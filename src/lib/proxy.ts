@@ -305,10 +305,13 @@ export function installProxyFetch(): void {
 		const configuredProxy = readConfiguredProxy();
 		if (configuredProxy) {
 			try {
-				return await rawFetch(input, {
+				const response = await rawFetch(input, {
 					...(init ?? {}),
 					proxy: normalizeProxyUrl(configuredProxy),
 				} as BunProxyFetchInit);
+				if (response.ok) return response;
+
+				return rawFetch(input, init);
 			} catch (err) {
 				// If the caller's signal fired during the proxy attempt, propagate rather than
 				// retrying with an already-aborted signal against the direct path.

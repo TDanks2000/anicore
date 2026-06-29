@@ -13,8 +13,10 @@ import { log } from "./logger";
 const CACHE_DIR = "data/cache";
 const IDS_FILE = `${CACHE_DIR}/anilist_ids.txt`;
 const PROGRESS_FILE = `${CACHE_DIR}/progress.json`;
-const IDS_URL =
-  "https://raw.githubusercontent.com/TDanks2000/anilistIds/refs/heads/main/anime_ids.txt";
+const IDS_URLS = [
+  "https://raw.githubusercontent.com/TDanks2000/anilistIds/refs/heads/main/anime_ids.txt",
+  "https://raw.githubusercontent.com/TDanks2000/anilistIds/main/anime_ids.txt",
+] as const;
 const IDS_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 function ensureCacheDir(): void {
@@ -32,12 +34,34 @@ export async function loadIds(forceRefresh = false): Promise<number[]> {
 
   if (forceRefresh || stale) {
     log.info("Downloading AniList ID list…");
-    const text = await fetch(IDS_URL).then((r) => {
-      if (!r.ok) throw new Error(`Failed to fetch IDs: ${r.status}`);
-      return r.text();
-    });
-    await Bun.write(IDS_FILE, text);
-    log.success(`Saved → ${IDS_FILE}`);
+    let lastError: Error | null = null;
+
+    for (const url of IDS_URLS) {
+      try {
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch IDs: ${response.status}`);
+        }
+
+        const text = await response.text();
+        await Bun.write(IDS_FILE, text);
+        log.success(`Saved → ${IDS_FILE}`);
+        lastError = null;
+        break;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+      }
+    }
+
+    if (lastError) {
+      if (existsSync(IDS_FILE)) {
+        log.warn(
+          `Failed to refresh AniList ID list (${lastError.message}); using cached ${IDS_FILE}`,
+        );
+      } else {
+        throw lastError;
+      }
+    }
   }
 
   const text = await Bun.file(IDS_FILE).text();
