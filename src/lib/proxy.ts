@@ -28,6 +28,13 @@ const PROXY_CACHE_FILE = `${CACHE_DIR}/proxies.txt`;
 const PROXY_CACHE_TS_FILE = `${CACHE_DIR}/proxies_ts`;
 const WORKING_PROXY_FILE = `${CACHE_DIR}/working_proxies.txt`;
 const DEAD_PROXY_FILE = `${CACHE_DIR}/dead_proxies.txt`;
+const DEFAULT_PROXY_BYPASS_HOSTS = new Set([
+	"raw.githubusercontent.com",
+	"kitsu.io",
+	"api4.thetvdb.com",
+	"api.themoviedb.org",
+	"animeschedule.net",
+]);
 
 type FetchInput = Parameters<typeof fetch>[0];
 type FetchInit = Parameters<typeof fetch>[1];
@@ -149,9 +156,6 @@ function proxyAttemptTimeoutMs(): number {
 }
 
 function shouldBypassProxy(input: FetchInput): boolean {
-	const noProxy = process.env.NO_PROXY ?? process.env.no_proxy;
-	if (!noProxy) return false;
-
 	const target =
 		typeof input === "string"
 			? input
@@ -164,6 +168,11 @@ function shouldBypassProxy(input: FetchInput): boolean {
 	} catch {
 		return false;
 	}
+
+	if (DEFAULT_PROXY_BYPASS_HOSTS.has(hostname)) return true;
+
+	const noProxy = process.env.NO_PROXY ?? process.env.no_proxy;
+	if (!noProxy) return false;
 
 	return noProxy
 		.split(",")
@@ -274,6 +283,11 @@ async function fetchWithFreeProxyFallback(
 			if (response.status === 407) {
 				if (isUntested) removeProxyFromUntestedList(proxy);
 				try { markDeadProxy(proxy); } catch { /* ignore disk errors */ }
+				continue;
+			}
+
+			if (!response.ok) {
+				if (isUntested) removeProxyFromUntestedList(proxy);
 				continue;
 			}
 
