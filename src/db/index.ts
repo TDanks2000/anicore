@@ -8,3 +8,7 @@ const client = postgres(process.env.DATABASE_URL!, { ssl: "require" });
 export const db = drizzle(client, { schema });
 
 export type Db = typeof db;
+
+export async function closeDb(): Promise<void> {
+	await client.end();
+}

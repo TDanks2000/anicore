@@ -152,7 +152,18 @@ async function insertKitsuMapping(
       source: "fuzzy",
       isPrimary: false,
     })
-    .onConflictDoNothing();
+    .onConflictDoUpdate({
+      target: [animeMappings.provider, animeMappings.providerId],
+      set: {
+        animeId: sql`excluded.anime_id`,
+        providerSlug: sql`excluded.provider_slug`,
+        providerUrl: sql`excluded.provider_url`,
+        confidence: sql`excluded.confidence`,
+        source: sql`excluded.source`,
+        isPrimary: sql`excluded.is_primary`,
+        updatedAt: sql`now()`,
+      },
+    });
 }
 
 // Given an AniList anime already in the DB, find and persist its Kitsu mapping.

@@ -1,9 +1,12 @@
 import { and, eq, isNotNull, lte, sql } from "drizzle-orm";
 
-import { db } from "../db";
+import { closeDb, db } from "../db";
 import { anime, animeMappings, episodeAudioStatus, episodes } from "../db/schema";
 import { log } from "../lib/logger";
+import { installProxyFetch } from "../lib/proxy";
 import { syncDubStatus, sleep } from "../providers/animeschedule/sync";
+
+installProxyFetch();
 
 const args      = process.argv.slice(2);
 const SUB_ONLY  = args.includes("--sub-only");
@@ -236,7 +239,14 @@ export async function runDubPass(): Promise<void> {
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 if (import.meta.main) {
-  if (RUN_SUB) await runSubPass();
-  if (RUN_DUB) await runDubPass();
-  log.success("Done.");
+  try {
+    if (RUN_SUB) await runSubPass();
+    if (RUN_DUB) await runDubPass();
+    log.success("Done.");
+    await closeDb();
+  } catch (err) {
+    log.error(`Fatal: ${err instanceof Error ? err.message : String(err)}`);
+    await closeDb().catch(() => undefined);
+    process.exit(1);
+  }
 }

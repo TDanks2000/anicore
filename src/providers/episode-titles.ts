@@ -94,7 +94,18 @@ async function upsertAnimeSourceMapping(
 			source: "api",
 			isPrimary: false,
 		})
-		.onConflictDoNothing();
+		.onConflictDoUpdate({
+			target: [animeMappings.provider, animeMappings.providerId],
+			set: {
+				animeId,
+				providerSlug: match.animeProviderSlug ?? null,
+				providerUrl: match.animeProviderUrl ?? null,
+				confidence: 85,
+				source: "api",
+				isPrimary: false,
+				updatedAt: new Date(),
+			},
+		});
 }
 
 async function applySourceMatch(
@@ -137,7 +148,18 @@ async function applySourceMatch(
 				confidence: 85,
 				source: "api",
 			})
-			.onConflictDoNothing();
+			.onConflictDoUpdate({
+				target: [episodeMappings.provider, episodeMappings.providerId],
+				set: {
+					episodeId: row.id,
+					providerSlug: null,
+					providerUrl: episode.providerUrl ?? null,
+					providerEpisodeNumber: episode.providerEpisodeNumber,
+					confidence: 85,
+					source: "api",
+					updatedAt: new Date(),
+				},
+			});
 
 		row.title = episode.title;
 		row.titleEnglish = episode.title;

@@ -150,7 +150,7 @@ async function upsertRelatedData(
           .map((studio) => [studio.anilistStudioId!, studio]),
       );
 
-      const linkValues: Array<{ animeId: number; studioId: number; isMain: boolean }> = [];
+      const linkByStudioId = new Map<number, { animeId: number; studioId: number; isMain: boolean }>();
 
       for (const studioDataRow of studioData) {
         const normalizedName = normalizeEntityName(studioDataRow.name);
@@ -203,13 +203,15 @@ async function upsertRelatedData(
           }
         }
 
-        linkValues.push({
+        const existingLink = linkByStudioId.get(studioRow.id);
+        linkByStudioId.set(studioRow.id, {
           animeId,
           studioId: studioRow.id,
-          isMain: studioDataRow.isMain,
+          isMain: (existingLink?.isMain ?? false) || studioDataRow.isMain,
         });
       }
 
+      const linkValues = [...linkByStudioId.values()];
       if (linkValues.length) {
         await tx.insert(animeStudioLinks).values(linkValues);
       }

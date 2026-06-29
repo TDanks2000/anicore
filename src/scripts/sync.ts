@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { and, eq } from "drizzle-orm";
 
-import { db } from "../db";
+import { closeDb, db } from "../db";
 import { anime, animeMappings } from "../db/schema";
 import {
 	appendUnmatched,
@@ -15,6 +15,7 @@ import {
 	saveProgress,
 } from "../lib/cache";
 import { log } from "../lib/logger";
+import { installProxyFetch } from "../lib/proxy";
 import { fetchAnilistAnime, syncAnilistAnime } from "../providers/anilist/sync";
 import {
 	enrichEpisodeTitlesForAnime,
@@ -34,6 +35,8 @@ import {
 // ── CLI flags ─────────────────────────────────────────────────────────────────
 
 const rawArgs = process.argv.slice(2);
+
+installProxyFetch();
 
 const flag = (name: string) => rawArgs.includes(name);
 const flagValue = (prefix: string) =>
@@ -666,7 +669,11 @@ async function main(): Promise<void> {
 	log.divider();
 }
 
-main().catch((err) => {
+try {
+	await main();
+	await closeDb();
+} catch (err) {
 	log.error(`Fatal: ${err instanceof Error ? err.message : String(err)}`);
+	await closeDb().catch(() => undefined);
 	process.exit(1);
-});
+}
