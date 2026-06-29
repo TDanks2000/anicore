@@ -6,8 +6,6 @@ import { log } from "../lib/logger";
 import { installProxyFetch } from "../lib/proxy";
 import { syncDubStatus, sleep } from "../providers/animeschedule/sync";
 
-installProxyFetch();
-
 const args      = process.argv.slice(2);
 const SUB_ONLY  = args.includes("--sub-only");
 const DUB_ONLY  = args.includes("--dub-only");
@@ -239,6 +237,7 @@ export async function runDubPass(): Promise<void> {
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 if (import.meta.main) {
+  installProxyFetch();
   try {
     if (RUN_SUB) await runSubPass();
     if (RUN_DUB) await runDubPass();

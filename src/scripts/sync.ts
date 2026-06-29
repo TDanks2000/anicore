@@ -15,18 +15,20 @@ import {
 	saveProgress,
 } from "../lib/cache";
 import { log } from "../lib/logger";
+import { withAnilistRetry } from "../lib/anilist-rate-limit";
 import { installProxyFetch } from "../lib/proxy";
+import {
+	type DryPluginEntry,
+	type PerIdResult,
+	SyncEngine,
+} from "../lib/sync-engine";
 import { fetchAnilistAnime, syncAnilistAnime } from "../providers/anilist/sync";
 import {
 	enrichEpisodeTitlesForAnime,
 	previewEpisodeTitleEnrichment,
 } from "../providers/episode-titles";
 import { kitsuPlugin } from "../providers/kitsu/plugin";
-import type {
-	DryPluginResult,
-	ProviderAnimeData,
-	ProviderPlugin,
-} from "../providers/types";
+import type { ProviderAnimeData, ProviderPlugin } from "../providers/types";
 import {
 	syncDubStatusForAnime,
 	syncSubStatusForAnime,
@@ -57,35 +59,31 @@ const LIMIT = flagValue("--limit=");
 
 const PLUGINS: ProviderPlugin[] = [kitsuPlugin];
 
-// AniList public API: 90 req/min → 2 parallel reqs/ID → min 1333ms. 1500ms is safe.
-const ANILIST_RATE_MS = 1500;
-
-function isRateLimitError(err: unknown): boolean {
-	const msg = err instanceof Error ? err.message : String(err);
-	return (
-		msg.includes("429") ||
-		msg.toLowerCase().includes("rate limit") ||
-		msg.toLowerCase().includes("too many requests")
-	);
-}
-
-async function withAnilistRetry<T>(fn: () => Promise<T>): Promise<T> {
-	for (let attempt = 0; attempt < 4; attempt++) {
-		try {
-			return await fn();
-		} catch (err) {
-			if (!isRateLimitError(err) || attempt === 3) throw err;
-			const wait = 60_000 * (attempt + 1);
-			log.warn(
-				`Rate limited — waiting ${wait / 1000}s before retry ${attempt + 1}/3…`,
-			);
-			await Bun.sleep(wait);
-		}
-	}
-	throw new Error("unreachable");
-}
-
 const CHECKPOINT_EVERY = 10;
+
+function getDryRunEpisodeRows(
+	plugins: Record<string, DryPluginEntry>,
+): NonNullable<
+	Parameters<typeof previewEpisodeTitleEnrichment>[2]
+>["episodeRows"] {
+	const episodeRows = Object.values(plugins)
+		.flatMap((result) =>
+			result.status === "matched" && "episodes" in result
+				? (result.episodes ?? [])
+				: [],
+		)
+		.map((episode) => ({
+			number: episode.number,
+			title: episode.title ?? null,
+			titleEnglish: episode.titleEnglish ?? null,
+			titleRomaji: episode.titleRomaji ?? null,
+			synopsis: episode.description ?? null,
+			airDate: episode.airDate ?? null,
+			seasonNumber: null,
+		}));
+
+	return episodeRows.length > 0 ? episodeRows : undefined;
+}
 
 // ── Verify mode ───────────────────────────────────────────────────────────────
 
@@ -207,18 +205,8 @@ interface DryRunEntry {
 				animeId: number | null;
 				data: ProviderAnimeData;
 		  }
-		| {
-				status: "error";
-				message: string;
-		  };
-	plugins: Record<
-		string,
-		| DryPluginResult
-		| {
-				status: "skipped";
-				message: string;
-		  }
-	>;
+		| { status: "error"; message: string };
+	plugins: Record<string, DryPluginEntry>;
 	episodeTitleEnrichment?: Awaited<
 		ReturnType<typeof previewEpisodeTitleEnrichment>
 	>;
@@ -259,12 +247,8 @@ async function lookupAnimeMapping(
 async function runDryRun(): Promise<void> {
 	const ids = await loadIds(REFRESH_IDS);
 	log.info(`Loaded ${ids.length.toLocaleString()} AniList IDs`);
-	const unmatchedSets = new Map(
-		PLUGINS.map((p) => [p.name, loadUnmatched(p.name)]),
-	);
 
 	let startIndex = 0;
-
 	if (FROM_ID) {
 		const targetId = parseInt(FROM_ID);
 		const idx = ids.indexOf(targetId);
@@ -289,137 +273,69 @@ async function runDryRun(): Promise<void> {
 	);
 	log.divider();
 
+	const engine = new SyncEngine(PLUGINS);
 	const results: DryRunEntry[] = [];
-	const bar = log.progress(count, "Dry-run");
-	let created = 0;
-	let updated = 0;
-	let failed = 0;
 	let pluginErrors = 0;
 
-	for (let i = startIndex; i < endIndex; i++) {
-		const id = ids[i]!;
-		const done = i - startIndex + 1;
-		const entry: DryRunEntry = {
-			index: i,
-			anilistId: id,
-			anilist: { status: "error", message: "not processed" },
-			plugins: {},
-		};
-
-		bar.setStage(`ID ${id} — anilist`);
-
-		try {
-			const anilistData = await withAnilistRetry(() => fetchAnilistAnime(id));
-			const existingAnimeId = await lookupAnimeMapping(
-				anilistData.provider,
-				anilistData.providerId,
-			);
-
-			entry.anilist = {
-				status: "ok",
-				created: existingAnimeId === null,
-				animeId: existingAnimeId,
-				data: anilistData,
+	const stats = await engine.iterate(
+		{ ids, startIndex, endIndex, label: "Dry-run" },
+		async (id, index, bar): Promise<PerIdResult> => {
+			const entry: DryRunEntry = {
+				index,
+				anilistId: id,
+				anilist: { status: "error", message: "not processed" },
+				plugins: {},
 			};
 
-			if (existingAnimeId === null) created++;
-			else updated++;
+			bar.setStage(`ID ${id} — anilist`);
 
-			const activePlugins = PLUGINS.filter(
-				(plugin) => !unmatchedSets.get(plugin.name)?.has(id),
-			);
-
-			for (const plugin of PLUGINS) {
-				if (unmatchedSets.get(plugin.name)?.has(id)) {
-					entry.plugins[plugin.name] = {
-						status: "skipped",
-						message: "cached unmatched",
-					};
-				} else if (!plugin.dryMatch) {
-					entry.plugins[plugin.name] = {
-						status: "skipped",
-						message: "no dry-match implementation",
-					};
-				}
-			}
-
-			if (activePlugins.length > 0) {
-				bar.setStage(
-					`ID ${id} — ${activePlugins.map((p) => p.name).join("+")}`,
-				);
-				const pluginResults = await Promise.allSettled(
-					activePlugins.map(async (plugin) => {
-						if (!plugin.dryMatch) {
-							return {
-								pluginName: plugin.name,
-								result: {
-									status: "skipped" as const,
-									message: "no dry-match implementation",
-								},
-							};
-						}
-
-						return {
-							pluginName: plugin.name,
-							result: await plugin.dryMatch(anilistData),
-						};
-					}),
+			try {
+				const anilistData = await withAnilistRetry(() => fetchAnilistAnime(id));
+				const existingAnimeId = await lookupAnimeMapping(
+					anilistData.provider,
+					anilistData.providerId,
 				);
 
-				for (let j = 0; j < activePlugins.length; j++) {
-					const plugin = activePlugins[j]!;
-					const settled = pluginResults[j]!;
+				entry.anilist = {
+					status: "ok",
+					created: existingAnimeId === null,
+					animeId: existingAnimeId,
+					data: anilistData,
+				};
 
-					if (settled.status === "rejected") {
-						pluginErrors++;
-						entry.plugins[plugin.name] = {
-							status: "error",
-							message:
-								settled.reason instanceof Error
-									? settled.reason.message
-									: String(settled.reason),
-						};
-						continue;
-					}
+				entry.plugins = await engine.dryPlugins(id, anilistData, bar);
 
-					entry.plugins[settled.value.pluginName] = settled.value.result;
-					if (settled.value.result.status === "error") {
-						pluginErrors++;
-					}
+				for (const result of Object.values(entry.plugins)) {
+					if (result.status === "error") pluginErrors++;
 				}
+
+				entry.episodeTitleEnrichment = await previewEpisodeTitleEnrichment(
+					existingAnimeId,
+					anilistData,
+					{ episodeRows: getDryRunEpisodeRows(entry.plugins) },
+				);
+
+				results.push(entry);
+				return {
+					outcome: existingAnimeId === null ? "created" : "updated",
+					extra: { pluginErrors },
+				};
+			} catch (err) {
+				const message = err instanceof Error ? err.message : String(err);
+				entry.anilist = { status: "error", message };
+				log.error(`ID ${id}: ${message}`);
+				results.push(entry);
+				return { outcome: "failed", extra: { pluginErrors } };
 			}
-
-			entry.episodeTitleEnrichment = await previewEpisodeTitleEnrichment(
-				existingAnimeId,
-				anilistData,
-			);
-		} catch (err) {
-			failed++;
-			entry.anilist = {
-				status: "error",
-				message: err instanceof Error ? err.message : String(err),
-			};
-			log.error(`ID ${id}: ${entry.anilist.message}`);
-		}
-
-		results.push(entry);
-
-		bar.tick().setStats({ done, created, updated, failed, pluginErrors });
-
-		if (i < endIndex - 1) {
-			bar.setStage("waiting…");
-			await Bun.sleep(ANILIST_RATE_MS);
-		}
-	}
-
-	bar.finish();
+		},
+	);
 
 	const output: DryRunOutput = {
 		runAt: new Date().toISOString(),
 		totalIdsAvailable: ids.length,
 		startIndex,
 		processedCount: results.length,
-		stats: { created, updated, failed, pluginErrors },
+		stats: { ...stats, pluginErrors },
 		results,
 	};
 
@@ -433,19 +349,14 @@ async function runDryRun(): Promise<void> {
 		`Dry-run complete — ${results.length} entries written to ${outPath}`,
 	);
 
-	for (const {
-		anilistId,
-		anilist,
-		plugins,
-		episodeTitleEnrichment,
-	} of results) {
+	for (const { anilistId, anilist, plugins, episodeTitleEnrichment } of results) {
 		if (anilist.status === "error") {
 			log.error(`  [${anilistId}] ${anilist.message}`);
 			continue;
 		}
 
 		const title = anilist.data.titleEnglish ?? anilist.data.titleRomaji;
-		const matches = Object.entries(plugins)
+		const pluginSummary = Object.entries(plugins)
 			.map(([name, r]) => {
 				if (r.status === "error") return `${name}:ERR`;
 				if (r.status === "skipped") return `${name}:SKIP`;
@@ -464,7 +375,7 @@ async function runDryRun(): Promise<void> {
 				? `  title-errors:${enrichment.errors.join(", ")}`
 				: "";
 		log.info(
-			`  [${anilistId}] ${title}  ${disposition}  ${matches}${enrichmentSummary}${enrichmentErrors}`,
+			`  [${anilistId}] ${title}  ${disposition}  ${pluginSummary}${enrichmentSummary}${enrichmentErrors}`,
 		);
 	}
 
@@ -500,10 +411,6 @@ async function main(): Promise<void> {
 	const ids = await loadIds(REFRESH_IDS);
 	log.info(`Loaded ${ids.length.toLocaleString()} AniList IDs`);
 
-	const unmatchedSets = new Map(
-		PLUGINS.map((p) => [p.name, loadUnmatched(p.name)]),
-	);
-
 	let progress = await loadProgress();
 	let startIndex = progress.lastIndex;
 
@@ -515,19 +422,11 @@ async function main(): Promise<void> {
 			process.exit(1);
 		}
 		startIndex = idx;
-		progress = {
-			...progress,
-			lastIndex: idx,
-			stats: { created: 0, updated: 0, failed: 0 },
-		};
+		progress = { ...progress, lastIndex: idx, stats: { created: 0, updated: 0, failed: 0 } };
 		log.info(`Starting from ID ${FROM_ID} (index ${idx})`);
 	} else if (FROM_INDEX) {
 		startIndex = parseInt(FROM_INDEX);
-		progress = {
-			...progress,
-			lastIndex: startIndex,
-			stats: { created: 0, updated: 0, failed: 0 },
-		};
+		progress = { ...progress, lastIndex: startIndex, stats: { created: 0, updated: 0, failed: 0 } };
 		log.info(`Starting from index ${startIndex}`);
 	} else if (startIndex > 0) {
 		log.info(
@@ -549,116 +448,70 @@ async function main(): Promise<void> {
 	);
 	log.divider();
 
-	let { created, updated, failed } = progress.stats;
+	const engine = new SyncEngine(PLUGINS);
 	let processedSinceCheckpoint = 0;
 
-	const bar = log.progress(remaining, "Sync");
-
-	for (let i = startIndex; i < endIndex; i++) {
-		const id = ids[i]!;
-		const done = i - startIndex + 1;
-
-		try {
-			// Stage 1: AniList
-			bar.setStage("anilist");
-			const anilistResult = await withAnilistRetry(() => syncAnilistAnime(id));
-			if (anilistResult.created) created++;
-			else updated++;
-
-			// Stage 2: Plugins (parallel)
-			const activePlugins = PLUGINS.filter(
-				(p) => !unmatchedSets.get(p.name)?.has(id),
-			);
-
-			if (activePlugins.length > 0) {
-				bar.setStage(activePlugins.map((p) => p.name).join("+"));
-				const results = await Promise.allSettled(
-					activePlugins.map((p) => p.sync(String(id), anilistResult.data)),
-				);
-
-				for (let j = 0; j < activePlugins.length; j++) {
-					const plugin = activePlugins[j]!;
-					const settled = results[j]!;
-
-					if (settled.status === "rejected") {
-						log.error(
-							`[${plugin.name.toUpperCase()}] ID ${id}: ${settled.reason}`,
-						);
-						continue;
-					}
-
-					const result = settled.value;
-					if (result.status === "unmatched") {
-						unmatchedSets.get(plugin.name)?.add(id);
-						appendUnmatched(plugin.name, id);
-					} else if (result.status === "error") {
-						log.error(
-							`[${plugin.name.toUpperCase()}] ID ${id}: ${result.message}`,
-						);
-					}
+	const stats = await engine.iterate(
+		{
+			ids,
+			startIndex,
+			endIndex,
+			label: "Sync",
+			onAfterEach: async ({ stats: s, index }) => {
+				progress.lastIndex = index + 1;
+				progress.stats = s;
+				if (++processedSinceCheckpoint >= CHECKPOINT_EVERY) {
+					await saveProgress(progress);
+					processedSinceCheckpoint = 0;
 				}
-			}
-
-			bar.setStage("episode-titles");
+			},
+		},
+		async (id, _index, bar): Promise<PerIdResult> => {
 			try {
-				await enrichEpisodeTitlesForAnime(
-					anilistResult.animeId,
-					anilistResult.data,
+				bar.setStage("anilist");
+				const result = await withAnilistRetry(() => syncAnilistAnime(id));
+
+				await engine.syncPlugins(id, result.data, bar);
+
+				bar.setStage("episode-titles");
+				await enrichEpisodeTitlesForAnime(result.animeId, result.data).catch(
+					(err) =>
+						log.warn(
+							`Episode title enrichment failed for ID ${id}: ${err instanceof Error ? err.message : String(err)}`,
+						),
 				);
-			} catch (error) {
-				log.warn(
-					`Episode title enrichment failed for ID ${id}: ${
-						error instanceof Error ? error.message : String(error)
-					}`,
+
+				bar.setStage("audio");
+				await syncSubStatusForAnime(result.animeId).catch((err) =>
+					log.warn(
+						`Audio status sync failed for ID ${id}: ${err instanceof Error ? err.message : String(err)}`,
+					),
 				);
+				await syncDubStatusForAnime(result.animeId).catch((err) =>
+					log.warn(
+						`Audio status sync failed for ID ${id}: ${err instanceof Error ? err.message : String(err)}`,
+					),
+				);
+
+				return { outcome: result.created ? "created" : "updated" };
+			} catch (err) {
+				log.error(
+					`ID ${id}: ${err instanceof Error ? err.message : String(err)}`,
+				);
+				return { outcome: "failed" };
 			}
-
-			bar.setStage("audio");
-			try {
-				await syncSubStatusForAnime(anilistResult.animeId);
-				await syncDubStatusForAnime(anilistResult.animeId);
-			} catch (error) {
-				log.warn(
-					`Audio status sync failed for ID ${id}: ${
-						error instanceof Error ? error.message : String(error)
-					}`,
-				);
-			}
-		} catch (err) {
-			failed++;
-			log.error(
-				`ID ${id}: ${err instanceof Error ? err.message : String(err)}`,
-			);
-		}
-
-		// Update progress
-		progress.lastIndex = i + 1;
-		progress.stats = { created, updated, failed };
-		processedSinceCheckpoint++;
-
-		bar.tick().setStats({ created, updated, failed });
-
-		if (processedSinceCheckpoint >= CHECKPOINT_EVERY) {
-			await saveProgress(progress);
-			processedSinceCheckpoint = 0;
-		}
-
-		if (i < endIndex - 1) {
-			bar.setStage("waiting…");
-			await Bun.sleep(ANILIST_RATE_MS);
-		}
-	}
+		},
+	);
 
 	await saveProgress(progress);
 
-	bar.finish();
 	log.divider();
 	log.success(`Sync complete — ${remaining.toLocaleString()} IDs processed`);
-	log.info(`  Created  : ${created.toLocaleString()}`);
-	log.info(`  Updated  : ${updated.toLocaleString()}`);
-	log.info(`  Failed   : ${failed.toLocaleString()}`);
+	log.info(`  Created  : ${stats.created.toLocaleString()}`);
+	log.info(`  Updated  : ${stats.updated.toLocaleString()}`);
+	log.info(`  Failed   : ${stats.failed.toLocaleString()}`);
 
-	for (const [provider, unmatched] of unmatchedSets) {
+	for (const [provider, unmatched] of engine.unmatchedSets) {
 		if (unmatched.size > 0) {
 			log.warn(
 				`  ${provider} unmatched: ${unmatched.size} (see data/cache/${provider}_unmatched.txt)`,

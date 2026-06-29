@@ -17,6 +17,16 @@ interface EpisodeRow {
 	seasonNumber: number | null;
 }
 
+interface EpisodeTitlePreviewRow {
+	number: number;
+	title?: string | null;
+	titleEnglish?: string | null;
+	titleRomaji?: string | null;
+	synopsis?: string | null;
+	airDate?: string | null;
+	seasonNumber?: number | null;
+}
+
 interface EpisodeTitleMatch {
 	providerEpisodeId: string;
 	providerEpisodeNumber: string;
@@ -50,6 +60,8 @@ export interface EpisodeTitleEnrichmentPreview {
 	possibleUpdates: number;
 	sourcesUsed: Array<"thetvdb" | "tmdb">;
 	errors: string[];
+	episodeRowsSource: "database" | "provided";
+	skippedReason?: "no-anime-id" | "no-episode-rows" | "no-missing-titles";
 	matches: Array<{
 		provider: "thetvdb" | "tmdb";
 		seasonNumber: number;
@@ -76,6 +88,23 @@ async function loadEpisodeRows(animeId: number): Promise<EpisodeRow[]> {
 
 function isTitleMissing(row: EpisodeRow): boolean {
 	return !row.title && !row.titleEnglish && !row.titleRomaji;
+}
+
+function isPreviewTitleMissing(row: EpisodeTitlePreviewRow): boolean {
+	return !row.title && !row.titleEnglish && !row.titleRomaji;
+}
+
+function toPreviewRows(rows: EpisodeTitlePreviewRow[]): EpisodeRow[] {
+	return rows.map((row, index) => ({
+		id: -(index + 1),
+		number: row.number,
+		title: row.title ?? null,
+		titleEnglish: row.titleEnglish ?? null,
+		titleRomaji: row.titleRomaji ?? null,
+		synopsis: row.synopsis ?? null,
+		airDate: row.airDate ?? null,
+		seasonNumber: row.seasonNumber ?? null,
+	}));
 }
 
 async function upsertAnimeSourceMapping(
@@ -221,20 +250,55 @@ export async function enrichEpisodeTitlesForAnime(
 export async function previewEpisodeTitleEnrichment(
 	animeId: number | null,
 	anilistData: ProviderAnimeData,
+	options: {
+		episodeRows?: EpisodeTitlePreviewRow[];
+	} = {},
 ): Promise<EpisodeTitleEnrichmentPreview | null> {
-	if (animeId === null) return null;
-
-	const rows = await loadEpisodeRows(animeId);
-	if (!rows.length || rows.every((row) => !isTitleMissing(row))) {
+	if (animeId === null && !options.episodeRows?.length) {
 		return {
 			possibleUpdates: 0,
 			sourcesUsed: [],
 			errors: [],
+			episodeRowsSource: "database",
+			skippedReason: "no-anime-id",
 			matches: [],
 		};
 	}
 
-	const context: EnrichmentContext = { animeId, anilistData, episodes: rows };
+	const rows =
+		options.episodeRows && options.episodeRows.length > 0
+			? toPreviewRows(options.episodeRows)
+			: animeId === null
+				? []
+				: await loadEpisodeRows(animeId);
+	const episodeRowsSource = options.episodeRows?.length ? "provided" : "database";
+	if (!rows.length) {
+		return {
+			possibleUpdates: 0,
+			sourcesUsed: [],
+			errors: [],
+			episodeRowsSource,
+			skippedReason: "no-episode-rows",
+			matches: [],
+		};
+	}
+
+	if (rows.every((row) => !isPreviewTitleMissing(row))) {
+		return {
+			possibleUpdates: 0,
+			sourcesUsed: [],
+			errors: [],
+			episodeRowsSource,
+			skippedReason: "no-missing-titles",
+			matches: [],
+		};
+	}
+
+	const context: EnrichmentContext = {
+		animeId: animeId ?? 0,
+		anilistData,
+		episodes: rows,
+	};
 	const matches: EpisodeTitleEnrichmentPreview["matches"] = [];
 	let possibleUpdates = 0;
 	const sourcesUsed: Array<"thetvdb" | "tmdb"> = [];
@@ -300,7 +364,7 @@ export async function previewEpisodeTitleEnrichment(
 		}
 	}
 
-	return { possibleUpdates, sourcesUsed, errors, matches };
+	return { possibleUpdates, sourcesUsed, errors, episodeRowsSource, matches };
 }
 
 export async function loadExistingAnimeSourceMapping(

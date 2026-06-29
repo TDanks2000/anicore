@@ -4,6 +4,7 @@ import {
 	mkdirSync,
 	readFileSync,
 	statSync,
+	writeFileSync,
 } from "node:fs";
 
 const PROXY_ENV_KEYS = [
@@ -17,9 +18,14 @@ const PROXY_ENV_KEYS = [
 const FREE_PROXY_LIST_URL =
 	"https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=5000&country=all&ssl=all&anonymity=elite,anonymous";
 const DEFAULT_FREE_PROXY_MAX_ATTEMPTS = 25;
+const DEFAULT_PROXY_ATTEMPT_TIMEOUT_MS = 15_000;
 const FREE_PROXY_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const CACHE_DIR = "data/cache";
+// Untested proxy queue — proxies are removed from here as they are tested.
 const PROXY_CACHE_FILE = `${CACHE_DIR}/proxies.txt`;
+// Touched on each successful download; its mtime tracks the 24h re-download TTL
+// independently of proxies.txt rewrites that happen during testing.
+const PROXY_CACHE_TS_FILE = `${CACHE_DIR}/proxies_ts`;
 const WORKING_PROXY_FILE = `${CACHE_DIR}/working_proxies.txt`;
 const DEAD_PROXY_FILE = `${CACHE_DIR}/dead_proxies.txt`;
 
@@ -29,6 +35,7 @@ type BunProxyFetchInit = FetchInit & { proxy?: string };
 
 let installed = false;
 let freeProxyList: string[] | null = null;
+let freeProxyListLoadedAt = 0;
 let workingProxyList: string[] | null = null;
 let deadProxySet: Set<string> | null = null;
 let freeProxyIndex = 0;
@@ -74,7 +81,12 @@ function parseProxyList(text: string): string[] {
 		text
 			.split(/\r?\n/)
 			.map((line) => line.trim())
-			.filter((line) => /^\d{1,3}(?:\.\d{1,3}){3}:\d{2,5}$/.test(line))
+			// Accept both raw ip:port and already-normalized http(s)://ip:port
+			.filter(
+				(line) =>
+					/^\d{1,3}(?:\.\d{1,3}){3}:\d{2,5}$/.test(line) ||
+					/^https?:\/\/\d{1,3}(?:\.\d{1,3}){3}:\d{2,5}$/.test(line),
+			)
 			.map(normalizeProxyUrl),
 	);
 }
@@ -107,6 +119,20 @@ function markDeadProxy(proxy: string): void {
 	appendProxyIfMissing(DEAD_PROXY_FILE, proxy, loadDeadProxySet());
 }
 
+function removeProxyFromUntestedList(proxy: string): void {
+	if (!freeProxyList) return;
+	const idx = freeProxyList.indexOf(proxy);
+	if (idx === -1) return;
+	freeProxyList.splice(idx, 1);
+	try {
+		ensureCacheDir();
+		writeFileSync(
+			PROXY_CACHE_FILE,
+			freeProxyList.length ? `${freeProxyList.join("\n")}\n` : "",
+		);
+	} catch { /* ignore disk errors */ }
+}
+
 function freeProxyMaxAttempts(): number {
 	const configured = Number(process.env.ANICORE_FREE_PROXY_MAX_ATTEMPTS);
 	if (Number.isFinite(configured) && configured > 0) {
@@ -114,6 +140,12 @@ function freeProxyMaxAttempts(): number {
 	}
 
 	return DEFAULT_FREE_PROXY_MAX_ATTEMPTS;
+}
+
+function proxyAttemptTimeoutMs(): number {
+	const configured = Number(process.env.ANICORE_PROXY_ATTEMPT_TIMEOUT_MS);
+	if (Number.isFinite(configured) && configured > 0) return Math.floor(configured);
+	return DEFAULT_PROXY_ATTEMPT_TIMEOUT_MS;
 }
 
 function shouldBypassProxy(input: FetchInput): boolean {
@@ -145,11 +177,17 @@ function shouldBypassProxy(input: FetchInput): boolean {
 }
 
 async function loadFreeProxyList(rawFetch: typeof fetch): Promise<string[]> {
-	if (freeProxyList) return freeProxyList;
+	if (freeProxyList && Date.now() - freeProxyListLoadedAt < FREE_PROXY_CACHE_TTL_MS) {
+		return freeProxyList;
+	}
 
+	freeProxyList = null;
+
+	// Use the timestamp file mtime to track when the list was last downloaded.
+	// proxies.txt is rewritten frequently (proxy removals), so its mtime is unreliable.
 	const cacheIsFresh =
-		existsSync(PROXY_CACHE_FILE) &&
-		Date.now() - statSync(PROXY_CACHE_FILE).mtimeMs < FREE_PROXY_CACHE_TTL_MS;
+		existsSync(PROXY_CACHE_TS_FILE) &&
+		Date.now() - statSync(PROXY_CACHE_TS_FILE).mtimeMs < FREE_PROXY_CACHE_TTL_MS;
 
 	if (!cacheIsFresh) {
 		try {
@@ -164,14 +202,23 @@ async function loadFreeProxyList(rawFetch: typeof fetch): Promise<string[]> {
 				);
 			}
 
+			// Only keep proxies that haven't been classified yet.
+			const downloaded = parseProxyList(await response.text());
+			const knownDead = loadDeadProxySet();
+			const knownWorking = new Set(loadWorkingProxyList());
+			const untested = downloaded.filter((p) => !knownDead.has(p) && !knownWorking.has(p));
+
 			ensureCacheDir();
-			await Bun.write(PROXY_CACHE_FILE, await response.text());
+			writeFileSync(PROXY_CACHE_FILE, untested.length ? `${untested.join("\n")}\n` : "");
+			writeFileSync(PROXY_CACHE_TS_FILE, ""); // touch to record download time
 		} catch {
 			if (!existsSync(PROXY_CACHE_FILE)) throw new Error("No proxy cache available");
 		}
 	}
 
 	freeProxyList = parseProxyList(readFileSync(PROXY_CACHE_FILE, "utf-8"));
+	freeProxyListLoadedAt = Date.now();
+	freeProxyIndex = 0;
 
 	return freeProxyList;
 }
@@ -188,6 +235,7 @@ async function fetchWithFreeProxyFallback(
 	init: FetchInit | undefined,
 ): Promise<Response> {
 	let proxies: string[];
+	let untestedSet: Set<string>;
 	try {
 		const knownDead = loadDeadProxySet();
 		const knownWorking = loadWorkingProxyList().filter((proxy) => !knownDead.has(proxy));
@@ -195,22 +243,48 @@ async function fetchWithFreeProxyFallback(
 			(proxy) => !knownDead.has(proxy),
 		);
 		proxies = unique([...knownWorking, ...freshProxies]);
+		untestedSet = new Set(freshProxies);
 	} catch {
 		return rawFetch(input, init);
 	}
 
 	if (!proxies.length) return rawFetch(input, init);
 
+	const callerSignal = init?.signal;
+	const timeoutMs = proxyAttemptTimeoutMs();
 	const attempts = Math.min(proxies.length, freeProxyMaxAttempts());
+
 	for (let attempt = 0; attempt < attempts; attempt++) {
 		const proxy = nextFreeProxy(proxies);
+		const isUntested = untestedSet.has(proxy);
+
+		// Cap each attempt independently so a slow proxy can't exhaust the caller's signal.
+		const attemptSignal = callerSignal
+			? AbortSignal.any([callerSignal, AbortSignal.timeout(timeoutMs)])
+			: AbortSignal.timeout(timeoutMs);
+
 		try {
-			const response = await rawFetch(input, { ...(init ?? {}), proxy } as BunProxyFetchInit);
-			markWorkingProxy(proxy);
+			const response = await rawFetch(input, {
+				...(init ?? {}),
+				signal: attemptSignal,
+				proxy,
+			} as BunProxyFetchInit);
+
+			// 407 means the proxy requires authentication — it's unusable as a free proxy.
+			if (response.status === 407) {
+				if (isUntested) removeProxyFromUntestedList(proxy);
+				try { markDeadProxy(proxy); } catch { /* ignore disk errors */ }
+				continue;
+			}
+
+			if (isUntested) removeProxyFromUntestedList(proxy);
+			try { markWorkingProxy(proxy); } catch { /* ignore disk errors */ }
 			return response;
-		} catch {
-			markDeadProxy(proxy);
-			continue;
+		} catch (err) {
+			// Caller intentionally cancelled — don't retry further.
+			if (callerSignal?.aborted) throw err;
+			if (isUntested) removeProxyFromUntestedList(proxy);
+			try { markDeadProxy(proxy); } catch { /* ignore disk errors */ }
 		}
 	}
 
@@ -235,7 +309,10 @@ export function installProxyFetch(): void {
 					...(init ?? {}),
 					proxy: normalizeProxyUrl(configuredProxy),
 				} as BunProxyFetchInit);
-			} catch {
+			} catch (err) {
+				// If the caller's signal fired during the proxy attempt, propagate rather than
+				// retrying with an already-aborted signal against the direct path.
+				if (init?.signal?.aborted) throw err;
 				return rawFetch(input, init);
 			}
 		}

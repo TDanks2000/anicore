@@ -1,55 +1,16 @@
 import { closeDb } from "../db";
+import { loadIds } from "../lib/cache";
+import { ANILIST_RATE_MS, withAnilistRetry } from "../lib/anilist-rate-limit";
 import { log } from "../lib/logger";
 import { installProxyFetch } from "../lib/proxy";
 import { syncAnilistAnime } from "../providers/anilist/sync";
 
 installProxyFetch();
 
-const IDS_URL =
-  "https://raw.githubusercontent.com/TDanks2000/anilistIds/refs/heads/main/anime_ids.txt";
-
-// AniList public API: 90 req/min -> 2 reqs/ID -> min 1333ms. 1500ms is safe.
-const RATE_LIMIT_MS = 1500;
-
-function isRateLimitError(err: unknown): boolean {
-  const msg = err instanceof Error ? err.message : String(err);
-  return (
-    msg.includes("429") ||
-    msg.toLowerCase().includes("rate limit") ||
-    msg.toLowerCase().includes("too many requests")
-  );
-}
-
-async function withAnilistRetry<T>(fn: () => Promise<T>): Promise<T> {
-  for (let attempt = 0; attempt < 4; attempt++) {
-    try {
-      return await fn();
-    } catch (err) {
-      if (!isRateLimitError(err) || attempt === 3) throw err;
-      const wait = 60_000 * (attempt + 1);
-      log.warn(`Rate limited - waiting ${wait / 1000}s before retry ${attempt + 1}/3...`);
-      await Bun.sleep(wait);
-    }
-  }
-  throw new Error("unreachable");
-}
-
 async function main(): Promise<void> {
-  log.info("Fetching AniList ID list...");
-  const text = await fetch(IDS_URL, { signal: AbortSignal.timeout(30_000) }).then((r) => {
-    if (!r.ok) throw new Error(`Failed to fetch ID list: ${r.status}`);
-    return r.text();
-  });
-
-  const ids = text
-    .split("\n")
-    .map((l) => l.trim())
-    .filter(Boolean)
-    .map(Number)
-    .filter((n) => !isNaN(n) && n > 0);
-
+  const ids = await loadIds();
   log.divider();
-  log.info(`Starting AniList sync - ${ids.length.toLocaleString()} IDs to process`);
+  log.info(`Starting AniList sync — ${ids.length.toLocaleString()} IDs to process`);
   log.divider();
 
   let created = 0;
@@ -78,14 +39,14 @@ async function main(): Promise<void> {
     bar.tick().setStats({ created, updated, failed });
 
     if (i < ids.length - 1) {
-      bar.setStage("waiting...");
-      await Bun.sleep(RATE_LIMIT_MS);
+      bar.setStage("waiting…");
+      await Bun.sleep(ANILIST_RATE_MS);
     }
   }
 
   bar.finish();
   log.divider();
-  log.success(`Sync complete - ${ids.length.toLocaleString()} IDs processed`);
+  log.success(`Sync complete — ${ids.length.toLocaleString()} IDs processed`);
   log.info(`  Created  : ${created.toLocaleString()}`);
   log.info(`  Updated  : ${updated.toLocaleString()}`);
   log.info(`  Failed   : ${failed.toLocaleString()}`);
