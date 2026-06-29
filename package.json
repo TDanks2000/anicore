@@ -1,15 +1,33 @@
 {
   "name": "anicore",
-  "version": "1.0.50",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "bun run --watch src/index.ts"
+    "dev": "bun --watch src/index.ts",
+    "start": "bun src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
+    "db:seed": "bun src/scripts/seed.ts",
+    "db:empty": "bun src/scripts/empty-db.ts",
+    "sync": "bun src/scripts/sync.ts",
+    "sync:dry": "bun src/scripts/sync.ts --dry-run",
+    "sync:anilist": "bun src/scripts/sync-anilist.ts",
+    "sync:audio": "bun src/scripts/sync-audio-status.ts"
   },
   "dependencies": {
-    "elysia": "latest"
+    "@api-wrappers/anilist-wrapper": "^2.7.0",
+    "@api-wrappers/tmdb-wrapper": "file:../../wrappers/tmdb-wrapper",
+    "drizzle-orm": "latest",
+    "elysia": "latest",
+    "postgres": "^3.4.5"
   },
   "devDependencies": {
-    "bun-types": "latest"
-  },
-  "module": "src/index.js"
+    "@types/bun": "latest",
+    "drizzle-kit": "latest",
+    "typescript": "latest"
+  }
 }

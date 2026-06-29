@@ -1,7 +1,7 @@
-import { Elysia } from "elysia";
+import { app } from "./app";
 
-const app = new Elysia().get("/", () => "Hello Elysia").listen(3000);
+const port = Number(process.env.PORT ?? 3000);
 
-console.log(
-  `🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`
-);
+app.listen(port);
+
+console.log(`AniCore API running at http://localhost:${port}`);
