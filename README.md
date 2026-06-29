@@ -1,5 +1,27 @@
 AniCore is a unified anime metadata API for mapping anime, episodes, and dub/sub availability across sources like AniList, Kitsu, and streaming providers.
 
+## Sync
+
+The main sync fetches AniList entries in parallel by default while keeping database writes and downstream provider sync sequential:
+
+```sh
+bun run sync
+```
+
+The default fetch concurrency is `4`. Override it with `--parallel=N`:
+
+```sh
+bun run sync --parallel=8
+```
+
+Use `--parallel=1` to force the old sequential fetch behavior:
+
+```sh
+bun run sync --parallel=1
+```
+
+Parallel mode batches external fetches, waits out the equivalent AniList request budget after each batch, and temporarily falls back to sequential fetches when rate-limit or fetch errors become frequent.
+
 ## Proxy support
 
 Provider HTTP calls can run through a proxy when the API or sync scripts are started with one of these environment variables:

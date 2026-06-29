@@ -10,19 +10,20 @@ import {
 	loadIds,
 	loadProgress,
 	loadUnmatched,
-	type Progress,
 	resetProgress,
 	saveProgress,
 } from "../lib/cache";
-import { log } from "../lib/logger";
+import { log, type ProgressBar } from "../lib/logger";
 import { withAnilistRetry } from "../lib/anilist-rate-limit";
 import { installProxyFetch } from "../lib/proxy";
 import {
 	type DryPluginEntry,
 	type PerIdResult,
+	type SyncStats,
 	SyncEngine,
 } from "../lib/sync-engine";
-import { fetchAnilistAnime, syncAnilistAnime } from "../providers/anilist/sync";
+import { fetchAnilistAnime } from "../providers/anilist/sync";
+import { upsertAnimeFromProvider } from "../providers";
 import {
 	enrichEpisodeTitlesForAnime,
 	previewEpisodeTitleEnrichment,
@@ -54,6 +55,21 @@ const DRY_RUN = flag("--dry-run");
 const FROM_ID = flagValue("--from=");
 const FROM_INDEX = flagValue("--from-index=");
 const LIMIT = flagValue("--limit=");
+const DEFAULT_PARALLEL = 4;
+const PARALLEL = parsePositiveIntegerFlag("--parallel=", DEFAULT_PARALLEL);
+
+function parsePositiveIntegerFlag(prefix: string, fallback: number): number {
+	const value = flagValue(prefix);
+	if (value === undefined) return fallback;
+
+	const parsed = Number(value);
+	if (!Number.isInteger(parsed) || parsed < 1) {
+		log.error(`${prefix.slice(0, -1)} must be a positive integer`);
+		process.exit(1);
+	}
+
+	return parsed;
+}
 
 // ── Registered plugins ────────────────────────────────────────────────────────
 
@@ -384,6 +400,38 @@ async function runDryRun(): Promise<void> {
 
 // ── Main sync ─────────────────────────────────────────────────────────────────
 
+async function processFetchedAnime(
+	id: number,
+	anilistData: ProviderAnimeData,
+	engine: SyncEngine,
+	bar: ProgressBar,
+): Promise<PerIdResult> {
+	const result = await upsertAnimeFromProvider(anilistData);
+
+	await engine.syncPlugins(id, anilistData, bar);
+
+	bar.setStage("episode-titles");
+	await enrichEpisodeTitlesForAnime(result.animeId, anilistData).catch((err) =>
+		log.warn(
+			`Episode title enrichment failed for ID ${id}: ${err instanceof Error ? err.message : String(err)}`,
+		),
+	);
+
+	bar.setStage("audio");
+	await syncSubStatusForAnime(result.animeId).catch((err) =>
+		log.warn(
+			`Audio status sync failed for ID ${id}: ${err instanceof Error ? err.message : String(err)}`,
+		),
+	);
+	await syncDubStatusForAnime(result.animeId).catch((err) =>
+		log.warn(
+			`Audio status sync failed for ID ${id}: ${err instanceof Error ? err.message : String(err)}`,
+		),
+	);
+
+	return { outcome: result.created ? "created" : "updated" };
+}
+
 async function main(): Promise<void> {
 	if (VERIFY) await runVerify();
 	if (DRY_RUN) {
@@ -446,62 +494,61 @@ async function main(): Promise<void> {
 	log.info(
 		`Syncing ${remaining.toLocaleString()} IDs  ·  providers: anilist + ${pluginNames}`,
 	);
+	if (PARALLEL > 1) {
+		log.info(
+			`Parallel fetch enabled: ×${PARALLEL}; DB writes and downstream sync remain sequential`,
+		);
+	}
 	log.divider();
 
 	const engine = new SyncEngine(PLUGINS);
 	let processedSinceCheckpoint = 0;
 
-	const stats = await engine.iterate(
-		{
-			ids,
-			startIndex,
-			endIndex,
-			label: "Sync",
-			onAfterEach: async ({ stats: s, index }) => {
-				progress.lastIndex = index + 1;
-				progress.stats = s;
-				if (++processedSinceCheckpoint >= CHECKPOINT_EVERY) {
-					await saveProgress(progress);
-					processedSinceCheckpoint = 0;
-				}
-			},
-		},
-		async (id, _index, bar): Promise<PerIdResult> => {
-			try {
-				bar.setStage("anilist");
-				const result = await withAnilistRetry(() => syncAnilistAnime(id));
-
-				await engine.syncPlugins(id, result.data, bar);
-
-				bar.setStage("episode-titles");
-				await enrichEpisodeTitlesForAnime(result.animeId, result.data).catch(
-					(err) =>
-						log.warn(
-							`Episode title enrichment failed for ID ${id}: ${err instanceof Error ? err.message : String(err)}`,
-						),
-				);
-
-				bar.setStage("audio");
-				await syncSubStatusForAnime(result.animeId).catch((err) =>
-					log.warn(
-						`Audio status sync failed for ID ${id}: ${err instanceof Error ? err.message : String(err)}`,
-					),
-				);
-				await syncDubStatusForAnime(result.animeId).catch((err) =>
-					log.warn(
-						`Audio status sync failed for ID ${id}: ${err instanceof Error ? err.message : String(err)}`,
-					),
-				);
-
-				return { outcome: result.created ? "created" : "updated" };
-			} catch (err) {
-				log.error(
-					`ID ${id}: ${err instanceof Error ? err.message : String(err)}`,
-				);
-				return { outcome: "failed" };
+	const iterateOptions = {
+		ids,
+		startIndex,
+		endIndex,
+		label: "Sync",
+		onAfterEach: async ({ stats: s, index }: { stats: SyncStats; index: number }) => {
+			progress.lastIndex = index + 1;
+			progress.stats = s;
+			if (++processedSinceCheckpoint >= CHECKPOINT_EVERY) {
+				await saveProgress(progress);
+				processedSinceCheckpoint = 0;
 			}
 		},
-	);
+	};
+
+	const stats =
+		PARALLEL > 1
+			? await engine.iterateParallel(
+					{ ...iterateOptions, concurrency: PARALLEL },
+					async (id, _index, reportIssue) => {
+						return withAnilistRetry(
+							() => fetchAnilistAnime(id),
+							() => reportIssue("rate-limit"),
+						);
+					},
+					async (id, _index, bar, anilistData) =>
+						processFetchedAnime(id, anilistData, engine, bar),
+				)
+			: await engine.iterate(
+					iterateOptions,
+					async (id, _index, bar): Promise<PerIdResult> => {
+						try {
+							bar.setStage("anilist");
+							const anilistData = await withAnilistRetry(() =>
+								fetchAnilistAnime(id),
+							);
+							return await processFetchedAnime(id, anilistData, engine, bar);
+						} catch (err) {
+							log.error(
+								`ID ${id}: ${err instanceof Error ? err.message : String(err)}`,
+							);
+							return { outcome: "failed" };
+						}
+					},
+				);
 
 	await saveProgress(progress);
 
