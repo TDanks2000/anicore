@@ -18,4 +18,18 @@ For disposable public proxies, set:
 ANICORE_USE_FREE_PROXY=1 bun run sync
 ```
 
-That loads and rotates the free HTTP proxy list from ProxyScrape's raw text endpoint. Public proxies are unreliable and should not be used for sensitive authenticated provider calls.
+That loads and rotates the free HTTP proxy list from ProxyScrape's raw text endpoint. Because public proxies are unreliable, AniCore tries multiple proxies for each request and falls back to a normal direct fetch if none of the attempted proxies work.
+
+Proxy state is cached under `data/cache`:
+
+- `proxies.txt` - the reusable proxy pool, hydrated from ProxyScrape when stale
+- `working_proxies.txt` - proxies that successfully completed a request
+- `dead_proxies.txt` - proxies that failed a request and should be skipped
+
+The default free-proxy attempt limit is 25 per request. Override it with:
+
+```sh
+ANICORE_USE_FREE_PROXY=1 ANICORE_FREE_PROXY_MAX_ATTEMPTS=50 bun run sync
+```
+
+Public proxies should not be used for sensitive authenticated provider calls.
