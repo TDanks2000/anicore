@@ -1,7 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
 
-import { db } from "../../db";
-import { animeMappings, episodes, episodeMappings } from "../../db/schema";
+import { db } from "@anicore/db";
+import { animeMappings, episodes, episodeMappings } from "@anicore/db/schema";
 import { searchKitsuByTitle, fetchKitsuEpisodes, type KitsuSearchNode } from "./client";
 import { mapKitsuAnime, mapKitsuEpisodes, type MappedEpisode } from "./mapper";
 import type { ProviderAnimeData } from "../types";

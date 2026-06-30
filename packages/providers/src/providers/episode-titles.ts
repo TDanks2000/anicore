@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 
-import { db } from "../db";
-import { animeMappings, episodeMappings, episodes } from "../db/schema";
+import { db } from "@anicore/db";
+import { animeMappings, episodeMappings, episodes } from "@anicore/db/schema";
 import { fetchTvdbEpisodeTitles } from "./thetvdb/episodes";
 import { fetchTmdbEpisodeTitles } from "./tmdb/episodes";
 import type { ProviderAnimeData } from "./types";

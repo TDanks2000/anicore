@@ -1,4 +1,4 @@
-import { db } from "../db";
+import { db } from "@anicore/db";
 import {
   anime,
   animeMappings,
@@ -6,8 +6,8 @@ import {
   episodeMappings,
   episodes,
   syncRuns,
-} from "../db/schema";
-import { log } from "../lib/logger";
+} from "@anicore/db/schema";
+import { log } from "@anicore/providers/lib/logger";
 
 log.info("Seeding AniCore database…");
 

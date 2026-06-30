@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
 
 import { app } from "./app";
-import { closeDb } from "./db";
+import { closeDb } from "@anicore/db";
 import { SyncMonitor } from "./lib/sync-monitor";
 
 async function json(response: Response): Promise<unknown> {

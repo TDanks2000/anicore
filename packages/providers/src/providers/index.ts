@@ -1,6 +1,6 @@
 import { and, eq, inArray, or, sql } from "drizzle-orm";
 
-import { db } from "../db";
+import { db } from "@anicore/db";
 import {
   anime,
   animeExternalLinks,
@@ -10,7 +10,7 @@ import {
   animeTagLinks,
   studios,
   tags,
-} from "../db/schema";
+} from "@anicore/db/schema";
 import { toJsonArray } from "../lib/json";
 import { slugify } from "../lib/slug";
 import {

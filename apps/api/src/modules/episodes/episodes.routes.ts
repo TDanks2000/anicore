@@ -1,8 +1,8 @@
 import { eq } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 
-import { db } from "../../db";
-import { episodeAudioStatus, episodeMappings, episodes } from "../../db/schema";
+import { db } from "@anicore/db";
+import { episodeAudioStatus, episodeMappings, episodes } from "@anicore/db/schema";
 import { parseId, parseLimit } from "../../lib/params";
 import { audioModeEnum, audioStatusEnum, episodeKindEnum, providerEnum, sourceEnum } from "../../lib/validators";
 

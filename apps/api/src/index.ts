@@ -1,4 +1,4 @@
-import { installProxyFetch } from "./lib/proxy";
+import { installProxyFetch } from "@anicore/providers/lib/proxy";
 import { app } from "./app";
 
 installProxyFetch();

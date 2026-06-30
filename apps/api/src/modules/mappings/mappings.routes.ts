@@ -1,13 +1,13 @@
 import { and, eq } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 
-import { db } from "../../db";
+import { db } from "@anicore/db";
 import {
 	anime,
 	animeMappings,
 	episodeMappings,
 	episodes,
-} from "../../db/schema";
+} from "@anicore/db/schema";
 import { providerEnum, sourceEnum } from "../../lib/validators";
 
 export const mappingRoutes = new Elysia({ prefix: "/mappings" })

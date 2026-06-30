@@ -1,8 +1,8 @@
 import { mkdirSync } from "node:fs";
 import { and, eq } from "drizzle-orm";
 
-import { closeDb, db } from "../db";
-import { anime, animeMappings } from "../db/schema";
+import { closeDb, db } from "@anicore/db";
+import { anime, animeMappings } from "@anicore/db/schema";
 import {
 	appendUnmatched,
 	clearAllUnmatched,
@@ -12,10 +12,10 @@ import {
 	loadUnmatched,
 	resetProgress,
 	saveProgress,
-} from "../lib/cache";
-import { log, type ProgressBar } from "../lib/logger";
-import { withAnilistRetry } from "../lib/anilist-rate-limit";
-import { installProxyFetch } from "../lib/proxy";
+} from "@anicore/providers/lib/cache";
+import { log, type ProgressBar } from "@anicore/providers/lib/logger";
+import { withAnilistRetry } from "@anicore/providers/lib/anilist-rate-limit";
+import { installProxyFetch } from "@anicore/providers/lib/proxy";
 import {
 	ensureSyncMonitorAccessCode,
 	getSyncMonitorPublicConfig,
@@ -27,15 +27,15 @@ import {
 	type PerIdResult,
 	type SyncStats,
 	SyncEngine,
-} from "../lib/sync-engine";
-import { fetchAnilistAnime } from "../providers/anilist/sync";
-import { upsertAnimeFromProvider } from "../providers";
+} from "@anicore/providers/lib/sync-engine";
+import { fetchAnilistAnime } from "@anicore/providers/anilist/sync";
+import { upsertAnimeFromProvider } from "@anicore/providers";
 import {
 	enrichEpisodeTitlesForAnime,
 	previewEpisodeTitleEnrichment,
-} from "../providers/episode-titles";
-import { kitsuPlugin } from "../providers/kitsu/plugin";
-import type { ProviderAnimeData, ProviderPlugin } from "../providers/types";
+} from "@anicore/providers/episode-titles";
+import { kitsuPlugin } from "@anicore/providers/kitsu/plugin";
+import type { ProviderAnimeData, ProviderPlugin } from "@anicore/providers/types";
 import {
 	syncDubStatusForAnime,
 	syncSubStatusForAnime,

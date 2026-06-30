@@ -14,6 +14,8 @@
       "name": "@anicore/api",
       "version": "0.1.0",
       "dependencies": {
+        "@anicore/db": "workspace:*",
+        "@anicore/providers": "workspace:*",
         "@anicore/sync-monitor": "workspace:*",
         "@api-wrappers/anilist-wrapper": "catalog:",
         "@api-wrappers/tmdb-wrapper": "catalog:",
@@ -51,6 +53,32 @@
         "typescript": "catalog:",
       },
     },
+    "packages/db": {
+      "name": "@anicore/db",
+      "version": "0.1.0",
+      "dependencies": {
+        "drizzle-orm": "catalog:",
+        "postgres": "catalog:",
+      },
+      "devDependencies": {
+        "bun-types": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
+    "packages/providers": {
+      "name": "@anicore/providers",
+      "version": "0.1.0",
+      "dependencies": {
+        "@anicore/db": "workspace:*",
+        "@api-wrappers/anilist-wrapper": "catalog:",
+        "@api-wrappers/tmdb-wrapper": "catalog:",
+        "drizzle-orm": "catalog:",
+      },
+      "devDependencies": {
+        "bun-types": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
     "packages/sync-monitor": {
       "name": "@anicore/sync-monitor",
       "version": "0.1.0",
@@ -85,6 +113,10 @@
   },
   "packages": {
     "@anicore/api": ["@anicore/api@workspace:apps/api"],
+
+    "@anicore/db": ["@anicore/db@workspace:packages/db"],
+
+    "@anicore/providers": ["@anicore/providers@workspace:packages/providers"],
 
     "@anicore/sync-monitor": ["@anicore/sync-monitor@workspace:packages/sync-monitor"],
 

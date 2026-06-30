@@ -1,23 +1,99 @@
 import { and, eq, like, or } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 
-import { db } from "../../db";
+import { db } from "@anicore/db";
 import {
   anime,
   animeExternalLinks,
   animeMappings,
   animeRelationLinks,
   episodes,
-} from "../../db/schema";
-import { toJsonArray } from "../../lib/json";
+  type AnimeMapping,
+} from "@anicore/db/schema";
+import { withAnilistRetry } from "@anicore/providers/lib/anilist-rate-limit";
+import { appendAnilistId } from "@anicore/providers/lib/cache";
+import { toJsonArray } from "@anicore/providers/lib/json";
 import { parseId, parseLimit } from "../../lib/params";
 import { providerEnum, sourceEnum } from "../../lib/validators";
+import { anilistClient } from "@anicore/providers/anilist/client";
+import { syncAnilistAnime } from "@anicore/providers/anilist/sync";
 import { formatAnime, getStudiosForAnime, getTagsForAnime } from "./anime.service";
+
+type AnimeProvider = AnimeMapping["provider"];
+
+async function findAnimeByProviderMapping(
+	provider: AnimeProvider,
+	providerId: string,
+) {
+	const rows = await db
+		.select({
+			anime,
+			mapping: animeMappings,
+		})
+		.from(animeMappings)
+		.innerJoin(anime, eq(animeMappings.animeId, anime.id))
+		.where(
+			and(
+				eq(animeMappings.provider, provider),
+				eq(animeMappings.providerId, providerId),
+			),
+		)
+		.limit(1);
+
+	return rows[0] ?? null;
+}
+
+async function getAnimeRowById(id: number) {
+	const [row] = await db.select().from(anime).where(eq(anime.id, id)).limit(1);
+	return row ?? null;
+}
+
+function parseAnilistId(providerId: string): number | null {
+	const id = Number(providerId);
+	return Number.isInteger(id) && id > 0 ? id : null;
+}
+
+function isUniqueConstraintError(err: unknown): boolean {
+	const message = err instanceof Error ? err.message : String(err);
+	return message.includes("unique") || message.includes("duplicate key");
+}
+
+const activeAnilistSyncs = new Map<
+	number,
+	Promise<Awaited<ReturnType<typeof getAnimeRowById>>>
+>();
+
+async function runAnilistSync(id: number) {
+	try {
+		const result = await withAnilistRetry(() => syncAnilistAnime(id));
+		return getAnimeRowById(result.animeId);
+	} catch (err) {
+		if (isUniqueConstraintError(err)) {
+			const existing = await findAnimeByProviderMapping("anilist", String(id));
+			if (existing) return existing.anime;
+		}
+
+		throw err;
+	}
+}
+
+async function syncMissingAnilistAnime(id: number) {
+	appendAnilistId(id);
+
+	const active = activeAnilistSyncs.get(id);
+	if (active) return active;
+
+	const sync = runAnilistSync(id).finally(() => {
+		activeAnilistSyncs.delete(id);
+	});
+	activeAnilistSyncs.set(id, sync);
+	return sync;
+}
 
 export const animeRoutes = new Elysia({ prefix: "/anime" })
 	.get(
 		"/",
-		async ({ query }) => {
+		async ({ query, set }) => {
 			const limit = parseLimit(query.limit);
 			const search = query.q?.trim();
 
@@ -41,7 +117,26 @@ export const animeRoutes = new Elysia({ prefix: "/anime" })
 				)
 				.limit(limit);
 
-			return rows.map(formatAnime);
+			if (rows.length > 0) {
+				return rows.map(formatAnime);
+			}
+
+			try {
+				const result = await withAnilistRetry(() =>
+					anilistClient.anime.getAnimeBySearch(search, 1, 1),
+				);
+				const match = result.Page?.media?.[0];
+				if (!match?.id) return [];
+
+				const synced = await syncMissingAnilistAnime(match.id);
+				return synced ? [formatAnime(synced)] : [];
+			} catch (err) {
+				set.status = 502;
+				return {
+					error: "Failed to sync missing anime from AniList",
+					message: err instanceof Error ? err.message : String(err),
+				};
+			}
 		},
 		{
 			query: t.Object({
@@ -193,24 +288,34 @@ export const animeRoutes = new Elysia({ prefix: "/anime" })
 
 	.get(
 		"/by/:provider/:providerId",
-		async ({ params }) => {
-			const rows = await db
-				.select({
-					anime,
-					mapping: animeMappings,
-				})
-				.from(animeMappings)
-				.innerJoin(anime, eq(animeMappings.animeId, anime.id))
-				.where(
-					and(
-						eq(animeMappings.provider, params.provider),
-						eq(animeMappings.providerId, params.providerId),
-					),
-				)
-				.limit(1);
+		async ({ params, set }) => {
+			const existing = await findAnimeByProviderMapping(
+				params.provider,
+				params.providerId,
+			);
 
-			if (!rows[0]) return null;
-			const { anime: animeRow, mapping } = rows[0];
+			let row = existing;
+			if (!row && params.provider === "anilist") {
+				const anilistId = parseAnilistId(params.providerId);
+				if (!anilistId) return null;
+
+				try {
+					await syncMissingAnilistAnime(anilistId);
+					row = await findAnimeByProviderMapping(
+						params.provider,
+						params.providerId,
+					);
+				} catch (err) {
+					set.status = 502;
+					return {
+						error: "Failed to sync missing anime from AniList",
+						message: err instanceof Error ? err.message : String(err),
+					};
+				}
+			}
+
+			if (!row) return null;
+			const { anime: animeRow, mapping } = row;
 			return { ...formatAnime(animeRow), mapping };
 		},
 		{

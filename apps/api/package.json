@@ -22,6 +22,8 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@anicore/db": "workspace:*",
+    "@anicore/providers": "workspace:*",
     "@anicore/sync-monitor": "workspace:*",
     "@api-wrappers/anilist-wrapper": "catalog:",
     "@api-wrappers/tmdb-wrapper": "catalog:",

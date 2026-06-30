@@ -1,8 +1,8 @@
 import postgres from "postgres";
 
-import { analyzeDbShape } from "../lib/db-shape";
-import { getDatabaseConfig } from "../lib/db-config";
-import { log } from "../lib/logger";
+import { analyzeDbShape } from "@anicore/db/db-shape";
+import { getDatabaseConfig } from "@anicore/db/db-config";
+import { log } from "@anicore/providers/lib/logger";
 
 interface TableRow {
   tableSchema: string;

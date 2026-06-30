@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 
-import { db } from "../db";
+import { db } from "@anicore/db";
 import {
   anime,
   animeExternalLinks,
@@ -14,9 +14,9 @@ import {
   studios,
   syncRuns,
   tags,
-} from "../db/schema";
-import { clearAllUnmatched, resetProgress } from "../lib/cache";
-import { log } from "../lib/logger";
+} from "@anicore/db/schema";
+import { clearAllUnmatched, resetProgress } from "@anicore/providers/lib/cache";
+import { log } from "@anicore/providers/lib/logger";
 
 const n = sql<number>`count(*)::int`;
 

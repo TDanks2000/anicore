@@ -2,10 +2,12 @@ AniCore is a unified anime metadata API for mapping anime, episodes, and dub/sub
 
 ## Monorepo
 
-AniCore now uses Bun workspaces and Turborepo:
+AniCore uses Bun workspaces and Turborepo:
 
 - `apps/api` - Elysia API, database scripts, provider sync runner
 - `apps/web` - Vite + React + Tailwind v4 monitor dashboard
+- `packages/db` - Drizzle schema, database connection, and DB validation helpers
+- `packages/providers` - AniList/Kitsu/provider sync clients, mappers, and sync utilities
 - `packages/sync-monitor` - shared sync monitor response types and browser client
 
 Install dependencies from the repo root:
@@ -23,6 +25,8 @@ bun run build
 bun run typecheck
 bun run test
 ```
+
+Root commands force Turbo's stream UI so Windows shells avoid the interactive UI path that can fail with exit code 56.
 
 Put API secrets in `apps/api/.env`. The old root `.env` was copied locally to `apps/api/.env` during the migration if it existed.
 

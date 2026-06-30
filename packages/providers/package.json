@@ -1,0 +1,46 @@
+{
+  "name": "@anicore/providers",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/providers/index.ts",
+    "./types": "./src/providers/types.ts",
+    "./episode-titles": "./src/providers/episode-titles.ts",
+    "./normalize": "./src/providers/normalize.ts",
+    "./anilist/client": "./src/providers/anilist/client.ts",
+    "./anilist/mapper": "./src/providers/anilist/mapper.ts",
+    "./anilist/sync": "./src/providers/anilist/sync.ts",
+    "./animeschedule/client": "./src/providers/animeschedule/client.ts",
+    "./animeschedule/sync": "./src/providers/animeschedule/sync.ts",
+    "./kitsu/client": "./src/providers/kitsu/client.ts",
+    "./kitsu/mapper": "./src/providers/kitsu/mapper.ts",
+    "./kitsu/plugin": "./src/providers/kitsu/plugin.ts",
+    "./kitsu/sync": "./src/providers/kitsu/sync.ts",
+    "./thetvdb/client": "./src/providers/thetvdb/client.ts",
+    "./thetvdb/episodes": "./src/providers/thetvdb/episodes.ts",
+    "./tmdb/episodes": "./src/providers/tmdb/episodes.ts",
+    "./lib/anilist-rate-limit": "./src/lib/anilist-rate-limit.ts",
+    "./lib/cache": "./src/lib/cache.ts",
+    "./lib/json": "./src/lib/json.ts",
+    "./lib/logger": "./src/lib/logger.ts",
+    "./lib/proxy": "./src/lib/proxy.ts",
+    "./lib/slug": "./src/lib/slug.ts",
+    "./lib/sync-engine": "./src/lib/sync-engine.ts"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anicore/db": "workspace:*",
+    "@api-wrappers/anilist-wrapper": "catalog:",
+    "@api-wrappers/tmdb-wrapper": "catalog:",
+    "drizzle-orm": "catalog:"
+  },
+  "devDependencies": {
+    "bun-types": "catalog:",
+    "typescript": "catalog:"
+  }
+}

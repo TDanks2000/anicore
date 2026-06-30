@@ -1,10 +1,10 @@
 import { and, eq, isNotNull, lte, sql } from "drizzle-orm";
 
-import { closeDb, db } from "../db";
-import { anime, animeMappings, episodeAudioStatus, episodes } from "../db/schema";
-import { log } from "../lib/logger";
-import { installProxyFetch } from "../lib/proxy";
-import { syncDubStatus, sleep } from "../providers/animeschedule/sync";
+import { closeDb, db } from "@anicore/db";
+import { anime, animeMappings, episodeAudioStatus, episodes } from "@anicore/db/schema";
+import { log } from "@anicore/providers/lib/logger";
+import { installProxyFetch } from "@anicore/providers/lib/proxy";
+import { syncDubStatus, sleep } from "@anicore/providers/animeschedule/sync";
 
 const args      = process.argv.slice(2);
 const SUB_ONLY  = args.includes("--sub-only");

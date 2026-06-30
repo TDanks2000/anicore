@@ -4,6 +4,7 @@ import {
   statSync,
   appendFileSync,
   readFileSync,
+  writeFileSync,
   unlinkSync,
   readdirSync,
 } from "node:fs";
@@ -23,6 +24,23 @@ function ensureCacheDir(): void {
   mkdirSync(CACHE_DIR, { recursive: true });
 }
 
+function parseIdText(text: string): number[] {
+  return text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map(Number)
+    .filter((n) => !isNaN(n) && n > 0);
+}
+
+function uniqueSortedIds(ids: number[]): number[] {
+  return [...new Set(ids)].sort((a, b) => a - b);
+}
+
+function serializeIds(ids: number[]): string {
+  return ids.length ? `${ids.join("\n")}\n` : "";
+}
+
 // ── ID list ──────────────────────────────────────────────────────────────────
 
 export async function loadIds(forceRefresh = false): Promise<number[]> {
@@ -35,6 +53,9 @@ export async function loadIds(forceRefresh = false): Promise<number[]> {
   if (forceRefresh || stale) {
     log.info("Downloading AniList ID list…");
     let lastError: Error | null = null;
+    const localIds = existsSync(IDS_FILE)
+      ? parseIdText(readFileSync(IDS_FILE, "utf-8"))
+      : [];
 
     for (const url of IDS_URLS) {
       try {
@@ -44,7 +65,10 @@ export async function loadIds(forceRefresh = false): Promise<number[]> {
         }
 
         const text = await response.text();
-        await Bun.write(IDS_FILE, text);
+        await Bun.write(
+          IDS_FILE,
+          serializeIds(uniqueSortedIds([...localIds, ...parseIdText(text)])),
+        );
         log.success(`Saved → ${IDS_FILE}`);
         lastError = null;
         break;
@@ -65,12 +89,24 @@ export async function loadIds(forceRefresh = false): Promise<number[]> {
   }
 
   const text = await Bun.file(IDS_FILE).text();
-  return text
-    .split("\n")
-    .map((l) => l.trim())
-    .filter(Boolean)
-    .map(Number)
-    .filter((n) => !isNaN(n) && n > 0);
+  return parseIdText(text);
+}
+
+export function appendAnilistId(id: number): boolean {
+  if (!Number.isInteger(id) || id <= 0) {
+    throw new Error(`Invalid AniList ID: ${id}`);
+  }
+
+  ensureCacheDir();
+  const existingIds = existsSync(IDS_FILE)
+    ? parseIdText(readFileSync(IDS_FILE, "utf-8"))
+    : [];
+
+  if (existingIds.includes(id)) return false;
+
+  const ids = uniqueSortedIds([...existingIds, id]);
+  writeFileSync(IDS_FILE, serializeIds(ids));
+  return true;
 }
 
 // ── Progress checkpoint ───────────────────────────────────────────────────────

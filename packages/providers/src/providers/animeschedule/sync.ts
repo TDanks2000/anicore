@@ -1,12 +1,12 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 
-import { db } from "../../db";
+import { db } from "@anicore/db";
 import {
   anime,
   animeMappings,
   episodeAudioStatus,
   episodes,
-} from "../../db/schema";
+} from "@anicore/db/schema";
 import {
   fetchByRoute,
   hasDub,
