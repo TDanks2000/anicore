@@ -17,6 +17,12 @@ import { log, type ProgressBar } from "../lib/logger";
 import { withAnilistRetry } from "../lib/anilist-rate-limit";
 import { installProxyFetch } from "../lib/proxy";
 import {
+	ensureSyncMonitorAccessCode,
+	getSyncMonitorPublicConfig,
+	type SyncMonitorStats,
+	SyncMonitor,
+} from "../lib/sync-monitor";
+import {
 	type DryPluginEntry,
 	type PerIdResult,
 	type SyncStats,
@@ -52,6 +58,7 @@ const RESET_PROVIDERS = rawArgs
 const REFRESH_IDS = flag("--refresh-ids");
 const VERIFY = flag("--verify");
 const DRY_RUN = flag("--dry-run");
+const MONITOR_ENABLED = flag("--monitor") || process.env.ANICORE_SYNC_MONITOR === "1";
 const FROM_ID = flagValue("--from=");
 const FROM_INDEX = flagValue("--from-index=");
 const LIMIT = flagValue("--limit=");
@@ -76,6 +83,32 @@ function parsePositiveIntegerFlag(prefix: string, fallback: number): number {
 const PLUGINS: ProviderPlugin[] = [kitsuPlugin];
 
 const CHECKPOINT_EVERY = 10;
+let activeMonitor: SyncMonitor | null = null;
+
+function formatMonitorStats(stats: SyncStats): SyncMonitorStats {
+	return {
+		created: stats.created,
+		updated: stats.updated,
+		failed: stats.failed,
+	};
+}
+
+function announceMonitor(): void {
+	const code = ensureSyncMonitorAccessCode();
+	const config = getSyncMonitorPublicConfig();
+	log.info("Sync monitor enabled");
+	log.info(`Access code saved locally: ${config.codePath}`);
+	log.info(`Use Authorization: Bearer ${code}`);
+	log.info(`Status file: ${config.statusPath}`);
+	log.info(`Events file: ${config.eventsPath}`);
+}
+
+function failActiveMonitor(message: string): void {
+	const monitor = activeMonitor;
+	if (!monitor) return;
+	monitor.fail(message);
+	activeMonitor = null;
+}
 
 function getDryRunEpisodeRows(
 	plugins: Record<string, DryPluginEntry>,
@@ -289,6 +322,20 @@ async function runDryRun(): Promise<void> {
 	);
 	log.divider();
 
+	let monitor: SyncMonitor | null = null;
+	if (MONITOR_ENABLED) {
+		announceMonitor();
+		monitor = new SyncMonitor({
+			mode: "dry-run",
+			total: count,
+			startIndex,
+			endIndex,
+			parallel: 1,
+			providers: ["anilist", ...PLUGINS.map((p) => p.name)],
+		});
+		activeMonitor = monitor;
+	}
+
 	const engine = new SyncEngine(PLUGINS);
 	const results: DryRunEntry[] = [];
 	let pluginErrors = 0;
@@ -304,6 +351,7 @@ async function runDryRun(): Promise<void> {
 			};
 
 			bar.setStage(`ID ${id} — anilist`);
+			monitor?.stage("anilist", index, id);
 
 			try {
 				const anilistData = await withAnilistRetry(() => fetchAnilistAnime(id));
@@ -319,12 +367,14 @@ async function runDryRun(): Promise<void> {
 					data: anilistData,
 				};
 
+				monitor?.stage("plugins", index, id);
 				entry.plugins = await engine.dryPlugins(id, anilistData, bar);
 
 				for (const result of Object.values(entry.plugins)) {
 					if (result.status === "error") pluginErrors++;
 				}
 
+				monitor?.stage("episode-title-preview", index, id);
 				entry.episodeTitleEnrichment = await previewEpisodeTitleEnrichment(
 					existingAnimeId,
 					anilistData,
@@ -340,11 +390,14 @@ async function runDryRun(): Promise<void> {
 				const message = err instanceof Error ? err.message : String(err);
 				entry.anilist = { status: "error", message };
 				log.error(`ID ${id}: ${message}`);
+				monitor?.recordError(message, index, id);
 				results.push(entry);
 				return { outcome: "failed", extra: { pluginErrors } };
 			}
 		},
 	);
+	monitor?.complete(formatMonitorStats(stats));
+	activeMonitor = null;
 
 	const output: DryRunOutput = {
 		runAt: new Date().toISOString(),
@@ -402,15 +455,20 @@ async function runDryRun(): Promise<void> {
 
 async function processFetchedAnime(
 	id: number,
+	index: number,
 	anilistData: ProviderAnimeData,
 	engine: SyncEngine,
 	bar: ProgressBar,
+	monitor?: SyncMonitor | null,
 ): Promise<PerIdResult> {
+	monitor?.stage("database-upsert", index, id);
 	const result = await upsertAnimeFromProvider(anilistData);
 
+	monitor?.stage("provider-plugins", index, id);
 	await engine.syncPlugins(id, anilistData, bar);
 
 	bar.setStage("episode-titles");
+	monitor?.stage("episode-titles", index, id);
 	await enrichEpisodeTitlesForAnime(result.animeId, anilistData).catch((err) =>
 		log.warn(
 			`Episode title enrichment failed for ID ${id}: ${err instanceof Error ? err.message : String(err)}`,
@@ -418,11 +476,13 @@ async function processFetchedAnime(
 	);
 
 	bar.setStage("audio");
+	monitor?.stage("audio-sub", index, id);
 	await syncSubStatusForAnime(result.animeId).catch((err) =>
 		log.warn(
 			`Audio status sync failed for ID ${id}: ${err instanceof Error ? err.message : String(err)}`,
 		),
 	);
+	monitor?.stage("audio-dub", index, id);
 	await syncDubStatusForAnime(result.animeId).catch((err) =>
 		log.warn(
 			`Audio status sync failed for ID ${id}: ${err instanceof Error ? err.message : String(err)}`,
@@ -501,6 +561,20 @@ async function main(): Promise<void> {
 	}
 	log.divider();
 
+	let monitor: SyncMonitor | null = null;
+	if (MONITOR_ENABLED) {
+		announceMonitor();
+		monitor = new SyncMonitor({
+			mode: "sync",
+			total: remaining,
+			startIndex,
+			endIndex,
+			parallel: PARALLEL,
+			providers: ["anilist", ...PLUGINS.map((p) => p.name)],
+		});
+		activeMonitor = monitor;
+	}
+
 	const engine = new SyncEngine(PLUGINS);
 	let processedSinceCheckpoint = 0;
 
@@ -512,6 +586,7 @@ async function main(): Promise<void> {
 		onAfterEach: async ({ stats: s, index }: { stats: SyncStats; index: number }) => {
 			progress.lastIndex = index + 1;
 			progress.stats = s;
+			monitor?.update({ stats: formatMonitorStats(s), currentIndex: index });
 			if (++processedSinceCheckpoint >= CHECKPOINT_EVERY) {
 				await saveProgress(progress);
 				processedSinceCheckpoint = 0;
@@ -523,28 +598,45 @@ async function main(): Promise<void> {
 		PARALLEL > 1
 			? await engine.iterateParallel(
 					{ ...iterateOptions, concurrency: PARALLEL },
-					async (id, _index, reportIssue) => {
-						return withAnilistRetry(
-							() => fetchAnilistAnime(id),
-							() => reportIssue("rate-limit"),
-						);
+					async (id, index, reportIssue) => {
+						monitor?.stage("anilist-fetch", index, id);
+						try {
+							return await withAnilistRetry(
+								() => fetchAnilistAnime(id),
+								() => reportIssue("rate-limit"),
+							);
+						} catch (err) {
+							const message = err instanceof Error ? err.message : String(err);
+							monitor?.recordError(message, index, id);
+							throw err;
+						}
 					},
-					async (id, _index, bar, anilistData) =>
-						processFetchedAnime(id, anilistData, engine, bar),
+					async (id, index, bar, anilistData) =>
+						processFetchedAnime(id, index, anilistData, engine, bar, monitor),
 				)
 			: await engine.iterate(
 					iterateOptions,
-					async (id, _index, bar): Promise<PerIdResult> => {
+					async (id, index, bar): Promise<PerIdResult> => {
 						try {
 							bar.setStage("anilist");
+							monitor?.stage("anilist-fetch", index, id);
 							const anilistData = await withAnilistRetry(() =>
 								fetchAnilistAnime(id),
 							);
-							return await processFetchedAnime(id, anilistData, engine, bar);
-						} catch (err) {
-							log.error(
-								`ID ${id}: ${err instanceof Error ? err.message : String(err)}`,
+							return await processFetchedAnime(
+								id,
+								index,
+								anilistData,
+								engine,
+								bar,
+								monitor,
 							);
+						} catch (err) {
+							const message = err instanceof Error ? err.message : String(err);
+							log.error(
+								`ID ${id}: ${message}`,
+							);
+							monitor?.recordError(message, index, id);
 							return { outcome: "failed" };
 						}
 					},
@@ -557,6 +649,8 @@ async function main(): Promise<void> {
 	log.info(`  Created  : ${stats.created.toLocaleString()}`);
 	log.info(`  Updated  : ${stats.updated.toLocaleString()}`);
 	log.info(`  Failed   : ${stats.failed.toLocaleString()}`);
+	monitor?.complete(formatMonitorStats(stats));
+	activeMonitor = null;
 
 	for (const [provider, unmatched] of engine.unmatchedSets) {
 		if (unmatched.size > 0) {
@@ -573,7 +667,9 @@ try {
 	await main();
 	await closeDb();
 } catch (err) {
-	log.error(`Fatal: ${err instanceof Error ? err.message : String(err)}`);
+	const message = err instanceof Error ? err.message : String(err);
+	log.error(`Fatal: ${message}`);
+	failActiveMonitor(message);
 	await closeDb().catch(() => undefined);
 	process.exit(1);
 }

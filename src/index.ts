@@ -4,7 +4,8 @@ import { app } from "./app";
 installProxyFetch();
 
 const port = Number(process.env.PORT ?? 3000);
+const hostname = process.env.HOST ?? process.env.HOSTNAME ?? "localhost";
 
-app.listen(port);
+app.listen({ hostname, port });
 
-console.log(`AniCore API running at http://localhost:${port}`);
+console.log(`AniCore API running at http://${hostname}:${port}`);

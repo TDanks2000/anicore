@@ -11,6 +11,7 @@ node_modules/
 
 # Sync cache and generated output
 data/cache/
+data/sync-monitor/
 data/dry-run-*.json
 
 # SQLite (if ever used locally)
