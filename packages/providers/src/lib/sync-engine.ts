@@ -26,6 +26,8 @@ export interface IterateOptions {
 	startIndex: number;
 	endIndex: number;
 	label: string;
+	rateLimitMs?: number;
+	getRateLimitMs?: () => number | Promise<number>;
 	/** Called after each item — use for progress checkpointing. */
 	onAfterEach?: (ctx: { stats: SyncStats; index: number }) => Promise<void>;
 	beforeEach?: (ctx: { id: number; index: number }) => Promise<boolean>;
@@ -238,10 +240,19 @@ export class SyncEngine {
 			bar: ProgressBar,
 		) => Promise<PerIdResult>,
 	): Promise<SyncStats> {
-		const { ids, startIndex, endIndex, label, onAfterEach } = options;
-		const { beforeEach } = options;
+		const {
+			ids,
+			startIndex,
+			endIndex,
+			label,
+			onAfterEach,
+			beforeEach,
+			rateLimitMs = ANILIST_RATE_MS,
+			getRateLimitMs,
+		} = options;
 		const bar = log.progress(endIndex - startIndex, label);
 		const stats: SyncStats = { created: 0, updated: 0, failed: 0 };
+		let activeRateLimitMs = rateLimitMs;
 
 		for (let i = startIndex; i < endIndex; i++) {
 			const id = ids[i]!;
@@ -259,8 +270,11 @@ export class SyncEngine {
 			await onAfterEach?.({ stats: { ...stats }, index: i });
 
 			if (i < endIndex - 1) {
+				if (getRateLimitMs) {
+					activeRateLimitMs = Math.max(0, Math.floor(await getRateLimitMs()));
+				}
 				bar.setStage("waiting…");
-				await Bun.sleep(ANILIST_RATE_MS);
+				await Bun.sleep(activeRateLimitMs);
 			}
 		}
 
@@ -283,6 +297,7 @@ export class SyncEngine {
 		options: IterateOptions & {
 			concurrency: number;
 			rateLimitMs?: number;
+			getRateLimitMs?: () => number | Promise<number>;
 			getConcurrency?: () => number | Promise<number>;
 			onBatchStart?: (ctx: {
 				startIndex: number;
@@ -322,6 +337,7 @@ export class SyncEngine {
 			onAfterEach,
 			concurrency,
 			rateLimitMs = ANILIST_RATE_MS,
+			getRateLimitMs,
 			getConcurrency,
 			onBatchStart,
 			onBatchEnd,
@@ -332,6 +348,7 @@ export class SyncEngine {
 		const bar = log.progress(endIndex - startIndex, label);
 		const stats: SyncStats = { created: 0, updated: 0, failed: 0 };
 		const ctrl = new AdaptiveController(concurrency);
+		let activeRateLimitMs = rateLimitMs;
 		let i = startIndex;
 
 		while (i < endIndex) {
@@ -344,6 +361,9 @@ export class SyncEngine {
 						next: ctrl.currentConcurrency,
 					});
 				}
+			}
+			if (getRateLimitMs) {
+				activeRateLimitMs = Math.max(0, Math.floor(await getRateLimitMs()));
 			}
 
 			const batchSize = ctrl.currentConcurrency;
@@ -449,7 +469,10 @@ export class SyncEngine {
 			if (i < endIndex) {
 				// Budget: batchSize fetches × rateLimitMs each, counting from batch start
 				const elapsed = Date.now() - batchStart;
-				const sleepMs = Math.max(0, batchIds.length * rateLimitMs - elapsed);
+				const sleepMs = Math.max(
+					0,
+					batchIds.length * activeRateLimitMs - elapsed,
+				);
 				if (sleepMs > 0) {
 					bar.setStage(
 						`waiting ${(sleepMs / 1000).toFixed(1)}s… (${ctrl.statusLabel})`,

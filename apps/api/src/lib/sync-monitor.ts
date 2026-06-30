@@ -38,8 +38,11 @@ const MAX_RECENT_ERRORS = 20;
 const MAX_EVENT_LINE_BYTES = 16 * 1024;
 const DEFAULT_PARALLEL = 4;
 const DEFAULT_CHECKPOINT_EVERY = 10;
+const DEFAULT_RATE_LIMIT_MS = 1500;
 const MAX_PARALLEL = 32;
 const MAX_CHECKPOINT_EVERY = 10_000;
+const MAX_RATE_LIMIT_MS = 60_000;
+const MAX_START_LIMIT = 1_000_000;
 
 function monitorDir(): string {
 	return process.env.ANICORE_SYNC_MONITOR_DIR ?? "data/sync-monitor";
@@ -105,11 +108,39 @@ function parsePositiveInteger(value: unknown, name: string, max: number): number
 	return value;
 }
 
+function parseNonNegativeIntegerOrNull(
+	value: unknown,
+	name: string,
+	max: number,
+): number | null {
+	if (value === null || value === undefined) return null;
+	if (typeof value !== "number" || !Number.isInteger(value)) {
+		throw new Error(`${name} must be an integer`);
+	}
+	if (value < 0 || value > max) {
+		throw new Error(`${name} must be between 0 and ${max}`);
+	}
+	return value;
+}
+
+function parseBoolean(value: unknown, name: string): boolean {
+	if (typeof value !== "boolean") {
+		throw new Error(`${name} must be a boolean`);
+	}
+	return value;
+}
+
 function defaultRuntimeConfig(): SyncMonitorRuntimeConfig {
 	return {
 		version: 1,
 		parallel: DEFAULT_PARALLEL,
 		checkpointEvery: DEFAULT_CHECKPOINT_EVERY,
+		rateLimitMs: DEFAULT_RATE_LIMIT_MS,
+		startMode: "dry-run",
+		startLimit: 5,
+		startFromIndex: null,
+		refreshIds: false,
+		resetAll: false,
 		updatedAt: nowIso(),
 		updatedBy: "default",
 	};
@@ -164,6 +195,37 @@ function normalizeRuntimeConfig(
 				"checkpointEvery",
 				MAX_CHECKPOINT_EVERY,
 			),
+			rateLimitMs: parsePositiveInteger(
+				input.rateLimitMs,
+				"rateLimitMs",
+				MAX_RATE_LIMIT_MS,
+			),
+			startMode:
+				input.startMode === "sync" || input.startMode === "dry-run"
+					? input.startMode
+					: fallback.startMode,
+			startLimit:
+				input.startLimit === null
+					? null
+					: parseNonNegativeIntegerOrNull(
+							input.startLimit,
+							"startLimit",
+							MAX_START_LIMIT,
+						),
+			startFromIndex:
+				input.startFromIndex === null
+					? null
+					: parseNonNegativeIntegerOrNull(
+							input.startFromIndex,
+							"startFromIndex",
+							MAX_START_LIMIT,
+						),
+			refreshIds:
+				typeof input.refreshIds === "boolean"
+					? input.refreshIds
+					: fallback.refreshIds,
+			resetAll:
+				typeof input.resetAll === "boolean" ? input.resetAll : fallback.resetAll,
 			updatedAt:
 				typeof input.updatedAt === "string" && input.updatedAt
 					? input.updatedAt
@@ -254,7 +316,46 @@ export function validateSyncMonitorRuntimeConfigPatch(
 		);
 	}
 
-	if (output.parallel === undefined && output.checkpointEvery === undefined) {
+	if (patch.rateLimitMs !== undefined) {
+		output.rateLimitMs = parsePositiveInteger(
+			patch.rateLimitMs,
+			"rateLimitMs",
+			MAX_RATE_LIMIT_MS,
+		);
+	}
+
+	if (patch.startMode !== undefined) {
+		if (patch.startMode !== "sync" && patch.startMode !== "dry-run") {
+			throw new Error("startMode must be sync or dry-run");
+		}
+		output.startMode = patch.startMode;
+	}
+
+	if (patch.startLimit !== undefined) {
+		output.startLimit = parseNonNegativeIntegerOrNull(
+			patch.startLimit,
+			"startLimit",
+			MAX_START_LIMIT,
+		);
+	}
+
+	if (patch.startFromIndex !== undefined) {
+		output.startFromIndex = parseNonNegativeIntegerOrNull(
+			patch.startFromIndex,
+			"startFromIndex",
+			MAX_START_LIMIT,
+		);
+	}
+
+	if (patch.refreshIds !== undefined) {
+		output.refreshIds = parseBoolean(patch.refreshIds, "refreshIds");
+	}
+
+	if (patch.resetAll !== undefined) {
+		output.resetAll = parseBoolean(patch.resetAll, "resetAll");
+	}
+
+	if (Object.keys(output).length === 0) {
 		throw new Error("At least one config setting must be supplied");
 	}
 

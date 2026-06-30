@@ -60,6 +60,12 @@ export interface SyncMonitorRuntimeConfig {
   version: 1;
   parallel: number;
   checkpointEvery: number;
+  rateLimitMs: number;
+  startMode: "sync" | "dry-run";
+  startLimit: number | null;
+  startFromIndex: number | null;
+  refreshIds: boolean;
+  resetAll: boolean;
   updatedAt: string;
   updatedBy: "default" | "api" | "sync";
 }
@@ -67,6 +73,12 @@ export interface SyncMonitorRuntimeConfig {
 export interface SyncMonitorRuntimeConfigPatch {
   parallel?: number;
   checkpointEvery?: number;
+  rateLimitMs?: number;
+  startMode?: "sync" | "dry-run";
+  startLimit?: number | null;
+  startFromIndex?: number | null;
+  refreshIds?: boolean;
+  resetAll?: boolean;
 }
 
 export type SyncMonitorControlCommand = "pause" | "resume" | "stop" | "start";

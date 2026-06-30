@@ -164,7 +164,16 @@ describe("app contract", () => {
           Authorization: "Bearer test-code",
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ parallel: 3, checkpointEvery: 2 }),
+        body: JSON.stringify({
+          parallel: 3,
+          checkpointEvery: 2,
+          rateLimitMs: 250,
+          startMode: "sync",
+          startLimit: 25,
+          startFromIndex: 10,
+          refreshIds: true,
+          resetAll: false,
+        }),
       }),
     );
 
@@ -173,6 +182,12 @@ describe("app contract", () => {
       runtime: {
         parallel: 3,
         checkpointEvery: 2,
+        rateLimitMs: 250,
+        startMode: "sync",
+        startLimit: 25,
+        startFromIndex: 10,
+        refreshIds: true,
+        resetAll: false,
         updatedBy: "api",
       },
     });
@@ -203,6 +218,12 @@ describe("app contract", () => {
       runtime: {
         parallel: 3,
         checkpointEvery: 2,
+        rateLimitMs: 250,
+        startMode: "sync",
+        startLimit: 25,
+        startFromIndex: 10,
+        refreshIds: true,
+        resetAll: false,
         updatedBy: "api",
       },
     });

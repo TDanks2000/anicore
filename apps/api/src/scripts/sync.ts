@@ -162,6 +162,9 @@ function refreshRuntimeConfig(monitor?: SyncMonitor | null): SyncMonitorRuntimeC
 				`checkpointEvery ${previous.checkpointEvery} -> ${next.checkpointEvery}`,
 			);
 		}
+		if (previous.rateLimitMs !== next.rateLimitMs) {
+			changes.push(`rateLimitMs ${previous.rateLimitMs} -> ${next.rateLimitMs}`);
+		}
 		if (changes.length > 0) {
 			const message = `Runtime config updated: ${changes.join(", ")}`;
 			log.info(message);
@@ -425,20 +428,68 @@ async function runDryRun(): Promise<void> {
 	const results: DryRunEntry[] = [];
 	let pluginErrors = 0;
 
-	const stats = await engine.iterate(
+	const stats = await engine.iterateParallel(
 		{
 			ids,
 			startIndex,
 			endIndex,
 			label: "Dry-run",
+			concurrency: activeRuntimeConfig?.parallel ?? 1,
+			rateLimitMs: activeRuntimeConfig?.rateLimitMs,
+			getRateLimitMs: monitor
+				? () => refreshRuntimeConfig(monitor).rateLimitMs
+				: undefined,
+			getConcurrency: monitor
+				? () => refreshRuntimeConfig(monitor).parallel
+				: undefined,
 			onAfterEach: async ({ stats: s, index }) => {
 				monitor?.update({ stats: formatMonitorStats(s), currentIndex: index });
 				refreshRuntimeConfig(monitor);
 			},
-			beforeEach: async () => waitForControlRelease(monitor),
+			beforeBatch: async () => waitForControlRelease(monitor),
+			onBatchStart: ({
+				startIndex: batchStart,
+				endIndex: batchEnd,
+				concurrency,
+				ids: batchIds,
+			}) => {
+				monitor?.update({
+					activeBatch: createSyncMonitorBatch({
+						startIndex: batchStart,
+						endIndex: batchEnd,
+						concurrency,
+						ids: batchIds,
+					}),
+				});
+			},
+			onBatchEnd: () => {
+				monitor?.update({ activeBatch: null });
+			},
+			onConcurrencyChange: ({ previous, next }) => {
+				if (previous === next) return;
+				const message = `Parallel setting now ×${next}`;
+				log.info(message);
+				monitor?.event("info", message, { stage: "runtime-config" });
+			},
 		},
-		async (id, index, bar): Promise<PerIdResult> => {
-			refreshRuntimeConfig(monitor);
+		async (id, index, reportIssue) => {
+			monitor?.stage("anilist", index, id);
+			try {
+				return {
+					status: "ok" as const,
+					data: await withAnilistRetry(
+						() => fetchAnilistAnime(id),
+						() => reportIssue("rate-limit"),
+					),
+				};
+			} catch (err) {
+				const message = err instanceof Error ? err.message : String(err);
+				monitor?.recordError(message, index, id);
+				reportIssue("error");
+				return { status: "error" as const, message };
+			}
+		},
+		async (id, index, bar, fetched): Promise<PerIdResult> => {
 			const entry: DryRunEntry = {
 				index,
 				anilistId: id,
@@ -446,11 +497,15 @@ async function runDryRun(): Promise<void> {
 				plugins: {},
 			};
 
-			bar.setStage(`ID ${id} — anilist`);
-			monitor?.stage("anilist", index, id);
-
 			try {
-				const anilistData = await withAnilistRetry(() => fetchAnilistAnime(id));
+				if (fetched.status === "error") {
+					entry.anilist = { status: "error", message: fetched.message };
+					log.error(`ID ${id}: ${fetched.message}`);
+					results.push(entry);
+					return { outcome: "failed", extra: { pluginErrors } };
+				}
+
+				const anilistData = fetched.data;
 				const existingAnimeId = await lookupAnimeMapping(
 					anilistData.provider,
 					anilistData.providerId,
@@ -663,6 +718,12 @@ async function main(): Promise<void> {
 				version: 1 as const,
 				parallel: PARALLEL,
 				checkpointEvery: 10,
+				rateLimitMs: 1500,
+				startMode: "sync" as const,
+				startLimit: null,
+				startFromIndex: null,
+				refreshIds: false,
+				resetAll: false,
 				updatedAt: new Date().toISOString(),
 				updatedBy: "sync" as const,
 			};
@@ -716,6 +777,10 @@ async function main(): Promise<void> {
 		{
 			...iterateOptions,
 			concurrency: initialRuntimeConfig.parallel,
+			getRateLimitMs: monitor
+				? () => refreshRuntimeConfig(monitor).rateLimitMs
+				: undefined,
+			rateLimitMs: initialRuntimeConfig.rateLimitMs,
 			getConcurrency: monitor
 				? () => refreshRuntimeConfig(monitor).parallel
 				: undefined,

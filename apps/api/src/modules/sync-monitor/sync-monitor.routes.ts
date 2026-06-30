@@ -90,13 +90,19 @@ function parseStartArgs(body: {
 	refreshIds?: boolean;
 	resetAll?: boolean;
 }): string[] {
+	const runtime = getSyncMonitorPublicConfig().runtime;
+	const dryRun = body.dryRun ?? runtime.startMode === "dry-run";
+	const limit = body.limit ?? runtime.startLimit ?? undefined;
+	const fromIndex = body.fromIndex ?? runtime.startFromIndex ?? undefined;
+	const refreshIds = body.refreshIds ?? runtime.refreshIds;
+	const resetAll = body.resetAll ?? runtime.resetAll;
 	const args = ["--monitor"];
 
-	if (body.dryRun) args.push("--dry-run");
-	if (body.refreshIds) args.push("--refresh-ids");
-	if (body.resetAll) args.push("--reset=all");
-	if (body.limit !== undefined) args.push(`--limit=${body.limit}`);
-	if (body.fromIndex !== undefined) args.push(`--from-index=${body.fromIndex}`);
+	if (dryRun) args.push("--dry-run");
+	if (refreshIds) args.push("--refresh-ids");
+	if (resetAll) args.push("--reset=all");
+	if (limit !== undefined) args.push(`--limit=${limit}`);
+	if (fromIndex !== undefined) args.push(`--from-index=${fromIndex}`);
 
 	return args;
 }
@@ -222,6 +228,12 @@ export const syncMonitorRoutes = new Elysia({ prefix: "/sync-monitor" })
 			body: t.Object({
 				parallel: t.Optional(t.Number()),
 				checkpointEvery: t.Optional(t.Number()),
+				rateLimitMs: t.Optional(t.Number()),
+				startMode: t.Optional(t.Union([t.Literal("sync"), t.Literal("dry-run")])),
+				startLimit: t.Optional(t.Nullable(t.Number())),
+				startFromIndex: t.Optional(t.Nullable(t.Number())),
+				refreshIds: t.Optional(t.Boolean()),
+				resetAll: t.Optional(t.Boolean()),
 			}),
 		},
 	)
