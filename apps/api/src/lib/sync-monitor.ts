@@ -10,20 +10,36 @@ import {
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import type {
 	SyncMonitorEvent,
+	SyncMonitorBatch,
+	SyncMonitorControlCommand,
+	SyncMonitorControlState,
+	SyncMonitorProgress,
 	SyncMonitorPublicConfig,
+	SyncMonitorRuntimeConfig,
+	SyncMonitorRuntimeConfigPatch,
 	SyncMonitorStats,
 	SyncMonitorStatus,
 } from "@anicore/sync-monitor";
 
 export type {
 	SyncMonitorEvent,
+	SyncMonitorBatch,
+	SyncMonitorControlCommand,
+	SyncMonitorControlState,
+	SyncMonitorProgress,
 	SyncMonitorPublicConfig,
+	SyncMonitorRuntimeConfig,
+	SyncMonitorRuntimeConfigPatch,
 	SyncMonitorStats,
 	SyncMonitorStatus,
 } from "@anicore/sync-monitor";
 
 const MAX_RECENT_ERRORS = 20;
 const MAX_EVENT_LINE_BYTES = 16 * 1024;
+const DEFAULT_PARALLEL = 4;
+const DEFAULT_CHECKPOINT_EVERY = 10;
+const MAX_PARALLEL = 32;
+const MAX_CHECKPOINT_EVERY = 10_000;
 
 function monitorDir(): string {
 	return process.env.ANICORE_SYNC_MONITOR_DIR ?? "data/sync-monitor";
@@ -35,6 +51,14 @@ function statusFile(): string {
 
 function eventsFile(): string {
 	return `${monitorDir()}/events.jsonl`;
+}
+
+function runtimeConfigFile(): string {
+	return `${monitorDir()}/runtime-config.json`;
+}
+
+function controlFile(): string {
+	return `${monitorDir()}/control.json`;
 }
 
 function codeFile(): string {
@@ -71,6 +95,182 @@ function readAccessCode(): string | null {
 	return safeReadText(codeFile())?.trim() || null;
 }
 
+function parsePositiveInteger(value: unknown, name: string, max: number): number {
+	if (typeof value !== "number" || !Number.isInteger(value)) {
+		throw new Error(`${name} must be an integer`);
+	}
+	if (value < 1 || value > max) {
+		throw new Error(`${name} must be between 1 and ${max}`);
+	}
+	return value;
+}
+
+function defaultRuntimeConfig(): SyncMonitorRuntimeConfig {
+	return {
+		version: 1,
+		parallel: DEFAULT_PARALLEL,
+		checkpointEvery: DEFAULT_CHECKPOINT_EVERY,
+		updatedAt: nowIso(),
+		updatedBy: "default",
+	};
+}
+
+function defaultControlState(): SyncMonitorControlState {
+	return {
+		version: 1,
+		command: null,
+		requestedAt: null,
+		requestedBy: null,
+		message: null,
+	};
+}
+
+function normalizeControlState(value: unknown): SyncMonitorControlState {
+	if (!value || typeof value !== "object") return defaultControlState();
+	const input = value as Partial<SyncMonitorControlState>;
+	const command =
+		input.command === "pause" ||
+		input.command === "resume" ||
+		input.command === "stop"
+			? input.command
+			: null;
+
+	return {
+		version: 1,
+		command,
+		requestedAt:
+			typeof input.requestedAt === "string" ? input.requestedAt : null,
+		requestedBy:
+			input.requestedBy === "api" || input.requestedBy === "sync"
+				? input.requestedBy
+				: null,
+		message: typeof input.message === "string" ? input.message : null,
+	};
+}
+
+function normalizeRuntimeConfig(
+	value: unknown,
+	fallback = defaultRuntimeConfig(),
+): SyncMonitorRuntimeConfig {
+	if (!value || typeof value !== "object") return fallback;
+	const input = value as Partial<SyncMonitorRuntimeConfig>;
+
+	try {
+		return {
+			version: 1,
+			parallel: parsePositiveInteger(input.parallel, "parallel", MAX_PARALLEL),
+			checkpointEvery: parsePositiveInteger(
+				input.checkpointEvery,
+				"checkpointEvery",
+				MAX_CHECKPOINT_EVERY,
+			),
+			updatedAt:
+				typeof input.updatedAt === "string" && input.updatedAt
+					? input.updatedAt
+					: fallback.updatedAt,
+			updatedBy:
+				input.updatedBy === "api" || input.updatedBy === "sync"
+					? input.updatedBy
+					: fallback.updatedBy,
+		};
+	} catch {
+		return fallback;
+	}
+}
+
+export function readSyncMonitorControlState(): SyncMonitorControlState {
+	const text = safeReadText(controlFile());
+	if (!text) return defaultControlState();
+
+	try {
+		return normalizeControlState(JSON.parse(text));
+	} catch {
+		return defaultControlState();
+	}
+}
+
+export function writeSyncMonitorControlState(
+	command: Exclude<SyncMonitorControlCommand, "start"> | null,
+	message: string | null,
+	requestedBy: SyncMonitorControlState["requestedBy"] = "api",
+): SyncMonitorControlState {
+	const next: SyncMonitorControlState = {
+		version: 1,
+		command,
+		requestedAt: command ? nowIso() : null,
+		requestedBy: command ? requestedBy : null,
+		message,
+	};
+	atomicWriteJson(controlFile(), next);
+	return next;
+}
+
+export function readSyncMonitorRuntimeConfig(): SyncMonitorRuntimeConfig {
+	const text = safeReadText(runtimeConfigFile());
+	if (!text) return defaultRuntimeConfig();
+
+	try {
+		return normalizeRuntimeConfig(JSON.parse(text));
+	} catch {
+		return defaultRuntimeConfig();
+	}
+}
+
+export function writeSyncMonitorRuntimeConfig(
+	patch: SyncMonitorRuntimeConfigPatch,
+	updatedBy: SyncMonitorRuntimeConfig["updatedBy"],
+): SyncMonitorRuntimeConfig {
+	const current = readSyncMonitorRuntimeConfig();
+	const next: SyncMonitorRuntimeConfig = {
+		...current,
+		...patch,
+		version: 1,
+		updatedAt: nowIso(),
+		updatedBy,
+	};
+	const normalized = normalizeRuntimeConfig(next, current);
+	atomicWriteJson(runtimeConfigFile(), normalized);
+	return normalized;
+}
+
+export function validateSyncMonitorRuntimeConfigPatch(
+	patch: SyncMonitorRuntimeConfigPatch,
+): SyncMonitorRuntimeConfigPatch {
+	const output: SyncMonitorRuntimeConfigPatch = {};
+
+	if (patch.parallel !== undefined) {
+		output.parallel = parsePositiveInteger(
+			patch.parallel,
+			"parallel",
+			MAX_PARALLEL,
+		);
+	}
+
+	if (patch.checkpointEvery !== undefined) {
+		output.checkpointEvery = parsePositiveInteger(
+			patch.checkpointEvery,
+			"checkpointEvery",
+			MAX_CHECKPOINT_EVERY,
+		);
+	}
+
+	if (output.parallel === undefined && output.checkpointEvery === undefined) {
+		throw new Error("At least one config setting must be supplied");
+	}
+
+	return output;
+}
+
+export function ensureSyncMonitorRuntimeConfig(
+	overrides: SyncMonitorRuntimeConfigPatch = {},
+): SyncMonitorRuntimeConfig {
+	const current = readSyncMonitorRuntimeConfig();
+	const shouldSeed =
+		!existsSync(runtimeConfigFile()) || current.updatedBy === "default";
+	if (!shouldSeed) return current;
+	return writeSyncMonitorRuntimeConfig(overrides, "sync");
+}
+
 function secureEqual(a: string, b: string): boolean {
 	const left = Buffer.from(a);
 	const right = Buffer.from(b);
@@ -101,8 +301,11 @@ export function getSyncMonitorPublicConfig(): SyncMonitorPublicConfig {
 		enabled: hasAccessCode,
 		statusPath: statusFile(),
 		eventsPath: eventsFile(),
+		controlPath: controlFile(),
+		runtimeConfigPath: runtimeConfigFile(),
 		codePath: codeFile(),
 		hasAccessCode,
+		runtime: readSyncMonitorRuntimeConfig(),
 	};
 }
 
@@ -167,6 +370,13 @@ export class SyncMonitor {
 			currentStage: "starting",
 			parallel: input.parallel,
 			providers: input.providers,
+			progress: calculateProgress({
+				stats: { created: 0, updated: 0, failed: 0 },
+				total: input.total,
+				startedAt: at,
+			}),
+			activeBatch: null,
+			runtimeConfig: readSyncMonitorRuntimeConfig(),
 			stats: { created: 0, updated: 0, failed: 0 },
 			lastError: null,
 			recentErrors: [],
@@ -177,7 +387,12 @@ export class SyncMonitor {
 	}
 
 	static isLikelyActive(status: SyncMonitorStatus | null): boolean {
-		if (!status || status.state !== "running") return false;
+		if (
+			!status ||
+			!["running", "paused", "stopping"].includes(status.state)
+		) {
+			return false;
+		}
 		try {
 			process.kill(status.pid, 0);
 			return true;
@@ -195,10 +410,23 @@ export class SyncMonitor {
 				| "currentStage"
 				| "stats"
 				| "lastError"
+				| "parallel"
+				| "activeBatch"
+				| "runtimeConfig"
+				| "state"
 			>
 		>,
 	): void {
-		this.status = { ...this.status, ...patch, updatedAt: nowIso() };
+		const updatedAt = nowIso();
+		const next = { ...this.status, ...patch, updatedAt };
+		this.status = {
+			...next,
+			progress: calculateProgress({
+				stats: next.stats,
+				total: next.total,
+				startedAt: next.startedAt,
+			}),
+		};
 		this.writeStatus();
 	}
 
@@ -214,11 +442,17 @@ export class SyncMonitor {
 		const recentErrors = [...this.status.recentErrors, message].slice(
 			-MAX_RECENT_ERRORS,
 		);
+		const updatedAt = nowIso();
 		this.status = {
 			...this.status,
 			lastError: message,
 			recentErrors,
-			updatedAt: nowIso(),
+			updatedAt,
+			progress: calculateProgress({
+				stats: this.status.stats,
+				total: this.status.total,
+				startedAt: this.status.startedAt,
+			}),
 		};
 		this.writeStatus();
 		this.event("error", message, { index, anilistId });
@@ -241,8 +475,15 @@ export class SyncMonitor {
 			state: "completed",
 			stats,
 			currentStage: "complete",
+			activeBatch: null,
 			updatedAt: at,
 			completedAt: at,
+			progress: calculateProgress({
+				stats,
+				total: this.status.total,
+				startedAt: this.status.startedAt,
+				endedAt: at,
+			}),
 		};
 		this.writeStatus();
 		this.event("info", "Sync complete", { stage: "complete" });
@@ -254,14 +495,65 @@ export class SyncMonitor {
 			...this.status,
 			state: "failed",
 			lastError: message,
+			activeBatch: null,
 			recentErrors: [...this.status.recentErrors, message].slice(
 				-MAX_RECENT_ERRORS,
 			),
 			updatedAt: at,
 			completedAt: at,
+			progress: calculateProgress({
+				stats: this.status.stats,
+				total: this.status.total,
+				startedAt: this.status.startedAt,
+				endedAt: at,
+			}),
 		};
 		this.writeStatus();
 		this.event("error", message);
+	}
+
+	pause(message = "Sync paused"): void {
+		this.update({
+			state: "paused",
+			currentStage: "paused",
+			activeBatch: null,
+		});
+		this.event("info", message, { stage: "paused" });
+	}
+
+	resume(message = "Sync resumed"): void {
+		this.update({ state: "running", currentStage: "resuming" });
+		this.event("info", message, { stage: "running" });
+	}
+
+	stopping(message = "Sync stopping"): void {
+		this.update({
+			state: "stopping",
+			currentStage: "stopping",
+			activeBatch: null,
+		});
+		this.event("warn", message, { stage: "stopping" });
+	}
+
+	stop(stats: SyncMonitorStats): void {
+		const at = nowIso();
+		this.status = {
+			...this.status,
+			state: "stopped",
+			stats,
+			currentStage: "stopped",
+			activeBatch: null,
+			updatedAt: at,
+			completedAt: at,
+			progress: calculateProgress({
+				stats,
+				total: this.status.total,
+				startedAt: this.status.startedAt,
+				endedAt: at,
+			}),
+		};
+		this.writeStatus();
+		this.event("warn", "Sync stopped", { stage: "stopped" });
 	}
 
 	private writeStatus(): void {
@@ -269,17 +561,66 @@ export class SyncMonitor {
 	}
 }
 
+export function createSyncMonitorBatch(input: {
+	startIndex: number;
+	endIndex: number;
+	concurrency: number;
+	ids: number[];
+}): SyncMonitorBatch {
+	return {
+		...input,
+		size: input.ids.length,
+		startedAt: nowIso(),
+	};
+}
+
+function calculateProgress(input: {
+	stats: SyncMonitorStats;
+	total: number;
+	startedAt: string;
+	endedAt?: string;
+}): SyncMonitorProgress {
+	const processed =
+		input.stats.created + input.stats.updated + input.stats.failed;
+	const remaining = Math.max(0, input.total - processed);
+	const percent =
+		input.total > 0
+			? Math.max(0, Math.min(100, Math.round((processed / input.total) * 100)))
+			: 0;
+	const startMs = new Date(input.startedAt).getTime();
+	const endMs = input.endedAt ? new Date(input.endedAt).getTime() : Date.now();
+	const elapsedMs = Math.max(0, endMs - startMs);
+	const ratePerMinute = elapsedMs > 0 ? (processed / elapsedMs) * 60_000 : 0;
+	const etaSeconds =
+		ratePerMinute > 0 ? Math.ceil((remaining / ratePerMinute) * 60) : null;
+
+	return {
+		processed,
+		remaining,
+		percent,
+		elapsedMs,
+		ratePerMinute,
+		etaSeconds,
+	};
+}
+
 export function getSyncMonitorFileInfo(): {
 	statusExists: boolean;
 	eventsExists: boolean;
+	controlExists: boolean;
+	runtimeConfigExists: boolean;
 	statusUpdatedAt: string | null;
 } {
 	const path = statusFile();
 	const statusExists = existsSync(path);
 	const eventsExists = existsSync(eventsFile());
+	const controlExists = existsSync(controlFile());
+	const runtimeConfigExists = existsSync(runtimeConfigFile());
 	return {
 		statusExists,
 		eventsExists,
+		controlExists,
+		runtimeConfigExists,
 		statusUpdatedAt: statusExists
 			? new Date(statSync(path).mtimeMs).toISOString()
 			: null,

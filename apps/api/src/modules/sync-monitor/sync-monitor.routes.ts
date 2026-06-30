@@ -1,13 +1,26 @@
 import { Elysia, t } from "elysia";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import {
+	ensureSyncMonitorAccessCode,
 	getSyncMonitorFileInfo,
 	getSyncMonitorPublicConfig,
 	isSyncMonitorAuthorized,
+	readSyncMonitorControlState,
 	readSyncMonitorEvents,
 	readSyncMonitorStatus,
 	SyncMonitor,
+	validateSyncMonitorRuntimeConfigPatch,
+	writeSyncMonitorControlState,
+	writeSyncMonitorRuntimeConfig,
 } from "../../lib/sync-monitor";
+
+const apiRoot = resolve(
+	dirname(fileURLToPath(import.meta.url)),
+	"../../..",
+);
+const syncScriptPath = resolve(apiRoot, "src/scripts/sync.ts");
 
 function extractAccessCode(
 	headers: Record<string, string | undefined>,
@@ -61,6 +74,52 @@ function guard(
 	return { ok: true };
 }
 
+function controlPayload() {
+	const status = readSyncMonitorStatus();
+	return {
+		control: readSyncMonitorControlState(),
+		status,
+		active: SyncMonitor.isLikelyActive(status),
+	};
+}
+
+function parseStartArgs(body: {
+	dryRun?: boolean;
+	limit?: number;
+	fromIndex?: number;
+	refreshIds?: boolean;
+	resetAll?: boolean;
+}): string[] {
+	const args = ["--monitor"];
+
+	if (body.dryRun) args.push("--dry-run");
+	if (body.refreshIds) args.push("--refresh-ids");
+	if (body.resetAll) args.push("--reset=all");
+	if (body.limit !== undefined) args.push(`--limit=${body.limit}`);
+	if (body.fromIndex !== undefined) args.push(`--from-index=${body.fromIndex}`);
+
+	return args;
+}
+
+function startSyncProcess(args: string[]): number {
+	const config = getSyncMonitorPublicConfig();
+	const code = ensureSyncMonitorAccessCode();
+	const child = Bun.spawn(["bun", syncScriptPath, ...args], {
+		cwd: apiRoot,
+		env: {
+			...process.env,
+			ANICORE_SYNC_MONITOR: "1",
+			ANICORE_SYNC_MONITOR_CODE: code,
+			ANICORE_SYNC_MONITOR_DIR: config.statusPath.replace(/\/status\.json$/, ""),
+		},
+		stdout: "inherit",
+		stderr: "inherit",
+		stdin: "ignore",
+	});
+	child.unref();
+	return child.pid;
+}
+
 export const syncMonitorRoutes = new Elysia({ prefix: "/sync-monitor" })
 	.get(
 		"/",
@@ -81,6 +140,7 @@ export const syncMonitorRoutes = new Elysia({ prefix: "/sync-monitor" })
 			return {
 				status,
 				active: SyncMonitor.isLikelyActive(status),
+				control: readSyncMonitorControlState(),
 				files: getSyncMonitorFileInfo(),
 			};
 		},
@@ -130,5 +190,172 @@ export const syncMonitorRoutes = new Elysia({ prefix: "/sync-monitor" })
 			if (!auth.ok) return auth.body;
 
 			return getSyncMonitorPublicConfig();
+		},
+	)
+	.patch(
+		"/config",
+		({ body, headers, set }) => {
+			const auth = guard(
+				headers,
+				(status) => {
+					set.status = status;
+				},
+				() => {
+					set.headers["WWW-Authenticate"] =
+						'Basic realm="AniCore Sync Monitor"';
+				},
+			);
+			if (!auth.ok) return auth.body;
+
+			try {
+				const patch = validateSyncMonitorRuntimeConfigPatch(body);
+				writeSyncMonitorRuntimeConfig(patch, "api");
+				return getSyncMonitorPublicConfig();
+			} catch (err) {
+				set.status = 400;
+				return {
+					error: err instanceof Error ? err.message : String(err),
+				};
+			}
+		},
+		{
+			body: t.Object({
+				parallel: t.Optional(t.Number()),
+				checkpointEvery: t.Optional(t.Number()),
+			}),
+		},
+	)
+	.get(
+		"/control",
+		({ headers, set }) => {
+			const auth = guard(
+				headers,
+				(status) => {
+					set.status = status;
+				},
+				() => {
+					set.headers["WWW-Authenticate"] =
+						'Basic realm="AniCore Sync Monitor"';
+				},
+			);
+			if (!auth.ok) return auth.body;
+
+			return controlPayload();
+		},
+	)
+	.post(
+		"/control/pause",
+		({ headers, set }) => {
+			const auth = guard(
+				headers,
+				(status) => {
+					set.status = status;
+				},
+				() => {
+					set.headers["WWW-Authenticate"] =
+						'Basic realm="AniCore Sync Monitor"';
+				},
+			);
+			if (!auth.ok) return auth.body;
+
+			const status = readSyncMonitorStatus();
+			if (!SyncMonitor.isLikelyActive(status)) {
+				set.status = 409;
+				return { error: "No active sync process to pause" };
+			}
+
+			writeSyncMonitorControlState("pause", "Pause requested from monitor");
+			return controlPayload();
+		},
+	)
+	.post(
+		"/control/resume",
+		({ headers, set }) => {
+			const auth = guard(
+				headers,
+				(status) => {
+					set.status = status;
+				},
+				() => {
+					set.headers["WWW-Authenticate"] =
+						'Basic realm="AniCore Sync Monitor"';
+				},
+			);
+			if (!auth.ok) return auth.body;
+
+			const status = readSyncMonitorStatus();
+			if (!SyncMonitor.isLikelyActive(status)) {
+				set.status = 409;
+				return { error: "No active sync process to resume" };
+			}
+
+			writeSyncMonitorControlState("resume", "Resume requested from monitor");
+			return controlPayload();
+		},
+	)
+	.post(
+		"/control/stop",
+		({ headers, set }) => {
+			const auth = guard(
+				headers,
+				(status) => {
+					set.status = status;
+				},
+				() => {
+					set.headers["WWW-Authenticate"] =
+						'Basic realm="AniCore Sync Monitor"';
+				},
+			);
+			if (!auth.ok) return auth.body;
+
+			const status = readSyncMonitorStatus();
+			if (!SyncMonitor.isLikelyActive(status)) {
+				set.status = 409;
+				return { error: "No active sync process to stop" };
+			}
+
+			writeSyncMonitorControlState("stop", "Stop requested from monitor");
+			return controlPayload();
+		},
+	)
+	.post(
+		"/control/start",
+		({ body, headers, set }) => {
+			const auth = guard(
+				headers,
+				(status) => {
+					set.status = status;
+				},
+				() => {
+					set.headers["WWW-Authenticate"] =
+						'Basic realm="AniCore Sync Monitor"';
+				},
+			);
+			if (!auth.ok) return auth.body;
+
+			const status = readSyncMonitorStatus();
+			if (SyncMonitor.isLikelyActive(status)) {
+				set.status = 409;
+				return { error: "A sync process is already active" };
+			}
+
+			writeSyncMonitorControlState(null, null, "sync");
+			const pid = startSyncProcess(parseStartArgs(body));
+			const payload = controlPayload();
+			return {
+				...payload,
+				active: true,
+				started: true,
+				pid,
+			};
+		},
+		{
+			body: t.Object({
+				dryRun: t.Optional(t.Boolean()),
+				limit: t.Optional(t.Number({ minimum: 1, maximum: 1_000_000 })),
+				fromIndex: t.Optional(t.Number({ minimum: 0 })),
+				refreshIds: t.Optional(t.Boolean()),
+				resetAll: t.Optional(t.Boolean()),
+			}),
 		},
 	);

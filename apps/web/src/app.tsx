@@ -1,4 +1,5 @@
 import type {
+  SyncMonitorConfigResponse,
   SyncMonitorEvent,
   SyncMonitorStatus,
   SyncMonitorStatusResponse,
@@ -9,10 +10,17 @@ import {
   AlertTriangle,
   Clock3,
   Database,
+  Moon,
+  Pause,
+  Play,
   PlugZap,
   RefreshCw,
+  Save,
   Server,
   ShieldCheck,
+  SlidersHorizontal,
+  Square,
+  Sun,
   TerminalSquare,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -30,6 +38,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useTheme } from "./theme-provider";
 
 const defaultApiUrl =
   import.meta.env.VITE_ANICORE_API_URL?.trim() || "http://localhost:3000";
@@ -67,7 +76,29 @@ function formatDuration(start?: string, end?: string): string {
   return `${hours}h ${minutes % 60}m`;
 }
 
+function formatMs(value?: number): string {
+  if (value === undefined) return "Not available";
+  const seconds = Math.max(0, Math.round(value / 1000));
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  if (minutes < 1) return `${remainder}s`;
+  if (minutes < 60) return `${minutes}m ${remainder}s`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h ${minutes % 60}m`;
+}
+
+function formatEta(value: number | null | undefined): string {
+  if (value === null || value === undefined) return "Calculating";
+  return formatMs(value * 1000);
+}
+
+function formatRate(value: number | undefined): string {
+  if (value === undefined) return "Unknown";
+  return `${value.toFixed(value >= 10 ? 0 : 1)}/min`;
+}
+
 function percent(status: SyncMonitorStatus | null): number {
+  if (status?.progress) return status.progress.percent;
   if (!status || status.total <= 0) return 0;
   const current =
     status.currentIndex === null ? status.startIndex : status.currentIndex + 1;
@@ -90,6 +121,7 @@ function describeConnection(state: ConnectionState): string {
 }
 
 export function App() {
+  const { resolvedTheme, setTheme, theme } = useTheme();
   const [apiUrl, setApiUrl] = useState(() =>
     loadStoredValue("anicore.apiUrl", defaultApiUrl),
   );
@@ -98,6 +130,14 @@ export function App() {
   );
   const [statusPayload, setStatusPayload] =
     useState<SyncMonitorStatusResponse | null>(null);
+  const [configPayload, setConfigPayload] =
+    useState<SyncMonitorConfigResponse | null>(null);
+  const [parallelDraft, setParallelDraft] = useState("4");
+  const [checkpointDraft, setCheckpointDraft] = useState("10");
+  const [configSaving, setConfigSaving] = useState(false);
+  const [configMessage, setConfigMessage] = useState<string | null>(null);
+  const [controlBusy, setControlBusy] = useState<string | null>(null);
+  const [controlMessage, setControlMessage] = useState<string | null>(null);
   const [events, setEvents] = useState<SyncMonitorEvent[]>([]);
   const [connectionState, setConnectionState] =
     useState<ConnectionState>("idle");
@@ -118,12 +158,14 @@ export function App() {
 
     setConnectionState((state) => (state === "ready" ? "ready" : "loading"));
     try {
-      const [nextStatus, nextEvents] = await Promise.all([
+      const [nextStatus, nextEvents, nextConfig] = await Promise.all([
         client.getStatus(),
         client.getEvents(80),
+        client.getConfig(),
       ]);
       setStatusPayload(nextStatus);
       setEvents(nextEvents.events);
+      setConfigPayload(nextConfig);
       setLastRefresh(new Date().toISOString());
       setError(null);
       setConnectionState("ready");
@@ -151,15 +193,82 @@ export function App() {
     return () => window.clearInterval(interval);
   }, [client, refresh]);
 
+  useEffect(() => {
+    const runtime = configPayload?.runtime ?? statusPayload?.status?.runtimeConfig;
+    if (!runtime) return;
+    setParallelDraft(String(runtime.parallel));
+    setCheckpointDraft(String(runtime.checkpointEvery));
+  }, [configPayload, statusPayload]);
+
+  const saveRuntimeConfig = useCallback(async () => {
+    if (!client) return;
+
+    const parallel = Number(parallelDraft);
+    const checkpointEvery = Number(checkpointDraft);
+    setConfigSaving(true);
+    setConfigMessage(null);
+
+    try {
+      if (!Number.isInteger(parallel) || parallel < 1 || parallel > 32) {
+        throw new Error("Parallel fetches must be an integer between 1 and 32.");
+      }
+      if (
+        !Number.isInteger(checkpointEvery) ||
+        checkpointEvery < 1 ||
+        checkpointEvery > 10000
+      ) {
+        throw new Error("Checkpoint every must be an integer between 1 and 10000.");
+      }
+      const nextConfig = await client.updateConfig({
+        parallel,
+        checkpointEvery,
+      });
+      setConfigPayload(nextConfig);
+      setParallelDraft(String(nextConfig.runtime.parallel));
+      setCheckpointDraft(String(nextConfig.runtime.checkpointEvery));
+      setConfigMessage("Runtime config saved. Active sync applies it at the next batch.");
+      await refresh();
+    } catch (err) {
+      setConfigMessage(err instanceof Error ? err.message : String(err));
+    } finally {
+      setConfigSaving(false);
+    }
+  }, [checkpointDraft, client, parallelDraft, refresh]);
+
   const status = statusPayload?.status ?? null;
+  const control = statusPayload?.control ?? null;
+  const runtime = configPayload?.runtime ?? status?.runtimeConfig ?? null;
   const completion = percent(status);
-  const processed = status
-    ? status.stats.created + status.stats.updated + status.stats.failed
-    : 0;
+  const processed = status?.progress.processed ?? 0;
+  const active = statusPayload?.active ?? false;
+  const isPaused = status?.state === "paused" || control?.command === "pause";
+
+  const runControlAction = useCallback(
+    async (
+      name: string,
+      action: () => Promise<unknown>,
+      successMessage: string,
+    ) => {
+      if (!client) return;
+      setControlBusy(name);
+      setControlMessage(null);
+
+      try {
+        await action();
+        setControlMessage(successMessage);
+        await refresh();
+      } catch (err) {
+        setControlMessage(err instanceof Error ? err.message : String(err));
+      } finally {
+        setControlBusy(null);
+      }
+    },
+    [client, refresh],
+  );
 
   return (
     <main className="min-h-screen bg-background text-foreground">
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-5 sm:px-6 lg:px-8">
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-5 sm:px-6 lg:px-8">
         <header className="grid gap-4 border-b border-border pb-5 lg:grid-cols-[1fr_auto] lg:items-end">
           <div className="flex flex-col gap-3">
             <div className="flex flex-wrap items-center gap-2">
@@ -180,10 +289,21 @@ export function App() {
             </div>
           </div>
 
-          <Button variant="outline" onClick={() => void refresh()}>
-            <RefreshCw data-icon="inline-start" />
-            Refresh
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label={`Switch to ${resolvedTheme === "dark" ? "light" : "dark"} mode`}
+              onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
+              title={`Theme: ${theme}`}
+            >
+              {resolvedTheme === "dark" ? <Sun /> : <Moon />}
+            </Button>
+            <Button variant="outline" onClick={() => void refresh()}>
+              <RefreshCw data-icon="inline-start" />
+              Refresh
+            </Button>
+          </div>
         </header>
 
         <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
@@ -253,6 +373,129 @@ export function App() {
           </Alert>
         ) : null}
 
+        <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_420px]">
+          <Card>
+            <CardHeader>
+              <CardTitle>Sync Controls</CardTitle>
+              <CardDescription>
+                Commands are written through the monitor API and applied by the sync loop.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4">
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  disabled={!client || active || controlBusy !== null}
+                  onClick={() =>
+                    void runControlAction(
+                      "start",
+                      () => client!.start({ dryRun: false }),
+                      "Sync start requested.",
+                    )
+                  }
+                >
+                  <Play data-icon="inline-start" />
+                  Start Sync
+                </Button>
+                <Button
+                  variant="secondary"
+                  disabled={!client || active || controlBusy !== null}
+                  onClick={() =>
+                    void runControlAction(
+                      "dry-run",
+                      () => client!.start({ dryRun: true, limit: 5 }),
+                      "Dry-run start requested.",
+                    )
+                  }
+                >
+                  <Play data-icon="inline-start" />
+                  Dry Run
+                </Button>
+                <Button
+                  variant="outline"
+                  disabled={!client || !active || isPaused || controlBusy !== null}
+                  onClick={() =>
+                    void runControlAction(
+                      "pause",
+                      () => client!.pause(),
+                      "Pause requested.",
+                    )
+                  }
+                >
+                  <Pause data-icon="inline-start" />
+                  Pause
+                </Button>
+                <Button
+                  variant="outline"
+                  disabled={!client || !active || !isPaused || controlBusy !== null}
+                  onClick={() =>
+                    void runControlAction(
+                      "resume",
+                      () => client!.resume(),
+                      "Resume requested.",
+                    )
+                  }
+                >
+                  <Play data-icon="inline-start" />
+                  Resume
+                </Button>
+                <Button
+                  variant="destructive"
+                  disabled={!client || !active || controlBusy !== null}
+                  onClick={() =>
+                    void runControlAction(
+                      "stop",
+                      () => client!.stop(),
+                      "Stop requested.",
+                    )
+                  }
+                >
+                  <Square data-icon="inline-start" />
+                  Stop
+                </Button>
+              </div>
+              {controlMessage ? (
+                <Alert>
+                  <AlertTitle>Control update</AlertTitle>
+                  <AlertDescription>{controlMessage}</AlertDescription>
+                </Alert>
+              ) : null}
+              <div className="grid gap-3 text-sm sm:grid-cols-3">
+                <TextStat label="Command" value={control?.command ?? "None"} />
+                <TextStat
+                  label="Requested"
+                  value={formatDate(control?.requestedAt ?? undefined)}
+                />
+                <TextStat label="Active" value={active ? "Yes" : "No"} />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Run State</CardTitle>
+              <CardDescription>
+                Latest monitor process projection from the API.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-3 text-sm">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">PID</span>
+                <span className="font-medium">{status?.pid ?? "None"}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">Mode</span>
+                <span className="font-medium">{status?.mode ?? "Idle"}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">Stage</span>
+                <span className="font-medium">
+                  {status?.currentStage ?? "No active stage"}
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+
         <section className="grid gap-4 lg:grid-cols-4">
           <MetricCard icon={Activity} label="State" value={status?.state ?? "No run"} />
           <MetricCard
@@ -268,7 +511,7 @@ export function App() {
           <MetricCard
             icon={PlugZap}
             label="Parallel"
-            value={status ? `x${status.parallel}` : "Unknown"}
+            value={runtime ? `x${runtime.parallel}` : "Unknown"}
           />
         </section>
 
@@ -313,11 +556,21 @@ export function App() {
                     </div>
                   </div>
                   <Progress value={completion} />
-                  <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
                     <Stat label="Created" value={status?.stats.created ?? 0} />
                     <Stat label="Updated" value={status?.stats.updated ?? 0} />
                     <Stat label="Failed" value={status?.stats.failed ?? 0} />
+                    <Stat label="Remaining" value={status?.progress.remaining ?? 0} />
+                    <TextStat
+                      label="Rate"
+                      value={formatRate(status?.progress.ratePerMinute)}
+                    />
+                    <TextStat
+                      label="ETA"
+                      value={formatEta(status?.progress.etaSeconds)}
+                    />
                   </div>
+                  <RuntimeSnapshot status={status} />
                   {status?.lastError ? (
                     <Alert className="border-destructive/40">
                       <AlertTitle>Latest error</AlertTitle>
@@ -329,7 +582,70 @@ export function App() {
             </CardContent>
           </Card>
 
-          <Card>
+          <div className="flex flex-col gap-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Runtime Config</CardTitle>
+                <CardDescription>
+                  Updates are written to the API host and picked up by sync between batches.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-3">
+                <label className="flex flex-col gap-2 text-sm font-medium">
+                  Parallel fetches
+                  <Input
+                    min={1}
+                    max={32}
+                    step={1}
+                    type="number"
+                    value={parallelDraft}
+                    onChange={(event) => setParallelDraft(event.target.value)}
+                  />
+                </label>
+                <label className="flex flex-col gap-2 text-sm font-medium">
+                  Checkpoint every
+                  <Input
+                    min={1}
+                    max={10000}
+                    step={1}
+                    type="number"
+                    value={checkpointDraft}
+                    onChange={(event) => setCheckpointDraft(event.target.value)}
+                  />
+                </label>
+                <Button
+                  onClick={() => void saveRuntimeConfig()}
+                  disabled={!client || configSaving}
+                >
+                  {configSaving ? (
+                    <RefreshCw data-icon="inline-start" />
+                  ) : (
+                    <Save data-icon="inline-start" />
+                  )}
+                  Save
+                </Button>
+                {configMessage ? (
+                  <div className="rounded-md border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
+                    {configMessage}
+                  </div>
+                ) : null}
+                <div className="grid gap-2 text-xs text-muted-foreground">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="flex items-center gap-2">
+                      <SlidersHorizontal />
+                      Updated by
+                    </span>
+                    <span>{runtime?.updatedBy ?? "default"}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span>Updated at</span>
+                    <span>{formatDate(runtime?.updatedAt)}</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
             <CardHeader>
               <CardTitle>Recent Events</CardTitle>
               <CardDescription>Latest entries from `events.jsonl`.</CardDescription>
@@ -351,6 +667,7 @@ export function App() {
               </div>
             </CardContent>
           </Card>
+          </div>
         </section>
       </div>
     </main>
@@ -388,6 +705,51 @@ function Stat({ label, value }: { label: string; value: number }) {
     <div className="rounded-md border border-border bg-muted/40 p-3">
       <div className="text-xs text-muted-foreground">{label}</div>
       <div className="mt-1 text-lg font-semibold">{value.toLocaleString()}</div>
+    </div>
+  );
+}
+
+function TextStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border border-border bg-muted/40 p-3">
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className="mt-1 text-lg font-semibold">{value}</div>
+    </div>
+  );
+}
+
+function RuntimeSnapshot({ status }: { status: SyncMonitorStatus | null }) {
+  if (!status) return null;
+
+  const batch = status.activeBatch;
+  return (
+    <div className="grid gap-3 rounded-md border border-border bg-muted/30 p-4 text-sm lg:grid-cols-3">
+      <div>
+        <div className="text-xs text-muted-foreground">Current stage</div>
+        <div className="mt-1 font-medium">{status.currentStage ?? "Idle"}</div>
+      </div>
+      <div>
+        <div className="text-xs text-muted-foreground">Elapsed</div>
+        <div className="mt-1 font-medium">
+          {formatMs(status.progress.elapsedMs)}
+        </div>
+      </div>
+      <div>
+        <div className="text-xs text-muted-foreground">Batch</div>
+        <div className="mt-1 font-medium">
+          {batch
+            ? `${batch.startIndex}-${batch.endIndex - 1} at x${batch.concurrency}`
+            : "No active batch"}
+        </div>
+      </div>
+      {batch ? (
+        <div className="min-w-0 lg:col-span-3">
+          <div className="text-xs text-muted-foreground">Batch IDs</div>
+          <div className="mt-1 truncate font-mono text-xs">
+            {batch.ids.join(", ")}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

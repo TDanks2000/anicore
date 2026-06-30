@@ -66,9 +66,18 @@ describe("app contract", () => {
     expect(await json(authorized)).toEqual({
       status: null,
       active: false,
+      control: {
+        version: 1,
+        command: null,
+        requestedAt: null,
+        requestedBy: null,
+        message: null,
+      },
       files: {
         statusExists: false,
         eventsExists: false,
+        controlExists: false,
+        runtimeConfigExists: false,
         statusUpdatedAt: null,
       },
     });
@@ -99,14 +108,36 @@ describe("app contract", () => {
     );
     expect(statusResponse.status).toBe(200);
     const statusPayload = (await json(statusResponse)) as {
-      status: { currentStage: string; currentAnilistId: number; lastError: string };
-      files: { statusExists: boolean; eventsExists: boolean };
+      status: {
+        currentStage: string;
+        currentAnilistId: number;
+        lastError: string;
+        progress: { processed: number; remaining: number; percent: number };
+        runtimeConfig: { parallel: number; checkpointEvery: number };
+      };
+      files: {
+        statusExists: boolean;
+        eventsExists: boolean;
+        controlExists: boolean;
+        runtimeConfigExists: boolean;
+      };
     };
     expect(statusPayload.status.currentStage).toBe("anilist-fetch");
     expect(statusPayload.status.currentAnilistId).toBe(123);
     expect(statusPayload.status.lastError).toBe("provider timeout");
+    expect(statusPayload.status.progress).toMatchObject({
+      processed: 0,
+      remaining: 5,
+      percent: 0,
+    });
+    expect(statusPayload.status.runtimeConfig).toMatchObject({
+      parallel: 4,
+      checkpointEvery: 10,
+    });
     expect(statusPayload.files.statusExists).toBe(true);
     expect(statusPayload.files.eventsExists).toBe(true);
+    expect(statusPayload.files.controlExists).toBe(false);
+    expect(statusPayload.files.runtimeConfigExists).toBe(false);
 
     const eventsResponse = await app.handle(
       new Request("http://localhost/sync-monitor/events?limit=1", {
@@ -116,6 +147,129 @@ describe("app contract", () => {
     expect(eventsResponse.status).toBe(200);
     expect(await json(eventsResponse)).toMatchObject({
       events: [{ level: "error", message: "provider timeout" }],
+    });
+
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("allows authenticated monitor config edits", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "anicore-monitor-"));
+    process.env.ANICORE_SYNC_MONITOR_DIR = dir;
+    process.env.ANICORE_SYNC_MONITOR_CODE = "test-code";
+
+    const updateResponse = await app.handle(
+      new Request("http://localhost/sync-monitor/config", {
+        method: "PATCH",
+        headers: {
+          Authorization: "Bearer test-code",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ parallel: 3, checkpointEvery: 2 }),
+      }),
+    );
+
+    expect(updateResponse.status).toBe(200);
+    expect(await json(updateResponse)).toMatchObject({
+      runtime: {
+        parallel: 3,
+        checkpointEvery: 2,
+        updatedBy: "api",
+      },
+    });
+
+    const invalidResponse = await app.handle(
+      new Request("http://localhost/sync-monitor/config", {
+        method: "PATCH",
+        headers: {
+          Authorization: "Bearer test-code",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ parallel: 0 }),
+      }),
+    );
+
+    expect(invalidResponse.status).toBe(400);
+    expect(await json(invalidResponse)).toEqual({
+      error: "parallel must be between 1 and 32",
+    });
+
+    const configResponse = await app.handle(
+      new Request("http://localhost/sync-monitor/config", {
+        headers: { Authorization: "Bearer test-code" },
+      }),
+    );
+    expect(configResponse.status).toBe(200);
+    expect(await json(configResponse)).toMatchObject({
+      runtime: {
+        parallel: 3,
+        checkpointEvery: 2,
+        updatedBy: "api",
+      },
+    });
+
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("writes authenticated sync control commands", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "anicore-monitor-"));
+    process.env.ANICORE_SYNC_MONITOR_DIR = dir;
+    process.env.ANICORE_SYNC_MONITOR_CODE = "test-code";
+
+    const inactivePause = await app.handle(
+      new Request("http://localhost/sync-monitor/control/pause", {
+        method: "POST",
+        headers: { Authorization: "Bearer test-code" },
+      }),
+    );
+    expect(inactivePause.status).toBe(409);
+    expect(await json(inactivePause)).toEqual({
+      error: "No active sync process to pause",
+    });
+
+    const monitor = new SyncMonitor({
+      mode: "sync",
+      total: 5,
+      startIndex: 0,
+      endIndex: 5,
+      parallel: 1,
+      providers: ["anilist"],
+    });
+    monitor.stage("anilist-fetch", 0, 1);
+
+    const pause = await app.handle(
+      new Request("http://localhost/sync-monitor/control/pause", {
+        method: "POST",
+        headers: { Authorization: "Bearer test-code" },
+      }),
+    );
+    expect(pause.status).toBe(200);
+    expect(await json(pause)).toMatchObject({
+      active: true,
+      control: { command: "pause", requestedBy: "api" },
+    });
+
+    const resume = await app.handle(
+      new Request("http://localhost/sync-monitor/control/resume", {
+        method: "POST",
+        headers: { Authorization: "Bearer test-code" },
+      }),
+    );
+    expect(resume.status).toBe(200);
+    expect(await json(resume)).toMatchObject({
+      active: true,
+      control: { command: "resume", requestedBy: "api" },
+    });
+
+    const stop = await app.handle(
+      new Request("http://localhost/sync-monitor/control/stop", {
+        method: "POST",
+        headers: { Authorization: "Bearer test-code" },
+      }),
+    );
+    expect(stop.status).toBe(200);
+    expect(await json(stop)).toMatchObject({
+      active: true,
+      control: { command: "stop", requestedBy: "api" },
     });
 
     rmSync(dir, { recursive: true, force: true });

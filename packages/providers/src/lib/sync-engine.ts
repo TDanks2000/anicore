@@ -28,6 +28,7 @@ export interface IterateOptions {
 	label: string;
 	/** Called after each item — use for progress checkpointing. */
 	onAfterEach?: (ctx: { stats: SyncStats; index: number }) => Promise<void>;
+	beforeEach?: (ctx: { id: number; index: number }) => Promise<boolean>;
 }
 
 export type DryPluginEntry =
@@ -42,7 +43,7 @@ class AdaptiveController {
 	private backoffBatchesLeft = 0;
 
 	constructor(
-		private readonly maxConcurrency: number,
+		private maxConcurrency: number,
 		private readonly windowSize = 20,
 		private readonly failureThreshold = 0.25,
 		private readonly backoffBatches = 10,
@@ -59,6 +60,17 @@ class AdaptiveController {
 			return `sequential (${this.backoffBatchesLeft} batches left, then ×${this.maxConcurrency})`;
 		}
 		return `×${this._concurrency} parallel`;
+	}
+
+	setMaxConcurrency(nextMax: number): boolean {
+		const normalized = Math.max(1, Math.floor(nextMax));
+		if (normalized === this.maxConcurrency) return false;
+
+		this.maxConcurrency = normalized;
+		if (this.backoffBatchesLeft === 0 || normalized < this._concurrency) {
+			this._concurrency = normalized;
+		}
+		return true;
 	}
 
 	/** Record one fetch outcome. Returns true if this triggered a new backoff. */
@@ -227,11 +239,15 @@ export class SyncEngine {
 		) => Promise<PerIdResult>,
 	): Promise<SyncStats> {
 		const { ids, startIndex, endIndex, label, onAfterEach } = options;
+		const { beforeEach } = options;
 		const bar = log.progress(endIndex - startIndex, label);
 		const stats: SyncStats = { created: 0, updated: 0, failed: 0 };
 
 		for (let i = startIndex; i < endIndex; i++) {
 			const id = ids[i]!;
+			if (beforeEach && !(await beforeEach({ id, index: i }))) {
+				break;
+			}
 			const { outcome, extra } = await perIdFn(id, i, bar);
 
 			if (outcome === "created") stats.created++;
@@ -264,7 +280,28 @@ export class SyncEngine {
 	 * `backoffBatches` (default 10) batches, then restores automatically.
 	 */
 	async iterateParallel<TFetched>(
-		options: IterateOptions & { concurrency: number; rateLimitMs?: number },
+		options: IterateOptions & {
+			concurrency: number;
+			rateLimitMs?: number;
+			getConcurrency?: () => number | Promise<number>;
+			onBatchStart?: (ctx: {
+				startIndex: number;
+				endIndex: number;
+				concurrency: number;
+				ids: number[];
+			}) => void | Promise<void>;
+			onBatchEnd?: () => void | Promise<void>;
+			onConcurrencyChange?: (ctx: {
+				previous: number;
+				next: number;
+			}) => void | Promise<void>;
+			beforeBatch?: (ctx: {
+				startIndex: number;
+				endIndex: number;
+				concurrency: number;
+				ids: number[];
+			}) => Promise<boolean>;
+		},
 		fetchFn: (
 			id: number,
 			index: number,
@@ -285,6 +322,11 @@ export class SyncEngine {
 			onAfterEach,
 			concurrency,
 			rateLimitMs = ANILIST_RATE_MS,
+			getConcurrency,
+			onBatchStart,
+			onBatchEnd,
+			onConcurrencyChange,
+			beforeBatch,
 		} = options;
 
 		const bar = log.progress(endIndex - startIndex, label);
@@ -293,11 +335,39 @@ export class SyncEngine {
 		let i = startIndex;
 
 		while (i < endIndex) {
+			if (getConcurrency) {
+				const previous = ctrl.currentConcurrency;
+				const changed = ctrl.setMaxConcurrency(await getConcurrency());
+				if (changed) {
+					await onConcurrencyChange?.({
+						previous,
+						next: ctrl.currentConcurrency,
+					});
+				}
+			}
+
 			const batchSize = ctrl.currentConcurrency;
 			const batchEnd = Math.min(i + batchSize, endIndex);
 			const batchIds = ids.slice(i, batchEnd);
 			const batchIndices = batchIds.map((_, j) => i + j);
 			const batchStart = Date.now();
+			if (
+				beforeBatch &&
+				!(await beforeBatch({
+					startIndex: i,
+					endIndex: batchEnd,
+					concurrency: batchSize,
+					ids: batchIds,
+				}))
+			) {
+				break;
+			}
+			await onBatchStart?.({
+				startIndex: i,
+				endIndex: batchEnd,
+				concurrency: batchSize,
+				ids: batchIds,
+			});
 
 			// Phase 1: parallel fetch from external API
 			bar.setStage(`fetching ×${batchIds.length}…`);
@@ -373,6 +443,7 @@ export class SyncEngine {
 			}
 
 			ctrl.batchDone();
+			await onBatchEnd?.();
 			i = batchEnd;
 
 			if (i < endIndex) {

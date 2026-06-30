@@ -1,9 +1,34 @@
-export type SyncMonitorState = "idle" | "running" | "completed" | "failed";
+export type SyncMonitorState =
+  | "idle"
+  | "running"
+  | "paused"
+  | "stopping"
+  | "stopped"
+  | "completed"
+  | "failed";
 
 export interface SyncMonitorStats {
   created: number;
   updated: number;
   failed: number;
+}
+
+export interface SyncMonitorProgress {
+  processed: number;
+  remaining: number;
+  percent: number;
+  elapsedMs: number;
+  ratePerMinute: number;
+  etaSeconds: number | null;
+}
+
+export interface SyncMonitorBatch {
+  startIndex: number;
+  endIndex: number;
+  size: number;
+  concurrency: number;
+  ids: number[];
+  startedAt: string;
 }
 
 export interface SyncMonitorStatus {
@@ -23,9 +48,54 @@ export interface SyncMonitorStatus {
   currentStage: string | null;
   parallel: number;
   providers: string[];
+  progress: SyncMonitorProgress;
+  activeBatch: SyncMonitorBatch | null;
+  runtimeConfig: SyncMonitorRuntimeConfig;
   stats: SyncMonitorStats;
   lastError: string | null;
   recentErrors: string[];
+}
+
+export interface SyncMonitorRuntimeConfig {
+  version: 1;
+  parallel: number;
+  checkpointEvery: number;
+  updatedAt: string;
+  updatedBy: "default" | "api" | "sync";
+}
+
+export interface SyncMonitorRuntimeConfigPatch {
+  parallel?: number;
+  checkpointEvery?: number;
+}
+
+export type SyncMonitorControlCommand = "pause" | "resume" | "stop" | "start";
+
+export interface SyncMonitorControlState {
+  version: 1;
+  command: Exclude<SyncMonitorControlCommand, "start"> | null;
+  requestedAt: string | null;
+  requestedBy: "api" | "sync" | null;
+  message: string | null;
+}
+
+export interface SyncMonitorControlResponse {
+  control: SyncMonitorControlState;
+  status: SyncMonitorStatus | null;
+  active: boolean;
+}
+
+export interface SyncMonitorStartOptions {
+  dryRun?: boolean;
+  limit?: number;
+  fromIndex?: number;
+  refreshIds?: boolean;
+  resetAll?: boolean;
+}
+
+export interface SyncMonitorStartResponse extends SyncMonitorControlResponse {
+  started: boolean;
+  pid: number | null;
 }
 
 export interface SyncMonitorEvent {
@@ -41,16 +111,22 @@ export interface SyncMonitorPublicConfig {
   enabled: boolean;
   statusPath: string;
   eventsPath: string;
+  controlPath: string;
+  runtimeConfigPath: string;
   codePath: string;
   hasAccessCode: boolean;
+  runtime: SyncMonitorRuntimeConfig;
 }
 
 export interface SyncMonitorStatusResponse {
   status: SyncMonitorStatus | null;
   active: boolean;
+  control: SyncMonitorControlState;
   files: {
     statusExists: boolean;
     eventsExists: boolean;
+    controlExists: boolean;
+    runtimeConfigExists: boolean;
     statusUpdatedAt: string | null;
   };
 }
@@ -58,6 +134,8 @@ export interface SyncMonitorStatusResponse {
 export interface SyncMonitorEventsResponse {
   events: SyncMonitorEvent[];
 }
+
+export interface SyncMonitorConfigResponse extends SyncMonitorPublicConfig {}
 
 export interface SyncMonitorClientOptions {
   baseUrl: string;
@@ -86,9 +164,59 @@ export class SyncMonitorClient {
     );
   }
 
+  async getConfig(): Promise<SyncMonitorConfigResponse> {
+    return this.getJson<SyncMonitorConfigResponse>("/sync-monitor/config");
+  }
+
+  async updateConfig(
+    patch: SyncMonitorRuntimeConfigPatch,
+  ): Promise<SyncMonitorConfigResponse> {
+    return this.requestJson<SyncMonitorConfigResponse>("/sync-monitor/config", {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    });
+  }
+
+  async pause(): Promise<SyncMonitorControlResponse> {
+    return this.postJson<SyncMonitorControlResponse>("/sync-monitor/control/pause");
+  }
+
+  async resume(): Promise<SyncMonitorControlResponse> {
+    return this.postJson<SyncMonitorControlResponse>("/sync-monitor/control/resume");
+  }
+
+  async stop(): Promise<SyncMonitorControlResponse> {
+    return this.postJson<SyncMonitorControlResponse>("/sync-monitor/control/stop");
+  }
+
+  async start(
+    options: SyncMonitorStartOptions = {},
+  ): Promise<SyncMonitorStartResponse> {
+    return this.postJson<SyncMonitorStartResponse>(
+      "/sync-monitor/control/start",
+      options,
+    );
+  }
+
   private async getJson<T>(path: string): Promise<T> {
+    return this.requestJson<T>(path);
+  }
+
+  private async postJson<T>(path: string, body?: unknown): Promise<T> {
+    return this.requestJson<T>(path, {
+      method: "POST",
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  }
+
+  private async requestJson<T>(
+    path: string,
+    init: Omit<RequestInit, "headers"> = {},
+  ): Promise<T> {
     const response = await this.fetcher(`${this.baseUrl}${path}`, {
+      ...init,
       headers: {
+        "Content-Type": "application/json",
         Authorization: `Bearer ${this.accessCode}`,
       },
     });

@@ -17,9 +17,15 @@ import { log, type ProgressBar } from "@anicore/providers/lib/logger";
 import { withAnilistRetry } from "@anicore/providers/lib/anilist-rate-limit";
 import { installProxyFetch } from "@anicore/providers/lib/proxy";
 import {
+	createSyncMonitorBatch,
 	ensureSyncMonitorAccessCode,
+	ensureSyncMonitorRuntimeConfig,
 	getSyncMonitorPublicConfig,
+	readSyncMonitorControlState,
+	readSyncMonitorRuntimeConfig,
 	type SyncMonitorStats,
+	type SyncMonitorRuntimeConfig,
+	writeSyncMonitorControlState,
 	SyncMonitor,
 } from "../lib/sync-monitor";
 import {
@@ -82,8 +88,10 @@ function parsePositiveIntegerFlag(prefix: string, fallback: number): number {
 
 const PLUGINS: ProviderPlugin[] = [kitsuPlugin];
 
-const CHECKPOINT_EVERY = 10;
 let activeMonitor: SyncMonitor | null = null;
+let activeRuntimeConfig: SyncMonitorRuntimeConfig | null = null;
+let stopRequested = false;
+let paused = false;
 
 function formatMonitorStats(stats: SyncStats): SyncMonitorStats {
 	return {
@@ -95,12 +103,17 @@ function formatMonitorStats(stats: SyncStats): SyncMonitorStats {
 
 function announceMonitor(): void {
 	const code = ensureSyncMonitorAccessCode();
+	ensureSyncMonitorRuntimeConfig({
+		parallel: PARALLEL,
+		checkpointEvery: 10,
+	});
 	const config = getSyncMonitorPublicConfig();
 	log.info("Sync monitor enabled");
 	log.info(`Access code saved locally: ${config.codePath}`);
 	log.info(`Use Authorization: Bearer ${code}`);
 	log.info(`Status file: ${config.statusPath}`);
 	log.info(`Events file: ${config.eventsPath}`);
+	log.info(`Runtime config file: ${config.runtimeConfigPath}`);
 }
 
 function failActiveMonitor(message: string): void {
@@ -132,6 +145,76 @@ function getDryRunEpisodeRows(
 		}));
 
 	return episodeRows.length > 0 ? episodeRows : undefined;
+}
+
+function refreshRuntimeConfig(monitor?: SyncMonitor | null): SyncMonitorRuntimeConfig {
+	const next = readSyncMonitorRuntimeConfig();
+	const previous = activeRuntimeConfig;
+	activeRuntimeConfig = next;
+
+	if (monitor && previous && previous.updatedAt !== next.updatedAt) {
+		const changes: string[] = [];
+		if (previous.parallel !== next.parallel) {
+			changes.push(`parallel ×${previous.parallel} -> ×${next.parallel}`);
+		}
+		if (previous.checkpointEvery !== next.checkpointEvery) {
+			changes.push(
+				`checkpointEvery ${previous.checkpointEvery} -> ${next.checkpointEvery}`,
+			);
+		}
+		if (changes.length > 0) {
+			const message = `Runtime config updated: ${changes.join(", ")}`;
+			log.info(message);
+			monitor.event("info", message, { stage: "runtime-config" });
+		}
+	}
+
+	monitor?.update({
+		parallel: next.parallel,
+		runtimeConfig: next,
+	});
+	return next;
+}
+
+async function waitForControlRelease(
+	monitor?: SyncMonitor | null,
+): Promise<boolean> {
+	if (!monitor) return true;
+
+	while (true) {
+		const control = readSyncMonitorControlState();
+		if (control.command === "stop") {
+			if (!stopRequested) {
+				stopRequested = true;
+				monitor.stopping(control.message ?? "Stop requested from monitor");
+			}
+			return false;
+		}
+
+		if (control.command === "pause") {
+			if (!paused) {
+				paused = true;
+				monitor.pause(control.message ?? "Pause requested from monitor");
+			}
+			await Bun.sleep(1000);
+			refreshRuntimeConfig(monitor);
+			continue;
+		}
+
+		if (control.command === "resume") {
+			writeSyncMonitorControlState(null, null, "sync");
+			if (paused) {
+				paused = false;
+				monitor.resume(control.message ?? "Resume requested from monitor");
+			}
+		}
+
+		if (paused) {
+			paused = false;
+			monitor.resume("Sync resumed");
+		}
+		return true;
+	}
 }
 
 // ── Verify mode ───────────────────────────────────────────────────────────────
@@ -325,15 +408,17 @@ async function runDryRun(): Promise<void> {
 	let monitor: SyncMonitor | null = null;
 	if (MONITOR_ENABLED) {
 		announceMonitor();
+		activeRuntimeConfig = readSyncMonitorRuntimeConfig();
 		monitor = new SyncMonitor({
 			mode: "dry-run",
 			total: count,
 			startIndex,
 			endIndex,
-			parallel: 1,
+			parallel: activeRuntimeConfig.parallel,
 			providers: ["anilist", ...PLUGINS.map((p) => p.name)],
 		});
 		activeMonitor = monitor;
+		refreshRuntimeConfig(monitor);
 	}
 
 	const engine = new SyncEngine(PLUGINS);
@@ -341,8 +426,19 @@ async function runDryRun(): Promise<void> {
 	let pluginErrors = 0;
 
 	const stats = await engine.iterate(
-		{ ids, startIndex, endIndex, label: "Dry-run" },
+		{
+			ids,
+			startIndex,
+			endIndex,
+			label: "Dry-run",
+			onAfterEach: async ({ stats: s, index }) => {
+				monitor?.update({ stats: formatMonitorStats(s), currentIndex: index });
+				refreshRuntimeConfig(monitor);
+			},
+			beforeEach: async () => waitForControlRelease(monitor),
+		},
 		async (id, index, bar): Promise<PerIdResult> => {
+			refreshRuntimeConfig(monitor);
 			const entry: DryRunEntry = {
 				index,
 				anilistId: id,
@@ -396,7 +492,11 @@ async function runDryRun(): Promise<void> {
 			}
 		},
 	);
-	monitor?.complete(formatMonitorStats(stats));
+	if (stopRequested) {
+		monitor?.stop(formatMonitorStats(stats));
+	} else {
+		monitor?.complete(formatMonitorStats(stats));
+	}
 	activeMonitor = null;
 
 	const output: DryRunOutput = {
@@ -554,9 +654,23 @@ async function main(): Promise<void> {
 	log.info(
 		`Syncing ${remaining.toLocaleString()} IDs  ·  providers: anilist + ${pluginNames}`,
 	);
-	if (PARALLEL > 1) {
+	const initialRuntimeConfig = MONITOR_ENABLED
+		? ensureSyncMonitorRuntimeConfig({
+				parallel: PARALLEL,
+				checkpointEvery: 10,
+			})
+		: {
+				version: 1 as const,
+				parallel: PARALLEL,
+				checkpointEvery: 10,
+				updatedAt: new Date().toISOString(),
+				updatedBy: "sync" as const,
+			};
+	activeRuntimeConfig = initialRuntimeConfig;
+
+	if (initialRuntimeConfig.parallel > 1) {
 		log.info(
-			`Parallel fetch enabled: ×${PARALLEL}; DB writes and downstream sync remain sequential`,
+			`Parallel fetch enabled: ×${initialRuntimeConfig.parallel}; DB writes and downstream sync remain sequential`,
 		);
 	}
 	log.divider();
@@ -569,10 +683,11 @@ async function main(): Promise<void> {
 			total: remaining,
 			startIndex,
 			endIndex,
-			parallel: PARALLEL,
+			parallel: initialRuntimeConfig.parallel,
 			providers: ["anilist", ...PLUGINS.map((p) => p.name)],
 		});
 		activeMonitor = monitor;
+		refreshRuntimeConfig(monitor);
 	}
 
 	const engine = new SyncEngine(PLUGINS);
@@ -587,69 +702,82 @@ async function main(): Promise<void> {
 			progress.lastIndex = index + 1;
 			progress.stats = s;
 			monitor?.update({ stats: formatMonitorStats(s), currentIndex: index });
-			if (++processedSinceCheckpoint >= CHECKPOINT_EVERY) {
+			const checkpointEvery =
+				activeRuntimeConfig?.checkpointEvery ??
+				initialRuntimeConfig.checkpointEvery;
+			if (++processedSinceCheckpoint >= checkpointEvery) {
 				await saveProgress(progress);
 				processedSinceCheckpoint = 0;
 			}
 		},
 	};
 
-	const stats =
-		PARALLEL > 1
-			? await engine.iterateParallel(
-					{ ...iterateOptions, concurrency: PARALLEL },
-					async (id, index, reportIssue) => {
-						monitor?.stage("anilist-fetch", index, id);
-						try {
-							return await withAnilistRetry(
-								() => fetchAnilistAnime(id),
-								() => reportIssue("rate-limit"),
-							);
-						} catch (err) {
-							const message = err instanceof Error ? err.message : String(err);
-							monitor?.recordError(message, index, id);
-							throw err;
-						}
-					},
-					async (id, index, bar, anilistData) =>
-						processFetchedAnime(id, index, anilistData, engine, bar, monitor),
-				)
-			: await engine.iterate(
-					iterateOptions,
-					async (id, index, bar): Promise<PerIdResult> => {
-						try {
-							bar.setStage("anilist");
-							monitor?.stage("anilist-fetch", index, id);
-							const anilistData = await withAnilistRetry(() =>
-								fetchAnilistAnime(id),
-							);
-							return await processFetchedAnime(
-								id,
-								index,
-								anilistData,
-								engine,
-								bar,
-								monitor,
-							);
-						} catch (err) {
-							const message = err instanceof Error ? err.message : String(err);
-							log.error(
-								`ID ${id}: ${message}`,
-							);
-							monitor?.recordError(message, index, id);
-							return { outcome: "failed" };
-						}
-					},
+	const stats = await engine.iterateParallel(
+		{
+			...iterateOptions,
+			concurrency: initialRuntimeConfig.parallel,
+			getConcurrency: monitor
+				? () => refreshRuntimeConfig(monitor).parallel
+				: undefined,
+			beforeBatch: async () => waitForControlRelease(monitor),
+			onBatchStart: ({
+				startIndex: batchStart,
+				endIndex: batchEnd,
+				concurrency,
+				ids: batchIds,
+			}) => {
+				monitor?.update({
+					activeBatch: createSyncMonitorBatch({
+						startIndex: batchStart,
+						endIndex: batchEnd,
+						concurrency,
+						ids: batchIds,
+					}),
+				});
+			},
+			onBatchEnd: () => {
+				monitor?.update({ activeBatch: null });
+			},
+			onConcurrencyChange: ({ previous, next }) => {
+				if (previous === next) return;
+				const message = `Parallel setting now ×${next}`;
+				log.info(message);
+				monitor?.event("info", message, { stage: "runtime-config" });
+			},
+		},
+		async (id, index, reportIssue) => {
+			monitor?.stage("anilist-fetch", index, id);
+			try {
+				return await withAnilistRetry(
+					() => fetchAnilistAnime(id),
+					() => reportIssue("rate-limit"),
 				);
+			} catch (err) {
+				const message = err instanceof Error ? err.message : String(err);
+				monitor?.recordError(message, index, id);
+				throw err;
+			}
+		},
+		async (id, index, bar, anilistData) =>
+			processFetchedAnime(id, index, anilistData, engine, bar, monitor),
+	);
 
 	await saveProgress(progress);
 
 	log.divider();
-	log.success(`Sync complete — ${remaining.toLocaleString()} IDs processed`);
+	log.success(
+		stopRequested
+			? "Sync stopped by monitor request"
+			: `Sync complete — ${remaining.toLocaleString()} IDs processed`,
+	);
 	log.info(`  Created  : ${stats.created.toLocaleString()}`);
 	log.info(`  Updated  : ${stats.updated.toLocaleString()}`);
 	log.info(`  Failed   : ${stats.failed.toLocaleString()}`);
-	monitor?.complete(formatMonitorStats(stats));
+	if (stopRequested) {
+		monitor?.stop(formatMonitorStats(stats));
+	} else {
+		monitor?.complete(formatMonitorStats(stats));
+	}
 	activeMonitor = null;
 
 	for (const [provider, unmatched] of engine.unmatchedSets) {
