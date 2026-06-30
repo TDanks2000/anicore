@@ -11,6 +11,7 @@
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
+    "db:check-shape": "bun src/scripts/check-db-shape.ts",
     "db:seed": "bun src/scripts/seed.ts",
     "db:empty": "bun src/scripts/empty-db.ts",
     "sync": "bun src/scripts/sync.ts",

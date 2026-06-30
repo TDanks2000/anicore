@@ -1,4 +1,4 @@
-import { and, asc, eq, like, or } from "drizzle-orm";
+import { and, eq, like, or } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 
 import { db } from "../../db";
@@ -7,53 +7,12 @@ import {
   animeExternalLinks,
   animeMappings,
   animeRelationLinks,
-  animeStudioLinks,
-  animeTagLinks,
   episodes,
-  studios,
-  tags,
-  type Anime,
 } from "../../db/schema";
-import { fromJsonArray, toJsonArray } from "../../lib/json";
+import { toJsonArray } from "../../lib/json";
 import { parseId, parseLimit } from "../../lib/params";
 import { providerEnum, sourceEnum } from "../../lib/validators";
-
-function formatAnime(row: Anime) {
-  const { genresJson, synonymsJson, ...rest } = row;
-  return { ...rest, genres: fromJsonArray(genresJson), synonyms: fromJsonArray(synonymsJson) };
-}
-
-async function getStudiosForAnime(animeId: number) {
-  return db
-    .select({
-      id: studios.id,
-      name: studios.name,
-      isMain: animeStudioLinks.isMain,
-      isAnimationStudio: studios.isAnimationStudio,
-      anilistStudioId: studios.anilistStudioId,
-    })
-    .from(animeStudioLinks)
-    .innerJoin(studios, eq(animeStudioLinks.studioId, studios.id))
-    .where(eq(animeStudioLinks.animeId, animeId))
-    .orderBy(asc(studios.name));
-}
-
-async function getTagsForAnime(animeId: number) {
-  return db
-    .select({
-      id: tags.id,
-      name: tags.name,
-      category: tags.category,
-      rank: animeTagLinks.rank,
-      isGeneralSpoiler: tags.isGeneralSpoiler,
-      isMediaSpoiler: tags.isMediaSpoiler,
-      isAdult: tags.isAdult,
-    })
-    .from(animeTagLinks)
-    .innerJoin(tags, eq(animeTagLinks.tagId, tags.id))
-    .where(eq(animeTagLinks.animeId, animeId))
-    .orderBy(asc(animeTagLinks.rank), asc(tags.name));
-}
+import { formatAnime, getStudiosForAnime, getTagsForAnime } from "./anime.service";
 
 export const animeRoutes = new Elysia({ prefix: "/anime" })
 	.get(

@@ -13,7 +13,12 @@ import {
 } from "../db/schema";
 import { toJsonArray } from "../lib/json";
 import { slugify } from "../lib/slug";
-import type { ProviderAnimeData, ProviderStudio, ProviderTag } from "./types";
+import {
+  dedupeProviderStudios,
+  dedupeProviderTags,
+  normalizeEntityName,
+} from "./normalize";
+import type { ProviderAnimeData } from "./types";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -67,58 +72,6 @@ function buildAnimeFields(data: ProviderAnimeData) {
   };
 }
 
-function dedupeStudios(studios: ProviderStudio[]): ProviderStudio[] {
-  const byName = new Map<string, ProviderStudio>();
-
-  for (const studio of studios) {
-    const name = studio.name.trim();
-    if (!name) continue;
-
-    const existing = byName.get(name);
-    if (!existing) {
-      byName.set(name, { ...studio, name });
-      continue;
-    }
-
-    existing.isMain = existing.isMain || studio.isMain;
-    existing.isAnimationStudio =
-      existing.isAnimationStudio || studio.isAnimationStudio;
-    existing.anilistStudioId ??= studio.anilistStudioId ?? null;
-  }
-
-  return [...byName.values()];
-}
-
-function dedupeTags(tags: ProviderTag[]): ProviderTag[] {
-  const byName = new Map<string, ProviderTag>();
-
-  for (const tag of tags) {
-    const name = tag.name.trim();
-    if (!name) continue;
-
-    const existing = byName.get(name);
-    if (!existing) {
-      byName.set(name, { ...tag, name });
-      continue;
-    }
-
-    existing.category ??= tag.category ?? null;
-    existing.rank = Math.min(existing.rank ?? Number.MAX_SAFE_INTEGER, tag.rank ?? Number.MAX_SAFE_INTEGER);
-    if (existing.rank === Number.MAX_SAFE_INTEGER) existing.rank = null;
-    existing.isGeneralSpoiler =
-      (existing.isGeneralSpoiler ?? false) || (tag.isGeneralSpoiler ?? false);
-    existing.isMediaSpoiler =
-      (existing.isMediaSpoiler ?? false) || (tag.isMediaSpoiler ?? false);
-    existing.isAdult = (existing.isAdult ?? false) || (tag.isAdult ?? false);
-  }
-
-  return [...byName.values()];
-}
-
-function normalizeEntityName(name: string): string {
-  return name.trim().toLowerCase();
-}
-
 async function upsertRelatedData(
   animeId: number,
   data: ProviderAnimeData,
@@ -127,7 +80,7 @@ async function upsertRelatedData(
   // Studios — replace on every sync since the set is authoritative
   if (data.studios !== undefined) {
     await tx.delete(animeStudioLinks).where(eq(animeStudioLinks.animeId, animeId));
-    const studioData = dedupeStudios(data.studios);
+    const studioData = dedupeProviderStudios(data.studios);
     if (studioData.length) {
       const names = studioData.map((studio) => normalizeEntityName(studio.name));
       const anilistIds = studioData
@@ -221,7 +174,7 @@ async function upsertRelatedData(
   // Tags — replace on every sync
   if (data.tags !== undefined) {
     await tx.delete(animeTagLinks).where(eq(animeTagLinks.animeId, animeId));
-    const tagData = dedupeTags(data.tags);
+    const tagData = dedupeProviderTags(data.tags);
     if (tagData.length) {
       const normalizedNames = tagData.map((tag) => normalizeEntityName(tag.name));
       const existingTags = await tx
