@@ -5,9 +5,9 @@
     "moduleResolution": "Bundler",
     "strict": true,
     "skipLibCheck": true,
-    "types": ["bun-types"],
+    "ignoreDeprecations": "6.0",
     "allowImportingTsExtensions": false,
-    "noEmit": true
-  },
-  "include": ["src/**/*.ts", "drizzle.config.ts"]
+    "noEmit": true,
+    "jsx": "react-jsx"
+  }
 }

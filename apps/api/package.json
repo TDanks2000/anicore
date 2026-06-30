@@ -1,0 +1,38 @@
+{
+  "name": "@anicore/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch src/index.ts",
+    "start": "bun src/index.ts",
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
+    "db:check-shape": "bun src/scripts/check-db-shape.ts",
+    "db:seed": "bun src/scripts/seed.ts",
+    "db:empty": "bun src/scripts/empty-db.ts",
+    "sync": "bun src/scripts/sync.ts",
+    "sync:dry": "bun src/scripts/sync.ts --dry-run",
+    "sync:anilist": "bun src/scripts/sync-anilist.ts",
+    "sync:audio": "bun src/scripts/sync-audio-status.ts"
+  },
+  "dependencies": {
+    "@api-wrappers/anilist-wrapper": "catalog:",
+    "@api-wrappers/tmdb-wrapper": "file:../../../../wrappers/tmdb-wrapper",
+    "@anicore/sync-monitor": "workspace:*",
+    "@elysia/cors": "catalog:",
+    "drizzle-orm": "catalog:",
+    "elysia": "catalog:",
+    "postgres": "catalog:"
+  },
+  "devDependencies": {
+    "bun-types": "catalog:",
+    "drizzle-kit": "catalog:",
+    "typescript": "catalog:"
+  }
+}

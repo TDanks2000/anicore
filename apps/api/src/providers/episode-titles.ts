@@ -2,8 +2,8 @@ import { and, eq } from "drizzle-orm";
 
 import { db } from "../db";
 import { animeMappings, episodeMappings, episodes } from "../db/schema";
-import { fetchTmdbEpisodeTitles } from "./tmdb/episodes";
 import { fetchTvdbEpisodeTitles } from "./thetvdb/episodes";
+import { fetchTmdbEpisodeTitles } from "./tmdb/episodes";
 import type { ProviderAnimeData } from "./types";
 
 interface EpisodeRow {
@@ -271,7 +271,9 @@ export async function previewEpisodeTitleEnrichment(
 			: animeId === null
 				? []
 				: await loadEpisodeRows(animeId);
-	const episodeRowsSource = options.episodeRows?.length ? "provided" : "database";
+	const episodeRowsSource = options.episodeRows?.length
+		? "provided"
+		: "database";
 	if (!rows.length) {
 		return {
 			possibleUpdates: 0,
@@ -318,7 +320,9 @@ export async function previewEpisodeTitleEnrichment(
 	}
 	if (tvdbMatch) {
 		const matchedRows = tvdbMatch.episodes
-			.map((ep) => rows.find((r) => r.number === Number(ep.providerEpisodeNumber)))
+			.map((ep) =>
+				rows.find((r) => r.number === Number(ep.providerEpisodeNumber)),
+			)
 			.filter((r): r is EpisodeRow => r !== undefined && isTitleMissing(r));
 
 		for (const row of matchedRows) coveredByTvdb.add(row.number);
@@ -330,13 +334,17 @@ export async function previewEpisodeTitleEnrichment(
 				provider: "thetvdb",
 				seasonNumber: tvdbMatch.seasonNumber,
 				episodeCount: tvdbMatch.episodes.length,
-				sampleTitles: tvdbMatch.episodes.slice(0, 3).map((episode) => episode.title),
+				sampleTitles: tvdbMatch.episodes
+					.slice(0, 3)
+					.map((episode) => episode.title),
 			});
 		}
 	}
 
 	// Only try TMDB if gaps remain after TVDB (same condition as real sync).
-	const hasRemainingGaps = rows.some((row) => isTitleMissing(row) && !coveredByTvdb.has(row.number));
+	const hasRemainingGaps = rows.some(
+		(row) => isTitleMissing(row) && !coveredByTvdb.has(row.number),
+	);
 	if (hasRemainingGaps) {
 		let tmdbMatch: TitleSourceMatch | null = null;
 		try {
@@ -348,8 +356,15 @@ export async function previewEpisodeTitleEnrichment(
 		}
 		if (tmdbMatch) {
 			const matchedRows = tmdbMatch.episodes
-				.map((ep) => rows.find((r) => r.number === Number(ep.providerEpisodeNumber)))
-				.filter((r): r is EpisodeRow => r !== undefined && isTitleMissing(r) && !coveredByTvdb.has(r.number));
+				.map((ep) =>
+					rows.find((r) => r.number === Number(ep.providerEpisodeNumber)),
+				)
+				.filter(
+					(r): r is EpisodeRow =>
+						r !== undefined &&
+						isTitleMissing(r) &&
+						!coveredByTvdb.has(r.number),
+				);
 
 			if (matchedRows.length > 0) {
 				possibleUpdates += matchedRows.length;
@@ -358,7 +373,9 @@ export async function previewEpisodeTitleEnrichment(
 					provider: "tmdb",
 					seasonNumber: tmdbMatch.seasonNumber,
 					episodeCount: tmdbMatch.episodes.length,
-					sampleTitles: tmdbMatch.episodes.slice(0, 3).map((episode) => episode.title),
+					sampleTitles: tmdbMatch.episodes
+						.slice(0, 3)
+						.map((episode) => episode.title),
 				});
 			}
 		}
@@ -370,7 +387,11 @@ export async function previewEpisodeTitleEnrichment(
 export async function loadExistingAnimeSourceMapping(
 	animeId: number,
 	provider: "thetvdb" | "tmdb",
-): Promise<{ providerId: string; providerSlug: string | null; providerUrl: string | null } | null> {
+): Promise<{
+	providerId: string;
+	providerSlug: string | null;
+	providerUrl: string | null;
+} | null> {
 	const [row] = await db
 		.select({
 			providerId: animeMappings.providerId,
@@ -379,11 +400,14 @@ export async function loadExistingAnimeSourceMapping(
 		})
 		.from(animeMappings)
 		.where(
-			and(eq(animeMappings.animeId, animeId), eq(animeMappings.provider, provider)),
+			and(
+				eq(animeMappings.animeId, animeId),
+				eq(animeMappings.provider, provider),
+			),
 		)
 		.limit(1);
 
 	return row ?? null;
 }
 
-export type { EnrichmentContext, TitleSourceMatch, EpisodeTitleMatch };
+export type { EnrichmentContext, EpisodeTitleMatch, TitleSourceMatch };

@@ -8,57 +8,19 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { randomBytes, timingSafeEqual } from "node:crypto";
+import type {
+	SyncMonitorEvent,
+	SyncMonitorPublicConfig,
+	SyncMonitorStats,
+	SyncMonitorStatus,
+} from "@anicore/sync-monitor";
 
-export type SyncMonitorState =
-	| "idle"
-	| "running"
-	| "completed"
-	| "failed";
-
-export interface SyncMonitorStats {
-	created: number;
-	updated: number;
-	failed: number;
-}
-
-export interface SyncMonitorStatus {
-	version: 1;
-	runId: string;
-	state: SyncMonitorState;
-	mode: "sync" | "dry-run" | "provider-reset" | "verify";
-	pid: number;
-	startedAt: string;
-	updatedAt: string;
-	completedAt?: string;
-	total: number;
-	startIndex: number;
-	endIndex: number;
-	currentIndex: number | null;
-	currentAnilistId: number | null;
-	currentStage: string | null;
-	parallel: number;
-	providers: string[];
-	stats: SyncMonitorStats;
-	lastError: string | null;
-	recentErrors: string[];
-}
-
-export interface SyncMonitorEvent {
-	at: string;
-	level: "info" | "warn" | "error";
-	message: string;
-	index?: number;
-	anilistId?: number;
-	stage?: string;
-}
-
-export interface SyncMonitorPublicConfig {
-	enabled: boolean;
-	statusPath: string;
-	eventsPath: string;
-	codePath: string;
-	hasAccessCode: boolean;
-}
+export type {
+	SyncMonitorEvent,
+	SyncMonitorPublicConfig,
+	SyncMonitorStats,
+	SyncMonitorStatus,
+} from "@anicore/sync-monitor";
 
 const MAX_RECENT_ERRORS = 20;
 const MAX_EVENT_LINE_BYTES = 16 * 1024;

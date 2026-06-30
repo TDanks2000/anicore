@@ -8,11 +8,16 @@ node_modules/
 
 # Bun cache
 .bun/
+.turbo/
+**/.turbo/
 
 # Sync cache and generated output
 data/cache/
 data/sync-monitor/
 data/dry-run-*.json
+apps/api/data/cache/
+apps/api/data/sync-monitor/
+apps/api/data/dry-run-*.json
 
 # SQLite (if ever used locally)
 *.sqlite
@@ -25,3 +30,7 @@ data/dry-run-*.json
 # Editor
 .vscode/
 .idea/
+
+# Build output
+dist/
+**/dist/

@@ -1,0 +1,47 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "IBM Plex Sans", "Aptos", "Segoe UI", sans-serif;
+  --color-background: hsl(210 20% 98%);
+  --color-foreground: hsl(216 28% 12%);
+  --color-card: hsl(0 0% 100%);
+  --color-card-foreground: hsl(216 28% 12%);
+  --color-popover: hsl(0 0% 100%);
+  --color-popover-foreground: hsl(216 28% 12%);
+  --color-primary: hsl(171 76% 30%);
+  --color-primary-foreground: hsl(0 0% 100%);
+  --color-secondary: hsl(206 33% 91%);
+  --color-secondary-foreground: hsl(216 28% 16%);
+  --color-muted: hsl(204 30% 94%);
+  --color-muted-foreground: hsl(215 16% 43%);
+  --color-accent: hsl(43 86% 63%);
+  --color-accent-foreground: hsl(216 28% 12%);
+  --color-destructive: hsl(356 74% 45%);
+  --color-destructive-foreground: hsl(0 0% 100%);
+  --color-warning: hsl(35 92% 52%);
+  --color-border: hsl(205 24% 84%);
+  --color-input: hsl(205 24% 84%);
+  --color-ring: hsl(171 76% 30%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background:
+    linear-gradient(
+      135deg,
+      hsl(210 20% 98%) 0%,
+      hsl(204 36% 96%) 45%,
+      hsl(42 100% 96%) 100%
+    );
+  font-family: var(--font-sans);
+}
+
+svg {
+  width: 1rem;
+  height: 1rem;
+}

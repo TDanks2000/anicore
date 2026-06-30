@@ -1,5 +1,31 @@
 AniCore is a unified anime metadata API for mapping anime, episodes, and dub/sub availability across sources like AniList, Kitsu, and streaming providers.
 
+## Monorepo
+
+AniCore now uses Bun workspaces and Turborepo:
+
+- `apps/api` - Elysia API, database scripts, provider sync runner
+- `apps/web` - Vite + React + Tailwind v4 monitor dashboard
+- `packages/sync-monitor` - shared sync monitor response types and browser client
+
+Install dependencies from the repo root:
+
+```sh
+bun install
+```
+
+Useful root commands:
+
+```sh
+bun run dev:api
+bun run dev:web
+bun run build
+bun run typecheck
+bun run test
+```
+
+Put API secrets in `apps/api/.env`. The old root `.env` was copied locally to `apps/api/.env` during the migration if it existed.
+
 ## Sync
 
 The main sync fetches AniList entries in parallel by default while keeping database writes and downstream provider sync sequential:
@@ -55,6 +81,33 @@ ANICORE_SYNC_MONITOR_CODE=change-me bun run sync --monitor
 ```
 
 Keep `HOST=localhost` unless you intentionally want LAN access, and do not expose the monitor port directly to the public internet.
+
+### Web dashboard
+
+Start the API on the computer running the sync:
+
+```sh
+HOST=0.0.0.0 CORS_ORIGIN=http://localhost:5173 bun run start
+```
+
+Start the web dashboard:
+
+```sh
+VITE_ANICORE_API_URL=http://<api-ip>:3000 bun run dev:web
+```
+
+You can either paste the monitor code into the dashboard or set it before startup:
+
+```sh
+VITE_SYNC_MONITOR_CODE=<code> VITE_ANICORE_API_URL=http://<api-ip>:3000 bun run dev:web
+```
+
+For Windows PowerShell:
+
+```powershell
+$env:HOST="0.0.0.0"; $env:CORS_ORIGIN="http://localhost:5173"; bun run start
+$env:VITE_ANICORE_API_URL="http://<api-ip>:3000"; bun run dev:web
+```
 
 ## Proxy support
 

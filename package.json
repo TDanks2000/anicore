@@ -3,32 +3,59 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "scripts": {
-    "dev": "bun --watch src/index.ts",
-    "start": "bun src/index.ts",
-    "typecheck": "tsc --noEmit",
-    "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
-    "db:push": "drizzle-kit push",
-    "db:studio": "drizzle-kit studio",
-    "db:check-shape": "bun src/scripts/check-db-shape.ts",
-    "db:seed": "bun src/scripts/seed.ts",
-    "db:empty": "bun src/scripts/empty-db.ts",
-    "sync": "bun src/scripts/sync.ts",
-    "sync:dry": "bun src/scripts/sync.ts --dry-run",
-    "sync:anilist": "bun src/scripts/sync-anilist.ts",
-    "sync:audio": "bun src/scripts/sync-audio-status.ts"
+  "packageManager": "bun@1.3.14",
+  "workspaces": {
+    "packages": [
+      "apps/*",
+      "packages/*"
+    ],
+    "catalog": {
+      "@api-wrappers/anilist-wrapper": "^2.7.0",
+      "@elysia/cors": "^1.3.3",
+      "@radix-ui/react-slot": "^1.1.1",
+      "@tailwindcss/vite": "^4.1.11",
+      "@types/react": "^19.0.0",
+      "@types/react-dom": "^19.0.0",
+      "@vitejs/plugin-react": "^4.6.0",
+      "class-variance-authority": "^0.7.1",
+      "clsx": "^2.1.1",
+      "drizzle-kit": "latest",
+      "drizzle-orm": "latest",
+      "elysia": "latest",
+      "lucide-react": "^0.468.0",
+      "postgres": "^3.4.5",
+      "react": "^19.0.0",
+      "react-dom": "^19.0.0",
+      "tailwind-merge": "^2.6.0",
+      "tailwindcss": "^4.1.11",
+      "bun-types": "latest",
+      "typescript": "latest",
+      "vite": "^6.0.0"
+    }
   },
-  "dependencies": {
-    "@api-wrappers/anilist-wrapper": "^2.7.0",
-    "@api-wrappers/tmdb-wrapper": "file:../../wrappers/tmdb-wrapper",
-    "drizzle-orm": "latest",
-    "elysia": "latest",
-    "postgres": "^3.4.5"
+  "scripts": {
+    "dev": "turbo run dev",
+    "dev:api": "turbo run dev --filter=@anicore/api",
+    "dev:web": "turbo run dev --filter=@anicore/web",
+    "start": "turbo run start --filter=@anicore/api",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "db:generate": "turbo run db:generate --filter=@anicore/api",
+    "db:migrate": "turbo run db:migrate --filter=@anicore/api",
+    "db:push": "turbo run db:push --filter=@anicore/api",
+    "db:studio": "turbo run db:studio --filter=@anicore/api",
+    "db:check-shape": "turbo run db:check-shape --filter=@anicore/api",
+    "db:seed": "turbo run db:seed --filter=@anicore/api",
+    "db:empty": "turbo run db:empty --filter=@anicore/api",
+    "sync": "turbo run sync --filter=@anicore/api --",
+    "sync:dry": "turbo run sync:dry --filter=@anicore/api --",
+    "sync:anilist": "turbo run sync:anilist --filter=@anicore/api --",
+    "sync:audio": "turbo run sync:audio --filter=@anicore/api --"
   },
   "devDependencies": {
-    "@types/bun": "latest",
-    "drizzle-kit": "latest",
-    "typescript": "latest"
+    "bun-types": "catalog:",
+    "turbo": "^2.5.4",
+    "typescript": "catalog:"
   }
 }
