@@ -4,6 +4,7 @@ import { cors } from "@elysia/cors";
 import { animeRoutes } from "./modules/anime/anime.routes";
 import { episodeRoutes } from "./modules/episodes/episodes.routes";
 import { healthRoutes } from "./modules/health/health.routes";
+import { languageStatusRoutes } from "./modules/language-status/language-status.routes";
 import { mappingRoutes } from "./modules/mappings/mappings.routes";
 import { syncMonitorRoutes } from "./modules/sync-monitor/sync-monitor.routes";
 
@@ -20,6 +21,7 @@ export const app = new Elysia()
   )
   .use(healthRoutes)
   .use(syncMonitorRoutes)
+  .use(languageStatusRoutes)
   .use(animeRoutes)
   .use(episodeRoutes)
   .use(mappingRoutes)

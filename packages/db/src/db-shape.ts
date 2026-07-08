@@ -1,11 +1,13 @@
 export const expectedTables = [
   "anime",
   "anime_external_links",
+  "anime_language_evidence",
+  "anime_language_status",
   "anime_mappings",
   "anime_relation_links",
   "anime_studio_links",
   "anime_tag_links",
-  "episode_audio_status",
+  "episode_language_status",
   "episode_mappings",
   "episodes",
   "studios",
@@ -13,10 +15,16 @@ export const expectedTables = [
   "tags",
 ] as const;
 
-export const legacyTables = ["anime_studios", "anime_tags"] as const;
+export const legacyTables = [
+  "anime_studios",
+  "anime_tags",
+  "episode_audio_status",
+] as const;
 
 export const expectedIndexes = [
   { tableName: "anime_mappings", indexName: "anime_mappings_provider_id_idx" },
+  { tableName: "anime_language_status", indexName: "anime_language_status_anime_language_media_idx" },
+  { tableName: "episode_language_status", indexName: "episode_language_status_anime_episode_language_media_idx" },
   { tableName: "anime_studio_links", indexName: "anime_studio_links_anime_studio_idx" },
   { tableName: "anime_tag_links", indexName: "anime_tag_links_anime_tag_idx" },
   { tableName: "episode_mappings", indexName: "episode_mappings_provider_episode_id_idx" },

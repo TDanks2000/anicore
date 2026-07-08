@@ -20,7 +20,7 @@ describe("analyzeDbShape", () => {
     expect(report.missingIndexes).toEqual([]);
   });
 
-  test("fails when legacy studio or tag tables remain", () => {
+  test("fails when legacy tables remain", () => {
     const report = analyzeDbShape(
       [
         ...expectedTables.map((tableName) => ({ tableName })),
@@ -30,7 +30,11 @@ describe("analyzeDbShape", () => {
     );
 
     expect(report.ok).toBe(false);
-    expect(report.presentLegacyTables).toEqual(["anime_studios", "anime_tags"]);
+    expect(report.presentLegacyTables).toEqual([
+      "anime_studios",
+      "anime_tags",
+      "episode_audio_status",
+    ]);
   });
 
   test("fails when normalized join tables or indexes are missing", () => {

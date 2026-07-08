@@ -2,7 +2,9 @@ import { db } from "@anicore/db";
 import {
   anime,
   animeMappings,
-  episodeAudioStatus,
+  animeLanguageEvidence,
+  animeLanguageStatus,
+  episodeLanguageStatus,
   episodeMappings,
   episodes,
   syncRuns,
@@ -12,7 +14,9 @@ import { log } from "@anicore/providers/lib/logger";
 log.info("Seeding AniCore database…");
 
 log.info("Clearing existing data…");
-await db.delete(episodeAudioStatus);
+await db.delete(episodeLanguageStatus);
+await db.delete(animeLanguageEvidence);
+await db.delete(animeLanguageStatus);
 await db.delete(episodeMappings);
 await db.delete(episodes);
 await db.delete(animeMappings);
@@ -126,21 +130,25 @@ await db.insert(episodeMappings).values(
   })),
 );
 
-await db.insert(episodeAudioStatus).values(
+await db.insert(episodeLanguageStatus).values(
   createdEpisodes.flatMap((episode) => [
     {
-      episodeId: episode.id,
-      audioMode: "sub" as const,
-      locale: "en",
+      animeId: episode.animeId,
+      episodeNumber: episode.number,
+      languageCode: "en",
+      mediaType: "subtitle" as const,
       status: "available" as const,
-      sourceProvider: "manual",
+      provider: "manual",
+      confidence: 100,
     },
     {
-      episodeId: episode.id,
-      audioMode: "dub" as const,
-      locale: "en",
+      animeId: episode.animeId,
+      episodeNumber: episode.number,
+      languageCode: "en",
+      mediaType: "audio" as const,
       status: "available" as const,
-      sourceProvider: "manual",
+      provider: "manual",
+      confidence: 100,
     },
   ]),
 );

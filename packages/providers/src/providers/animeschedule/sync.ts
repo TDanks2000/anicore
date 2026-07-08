@@ -4,7 +4,7 @@ import { db } from "@anicore/db";
 import {
   anime,
   animeMappings,
-  episodeAudioStatus,
+  episodeLanguageStatus,
   episodes,
 } from "@anicore/db/schema";
 import {
@@ -117,10 +117,10 @@ async function storeRoute(animeId: number, route: string): Promise<void> {
 // Upsert dub status rows for every episode of an anime in 500-row chunks.
 async function upsertDubStatus(
   animeId: number,
-  dubStatus: "available" | "unavailable",
+  dubStatus: "available" | "missing",
 ): Promise<number> {
   const rows = await db
-    .select({ id: episodes.id })
+    .select({ number: episodes.number })
     .from(episodes)
     .where(eq(episodes.animeId, animeId));
 
@@ -132,26 +132,30 @@ async function upsertDubStatus(
   for (let i = 0; i < rows.length; i += CHUNK) {
     const chunk = rows.slice(i, i + CHUNK);
     await db
-      .insert(episodeAudioStatus)
+      .insert(episodeLanguageStatus)
       .values(
         chunk.map((ep) => ({
-          episodeId: ep.id,
-          audioMode: "dub" as const,
-          locale: "en",
+          animeId,
+          episodeNumber: ep.number,
+          languageCode: "en",
+          mediaType: "audio" as const,
           status: dubStatus,
-          sourceProvider: "animeschedule",
+          provider: "animeschedule",
+          confidence: 90,
           checkedAt,
         })),
       )
       .onConflictDoUpdate({
         target: [
-          episodeAudioStatus.episodeId,
-          episodeAudioStatus.audioMode,
-          episodeAudioStatus.locale,
-          episodeAudioStatus.sourceProvider,
+          episodeLanguageStatus.animeId,
+          episodeLanguageStatus.episodeNumber,
+          episodeLanguageStatus.languageCode,
+          episodeLanguageStatus.mediaType,
+          episodeLanguageStatus.provider,
         ],
         set: {
           status: sql`excluded.status`,
+          confidence: sql`excluded.confidence`,
           checkedAt: sql`excluded.checked_at`,
           updatedAt: sql`now()`,
         },

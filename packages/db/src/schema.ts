@@ -412,28 +412,37 @@ export const episodeMappings = pgTable(
 	}),
 );
 
-export const episodeAudioStatus = pgTable(
-	"episode_audio_status",
+export const animeLanguageStatus = pgTable(
+	"anime_language_status",
 	{
 		id: serial("id").primaryKey(),
 
-		episodeId: integer("episode_id")
+		animeId: integer("anime_id")
 			.notNull()
-			.references(() => episodes.id, { onDelete: "cascade" }),
+			.references(() => anime.id, { onDelete: "cascade" }),
 
-		audioMode: text("audio_mode", {
-			enum: ["original", "sub", "dub"],
+		languageCode: text("language_code").notNull(),
+
+		mediaType: text("media_type", {
+			enum: ["audio", "subtitle"],
 		}).notNull(),
 
-		locale: text("locale").notNull().default("en"),
-
 		status: text("status", {
-			enum: ["unknown", "unavailable", "available", "partial"],
+			enum: [
+				"unknown",
+				"possible",
+				"likely",
+				"confirmed",
+				"partial",
+				"not_available",
+			],
 		})
 			.notNull()
 			.default("unknown"),
 
-		sourceProvider: text("source_provider").notNull().default("manual"),
+		confidence: integer("confidence").notNull().default(0),
+
+		isManualOverride: boolean("is_manual_override").notNull().default(false),
 
 		notes: text("notes"),
 
@@ -444,15 +453,128 @@ export const episodeAudioStatus = pgTable(
 		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 	},
 	(table) => ({
-		episodeAudioLocaleSourceIdx: uniqueIndex(
-			"episode_audio_status_episode_audio_locale_source_idx",
-		).on(table.episodeId, table.audioMode, table.locale, table.sourceProvider),
+		animeLanguageMediaIdx: uniqueIndex(
+			"anime_language_status_anime_language_media_idx",
+		).on(table.animeId, table.languageCode, table.mediaType),
 
-		statusIdx: index("episode_audio_status_status_idx").on(table.status),
-
-		sourceProviderIdx: index("episode_audio_status_source_provider_idx").on(
-			table.sourceProvider,
+		reviewQueueIdx: index("anime_language_status_review_queue_idx").on(
+			table.status,
+			table.confidence,
+			table.isManualOverride,
 		),
+	}),
+);
+
+export const animeLanguageEvidence = pgTable(
+	"anime_language_evidence",
+	{
+		id: serial("id").primaryKey(),
+
+		animeId: integer("anime_id")
+			.notNull()
+			.references(() => anime.id, { onDelete: "cascade" }),
+
+		languageCode: text("language_code").notNull(),
+
+		mediaType: text("media_type", {
+			enum: ["audio", "subtitle"],
+		}).notNull(),
+
+		source: text("source", {
+			enum: [
+				"ann",
+				"official_site",
+				"provider",
+				"home_video",
+				"community",
+				"manual",
+				"other",
+			],
+		}).notNull(),
+
+		sourceUrl: text("source_url"),
+
+		evidenceType: text("evidence_type", {
+			enum: [
+				"voice_cast",
+				"provider_audio",
+				"provider_subtitle",
+				"official_announcement",
+				"home_video_release",
+				"manual_verified",
+				"community_submission",
+				"other",
+			],
+		}).notNull(),
+
+		value: text("value").notNull(),
+
+		confidence: integer("confidence").notNull().default(0),
+
+		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+
+		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+	},
+	(table) => ({
+		animeLanguageMediaIdx: index(
+			"anime_language_evidence_anime_language_media_idx",
+		).on(table.animeId, table.languageCode, table.mediaType),
+
+		sourceIdx: index("anime_language_evidence_source_idx").on(table.source),
+
+		confidenceIdx: index("anime_language_evidence_confidence_idx").on(
+			table.confidence,
+		),
+	}),
+);
+
+export const episodeLanguageStatus = pgTable(
+	"episode_language_status",
+	{
+		id: serial("id").primaryKey(),
+
+		animeId: integer("anime_id")
+			.notNull()
+			.references(() => anime.id, { onDelete: "cascade" }),
+
+		episodeNumber: integer("episode_number").notNull(),
+
+		languageCode: text("language_code").notNull(),
+
+		mediaType: text("media_type", {
+			enum: ["audio", "subtitle"],
+		}).notNull(),
+
+		status: text("status", {
+			enum: ["unknown", "available", "missing", "partial"],
+		})
+			.notNull()
+			.default("unknown"),
+
+		provider: text("provider").notNull().default("manual"),
+
+		confidence: integer("confidence").notNull().default(0),
+
+		checkedAt: timestamp("checked_at", { withTimezone: true }).notNull().defaultNow(),
+
+		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+
+		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+	},
+	(table) => ({
+		animeEpisodeLanguageMediaIdx: uniqueIndex(
+			"episode_language_status_anime_episode_language_media_idx",
+		).on(
+			table.animeId,
+			table.episodeNumber,
+			table.languageCode,
+			table.mediaType,
+			table.provider,
+		),
+
+		statusIdx: index("episode_language_status_status_idx").on(table.status),
+
+		providerIdx: index("episode_language_status_provider_idx").on(table.provider),
 	}),
 );
 
@@ -512,6 +634,9 @@ export const syncRuns = pgTable(
 export const animeOrmRelations = relations(anime, ({ many }) => ({
 	mappings: many(animeMappings),
 	episodes: many(episodes),
+	languageStatuses: many(animeLanguageStatus),
+	languageEvidence: many(animeLanguageEvidence),
+	episodeLanguageStatuses: many(episodeLanguageStatus),
 	relationLinks: many(animeRelationLinks, { relationName: "animeSource" }),
 	relatedToLinks: many(animeRelationLinks, { relationName: "animeRelated" }),
 	studioLinks: many(animeStudioLinks),
@@ -591,7 +716,6 @@ export const episodesRelations = relations(episodes, ({ one, many }) => ({
 		references: [anime.id],
 	}),
 	mappings: many(episodeMappings),
-	audioStatuses: many(episodeAudioStatus),
 }));
 
 export const episodeMappingsRelations = relations(
@@ -604,12 +728,32 @@ export const episodeMappingsRelations = relations(
 	}),
 );
 
-export const episodeAudioStatusRelations = relations(
-	episodeAudioStatus,
+export const animeLanguageStatusRelations = relations(
+	animeLanguageStatus,
 	({ one }) => ({
-		episode: one(episodes, {
-			fields: [episodeAudioStatus.episodeId],
-			references: [episodes.id],
+		anime: one(anime, {
+			fields: [animeLanguageStatus.animeId],
+			references: [anime.id],
+		}),
+	}),
+);
+
+export const animeLanguageEvidenceRelations = relations(
+	animeLanguageEvidence,
+	({ one }) => ({
+		anime: one(anime, {
+			fields: [animeLanguageEvidence.animeId],
+			references: [anime.id],
+		}),
+	}),
+);
+
+export const episodeLanguageStatusRelations = relations(
+	episodeLanguageStatus,
+	({ one }) => ({
+		anime: one(anime, {
+			fields: [episodeLanguageStatus.animeId],
+			references: [anime.id],
 		}),
 	}),
 );
@@ -644,8 +788,14 @@ export type NewEpisode = typeof episodes.$inferInsert;
 export type EpisodeMapping = typeof episodeMappings.$inferSelect;
 export type NewEpisodeMapping = typeof episodeMappings.$inferInsert;
 
-export type EpisodeAudioStatus = typeof episodeAudioStatus.$inferSelect;
-export type NewEpisodeAudioStatus = typeof episodeAudioStatus.$inferInsert;
+export type AnimeLanguageStatus = typeof animeLanguageStatus.$inferSelect;
+export type NewAnimeLanguageStatus = typeof animeLanguageStatus.$inferInsert;
+
+export type AnimeLanguageEvidence = typeof animeLanguageEvidence.$inferSelect;
+export type NewAnimeLanguageEvidence = typeof animeLanguageEvidence.$inferInsert;
+
+export type EpisodeLanguageStatus = typeof episodeLanguageStatus.$inferSelect;
+export type NewEpisodeLanguageStatus = typeof episodeLanguageStatus.$inferInsert;
 
 export type SyncRun = typeof syncRuns.$inferSelect;
 export type NewSyncRun = typeof syncRuns.$inferInsert;

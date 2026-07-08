@@ -1,7 +1,7 @@
 import { and, eq, isNotNull, lte, sql } from "drizzle-orm";
 
 import { closeDb, db } from "@anicore/db";
-import { anime, animeMappings, episodeAudioStatus, episodes } from "@anicore/db/schema";
+import { anime, animeMappings, episodeLanguageStatus, episodes } from "@anicore/db/schema";
 import { log } from "@anicore/providers/lib/logger";
 import { installProxyFetch } from "@anicore/providers/lib/proxy";
 import { syncDubStatus, sleep } from "@anicore/providers/animeschedule/sync";
@@ -20,7 +20,7 @@ const RUN_DUB = !SUB_ONLY;
 export async function syncSubStatusForAnime(animeId: number): Promise<number> {
   const today = new Date().toISOString().split("T")[0]!;
   const rows = await db
-    .select({ id: episodes.id })
+    .select({ number: episodes.number })
     .from(episodes)
     .where(
       and(
@@ -33,23 +33,27 @@ export async function syncSubStatusForAnime(animeId: number): Promise<number> {
   if (!rows.length) return 0;
 
   await db
-    .insert(episodeAudioStatus)
+    .insert(episodeLanguageStatus)
     .values(
       rows.flatMap((ep) => [
         {
-          episodeId: ep.id,
-          audioMode: "original" as const,
-          locale: "ja",
+          animeId,
+          episodeNumber: ep.number,
+          languageCode: "ja",
+          mediaType: "audio" as const,
           status: "available" as const,
-          sourceProvider: "derived-airdate",
+          provider: "derived-airdate",
+          confidence: 75,
           checkedAt: new Date(),
         },
         {
-          episodeId: ep.id,
-          audioMode: "sub" as const,
-          locale: "en",
+          animeId,
+          episodeNumber: ep.number,
+          languageCode: "en",
+          mediaType: "subtitle" as const,
           status: "available" as const,
-          sourceProvider: "derived-airdate",
+          provider: "derived-airdate",
+          confidence: 75,
           checkedAt: new Date(),
         },
       ]),
@@ -117,7 +121,7 @@ export async function runSubPass(): Promise<void> {
 
   while (true) {
     const rows = await db
-      .select({ id: episodes.id })
+      .select({ animeId: episodes.animeId, number: episodes.number })
       .from(episodes)
       .where(and(isNotNull(episodes.airDate), lte(episodes.airDate, today)))
       .limit(BATCH)
@@ -128,23 +132,27 @@ export async function runSubPass(): Promise<void> {
     for (let i = 0; i < rows.length; i += CHUNK) {
       const chunk = rows.slice(i, i + CHUNK);
       await db
-        .insert(episodeAudioStatus)
+        .insert(episodeLanguageStatus)
         .values(
           chunk.flatMap((ep) => [
             {
-              episodeId:      ep.id,
-              audioMode:      "original" as const,
-              locale:         "ja",
+              animeId:        ep.animeId,
+              episodeNumber:  ep.number,
+              languageCode:   "ja",
+              mediaType:      "audio" as const,
               status:         "available" as const,
-              sourceProvider: "derived-airdate",
+              provider:       "derived-airdate",
+              confidence:     75,
               checkedAt,
             },
             {
-              episodeId:      ep.id,
-              audioMode:      "sub" as const,
-              locale:         "en",
+              animeId:        ep.animeId,
+              episodeNumber:  ep.number,
+              languageCode:   "en",
+              mediaType:      "subtitle" as const,
               status:         "available" as const,
-              sourceProvider: "derived-airdate",
+              provider:       "derived-airdate",
+              confidence:     75,
               checkedAt,
             },
           ]),

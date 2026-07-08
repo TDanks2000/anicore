@@ -39,3 +39,45 @@ export const audioStatusEnum = t.Union([
   t.Literal("available"),
   t.Literal("partial"),
 ]);
+
+export const languageMediaTypeEnum = t.Union([
+  t.Literal("audio"),
+  t.Literal("subtitle"),
+]);
+
+export const animeLanguageStatusEnum = t.Union([
+  t.Literal("unknown"),
+  t.Literal("possible"),
+  t.Literal("likely"),
+  t.Literal("confirmed"),
+  t.Literal("partial"),
+  t.Literal("not_available"),
+]);
+
+export const episodeLanguageStatusEnum = t.Union([
+  t.Literal("unknown"),
+  t.Literal("available"),
+  t.Literal("missing"),
+  t.Literal("partial"),
+]);
+
+export const languageEvidenceSourceEnum = t.Union([
+  t.Literal("ann"),
+  t.Literal("official_site"),
+  t.Literal("provider"),
+  t.Literal("home_video"),
+  t.Literal("community"),
+  t.Literal("manual"),
+  t.Literal("other"),
+]);
+
+export const languageEvidenceTypeEnum = t.Union([
+  t.Literal("voice_cast"),
+  t.Literal("provider_audio"),
+  t.Literal("provider_subtitle"),
+  t.Literal("official_announcement"),
+  t.Literal("home_video_release"),
+  t.Literal("manual_verified"),
+  t.Literal("community_submission"),
+  t.Literal("other"),
+]);

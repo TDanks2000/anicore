@@ -4,11 +4,13 @@ import { db } from "@anicore/db";
 import {
   anime,
   animeExternalLinks,
+  animeLanguageEvidence,
+  animeLanguageStatus,
   animeMappings,
   animeRelationLinks,
   animeStudioLinks,
   animeTagLinks,
-  episodeAudioStatus,
+  episodeLanguageStatus,
   episodeMappings,
   episodes,
   studios,
@@ -36,9 +38,11 @@ const counts = {
   tags:                await rowCount(tags),
   anime_tag_links:     await rowCount(animeTagLinks),
   anime_external_links:await rowCount(animeExternalLinks),
+  anime_language_status:await rowCount(animeLanguageStatus),
+  anime_language_evidence:await rowCount(animeLanguageEvidence),
   episodes:            await rowCount(episodes),
   episode_mappings:    await rowCount(episodeMappings),
-  episode_audio_status:await rowCount(episodeAudioStatus),
+  episode_language_status:await rowCount(episodeLanguageStatus),
   sync_runs:           await rowCount(syncRuns),
 };
 

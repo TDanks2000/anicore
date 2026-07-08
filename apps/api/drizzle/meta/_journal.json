@@ -8,6 +8,13 @@
       "when": 1782735656650,
       "tag": "0000_tranquil_ultimatum",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1783542400385,
+      "tag": "0001_anicore_language_status",
+      "breakpoints": true
     }
   ]
 }

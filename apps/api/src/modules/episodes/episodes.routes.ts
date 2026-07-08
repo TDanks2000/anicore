@@ -1,10 +1,27 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 
 import { db } from "@anicore/db";
-import { episodeAudioStatus, episodeMappings, episodes } from "@anicore/db/schema";
+import { episodeLanguageStatus, episodeMappings, episodes } from "@anicore/db/schema";
 import { parseId, parseLimit } from "../../lib/params";
-import { audioModeEnum, audioStatusEnum, episodeKindEnum, providerEnum, sourceEnum } from "../../lib/validators";
+import {
+	audioModeEnum,
+	audioStatusEnum,
+	episodeKindEnum,
+	episodeLanguageStatusEnum,
+	languageMediaTypeEnum,
+	providerEnum,
+	sourceEnum,
+} from "../../lib/validators";
+import {
+	getEpisodeLanguageStatusesForEpisode,
+	upsertLegacyEpisodeAudioStatus,
+} from "../language-status/language-status.service";
+import {
+	mapLegacyAudioStatusToEpisodeStatus,
+	normalizeLanguageCode,
+	toLegacyEpisodeAudioResponse,
+} from "../language-status/language-status.scoring";
 
 export const episodeRoutes = new Elysia({ prefix: "/episodes" })
 	.get(
@@ -64,17 +81,33 @@ export const episodeRoutes = new Elysia({ prefix: "/episodes" })
 						);
 					}
 
-					if (body.audioStatuses?.length) {
-						await tx.insert(episodeAudioStatus).values(
-							body.audioStatuses.map((status) => ({
-								episodeId: row.id,
-								audioMode: status.audioMode,
-								locale: status.locale ?? "en",
-								status: status.status ?? "unknown",
-								sourceProvider: status.sourceProvider ?? "manual",
-								notes: status.notes,
-							})),
-						);
+					const languageStatuses = [
+						...(body.languageStatuses ?? []).map((status) => ({
+							animeId: row.animeId,
+							episodeNumber: row.number,
+							languageCode: normalizeLanguageCode(status.languageCode),
+							mediaType: status.mediaType,
+							status: status.status ?? "unknown",
+							provider: status.provider ?? "manual",
+							confidence: status.confidence ?? 75,
+						})),
+						...(body.audioStatuses ?? []).map((status) => ({
+							animeId: row.animeId,
+							episodeNumber: row.number,
+							languageCode: normalizeLanguageCode(
+								status.locale ?? (status.audioMode === "original" ? "ja" : "en"),
+							),
+							mediaType: "audio" as const,
+							status: mapLegacyAudioStatusToEpisodeStatus(
+								status.status ?? "unknown",
+							),
+							provider: status.sourceProvider ?? "manual",
+							confidence: status.sourceProvider === "manual" ? 100 : 75,
+						})),
+					];
+
+					if (languageStatuses.length) {
+						await tx.insert(episodeLanguageStatus).values(languageStatuses);
 					}
 
 					return row;
@@ -140,6 +173,18 @@ export const episodeRoutes = new Elysia({ prefix: "/episodes" })
 						}),
 					),
 				),
+
+				languageStatuses: t.Optional(
+					t.Array(
+						t.Object({
+							languageCode: t.String(),
+							mediaType: languageMediaTypeEnum,
+							status: t.Optional(episodeLanguageStatusEnum),
+							provider: t.Optional(t.String()),
+							confidence: t.Optional(t.Number()),
+						}),
+					),
+				),
 			}),
 		},
 	)
@@ -163,21 +208,27 @@ export const episodeRoutes = new Elysia({ prefix: "/episodes" })
 			return { error: "Episode not found" };
 		}
 
-		const [mappings, audioStatuses] = await Promise.all([
+		const [mappings, languageStatuses] = await Promise.all([
 			db
 				.select()
 				.from(episodeMappings)
 				.where(eq(episodeMappings.episodeId, id)),
 			db
 				.select()
-				.from(episodeAudioStatus)
-				.where(eq(episodeAudioStatus.episodeId, id)),
+				.from(episodeLanguageStatus)
+				.where(
+					and(
+						eq(episodeLanguageStatus.animeId, episode.animeId),
+						eq(episodeLanguageStatus.episodeNumber, episode.number),
+					),
+				),
 		]);
 
 		return {
 			...episode,
 			mappings,
-			audioStatuses,
+			languageStatuses,
+			audioStatuses: toLegacyEpisodeAudioResponse(episode, languageStatuses),
 		};
 	})
 
@@ -225,10 +276,13 @@ export const episodeRoutes = new Elysia({ prefix: "/episodes" })
 			return { error: "Invalid episode id" };
 		}
 
-		return db
-			.select()
-			.from(episodeAudioStatus)
-			.where(eq(episodeAudioStatus.episodeId, episodeId));
+		const result = await getEpisodeLanguageStatusesForEpisode(episodeId);
+		if (!result) {
+			set.status = 404;
+			return { error: "Episode not found" };
+		}
+
+		return toLegacyEpisodeAudioResponse(result.episode, result.rows);
 	})
 
 	.post(
@@ -241,28 +295,18 @@ export const episodeRoutes = new Elysia({ prefix: "/episodes" })
 				return { error: "Invalid episode id" };
 			}
 
-			const [exists] = await db
-				.select({ id: episodes.id })
-				.from(episodes)
-				.where(eq(episodes.id, episodeId))
-				.limit(1);
+			const created = await upsertLegacyEpisodeAudioStatus({
+				episodeId,
+				audioMode: body.audioMode,
+				locale: body.locale,
+				status: body.status,
+				sourceProvider: body.sourceProvider,
+			});
 
-			if (!exists) {
+			if (!created) {
 				set.status = 404;
 				return { error: "Episode not found" };
 			}
-
-			const [created] = await db
-				.insert(episodeAudioStatus)
-				.values({
-					episodeId,
-					audioMode: body.audioMode,
-					locale: body.locale ?? "en",
-					status: body.status ?? "unknown",
-					sourceProvider: body.sourceProvider ?? "manual",
-					notes: body.notes,
-				})
-				.returning();
 
 			return created;
 		},
