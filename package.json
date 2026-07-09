@@ -55,8 +55,8 @@
     "sync:audio": "turbo run sync:audio --filter=@anicore/api --ui=stream --"
   },
   "devDependencies": {
-    "bun-types": "catalog:",
-    "turbo": "^2.5.4",
-    "typescript": "catalog:"
+    "bun-types": "^1.3.14",
+    "turbo": "^2.10.4",
+    "typescript": "^7.0.2"
   }
 }
