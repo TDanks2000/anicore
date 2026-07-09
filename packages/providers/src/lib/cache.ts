@@ -10,6 +10,7 @@ import {
 } from "node:fs";
 
 import { log } from "./logger";
+import { formatHttpError } from "./http";
 
 const CACHE_DIR = "data/cache";
 const IDS_FILE = `${CACHE_DIR}/anilist_ids.txt`;
@@ -61,7 +62,7 @@ export async function loadIds(forceRefresh = false): Promise<number[]> {
       try {
         const response = await fetch(url);
         if (!response.ok) {
-          throw new Error(`Failed to fetch IDs: ${response.status}`);
+          throw new Error(await formatHttpError("Failed to fetch IDs", response));
         }
 
         const text = await response.text();

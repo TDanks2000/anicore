@@ -1,3 +1,5 @@
+import { formatHttpError } from "../../lib/http";
+
 const BASE = "https://animeschedule.net/api/v3";
 
 // anime-schedule.net uses Go's zero time as a sentinel for "not set"
@@ -46,7 +48,7 @@ async function fetchJson<T>(url: string): Promise<T | null> {
   // 5xx means their API is broken for this query — treat as no result rather than
   // propagating an error that would mark the entire anime sync as failed.
   if (res.status >= 500) return null;
-  if (!res.ok) throw new Error(`anime-schedule ${res.status}: ${url}`);
+  if (!res.ok) throw new Error(await formatHttpError("anime-schedule", res));
   return res.json() as Promise<T>;
 }
 

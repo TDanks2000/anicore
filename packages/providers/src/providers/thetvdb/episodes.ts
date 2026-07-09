@@ -1,4 +1,5 @@
 import { loadExistingAnimeSourceMapping, type EnrichmentContext, type TitleSourceMatch } from "../episode-titles";
+import { hasConflictingExplicitEpisodeNumbers } from "../episode-title-scoring";
 import {
 	getTvdbSeasonEpisodes,
 	getTvdbSeriesExtended,
@@ -33,7 +34,18 @@ function deriveBaseTitle(title: string): string | null {
 }
 
 function scoreEpisodeBatch(context: EnrichmentContext, titles: { number: number; title: string; airDate?: string | null }[]): number {
+	if (hasConflictingExplicitEpisodeNumbers(titles)) {
+		return Number.NEGATIVE_INFINITY;
+	}
+
 	const episodeCount = context.anilistData.episodeCount ?? context.episodes.length;
+	if (
+		episodeCount >= 8 &&
+		titles.length < Math.ceil(episodeCount * 0.75)
+	) {
+		return Number.NEGATIVE_INFINITY;
+	}
+
 	const batchYear = titles[0]?.airDate ? Number(titles[0].airDate.slice(0, 4)) : null;
 	const localAirDates = new Map(
 		context.episodes
@@ -78,6 +90,15 @@ function parseStoredMapping(
 	return { seriesId: parsedSeriesId, seasonNumber: parsedSeasonNumber };
 }
 
+function sortByEpisodeNumber<T extends { providerEpisodeNumber: string }>(
+	episodes: T[],
+): T[] {
+	return episodes.sort(
+		(a, b) =>
+			Number(a.providerEpisodeNumber) - Number(b.providerEpisodeNumber),
+	);
+}
+
 async function resolveStoredMatch(
 	context: EnrichmentContext,
 ): Promise<TitleSourceMatch | null> {
@@ -88,7 +109,7 @@ async function resolveStoredMatch(
 	if (!parsed) return null;
 
 	const episodes = await getTvdbSeasonEpisodes(parsed.seriesId, parsed.seasonNumber, "eng");
-	const titledEpisodes = episodes
+	const titledEpisodes = sortByEpisodeNumber(episodes
 		.filter((episode): episode is typeof episode & { number: number; name: string } =>
 			episode.number != null && Boolean(episode.name?.trim()),
 		)
@@ -99,9 +120,10 @@ async function resolveStoredMatch(
 			description: episode.overview ?? null,
 			airDate: episode.aired ?? null,
 			providerUrl: `https://thetvdb.com/series/${parsed.seriesId}/episodes/${episode.id}`,
-		}));
+		})));
 
 	if (!titledEpisodes.length) return null;
+	if (hasConflictingExplicitEpisodeNumbers(titledEpisodes)) return null;
 
 	return {
 		provider: "thetvdb",
@@ -176,7 +198,7 @@ export async function fetchTvdbEpisodeTitles(
 
 		for (const seasonNumber of seasons.slice(0, 8)) {
 			const seasonEpisodes = await getTvdbSeasonEpisodes(candidate.id, seasonNumber, "eng");
-			const titledEpisodes = seasonEpisodes
+			const titledEpisodes = sortByEpisodeNumber(seasonEpisodes
 				.filter((episode): episode is typeof episode & { number: number; name: string } =>
 					episode.number != null && Boolean(episode.name?.trim()),
 				)
@@ -187,7 +209,7 @@ export async function fetchTvdbEpisodeTitles(
 					description: episode.overview ?? null,
 					airDate: episode.aired ?? null,
 					providerUrl: `https://thetvdb.com/series/${candidate.slug ?? candidate.id}/episodes/${episode.id}`,
-				}));
+				})));
 
 			if (!titledEpisodes.length) continue;
 

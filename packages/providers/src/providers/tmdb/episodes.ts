@@ -1,6 +1,7 @@
 import { TMDB, type Season, type SeasonDetails } from "@api-wrappers/tmdb-wrapper";
 
 import { loadExistingAnimeSourceMapping, type EnrichmentContext, type TitleSourceMatch } from "../episode-titles";
+import { hasConflictingExplicitEpisodeNumbers } from "../episode-title-scoring";
 
 function normalizeTitle(value: string): string {
 	return value.toLowerCase().replace(/[^a-z0-9\s]/g, " ").trim();
@@ -27,7 +28,18 @@ function deriveBaseTitle(title: string): string | null {
 }
 
 function scoreEpisodeBatch(context: EnrichmentContext, titles: { number: number; title: string; airDate?: string | null }[]): number {
+	if (hasConflictingExplicitEpisodeNumbers(titles)) {
+		return Number.NEGATIVE_INFINITY;
+	}
+
 	const episodeCount = context.anilistData.episodeCount ?? context.episodes.length;
+	if (
+		episodeCount >= 8 &&
+		titles.length < Math.ceil(episodeCount * 0.75)
+	) {
+		return Number.NEGATIVE_INFINITY;
+	}
+
 	const batchYear = titles[0]?.airDate ? Number(titles[0].airDate.slice(0, 4)) : null;
 	const localAirDates = new Map(
 		context.episodes
@@ -70,6 +82,15 @@ function parseStoredMapping(value: string): { showId: number; seasonNumber: numb
 	return { showId: parsedShowId, seasonNumber: parsedSeasonNumber };
 }
 
+function sortByEpisodeNumber<T extends { providerEpisodeNumber: string }>(
+	episodes: T[],
+): T[] {
+	return episodes.sort(
+		(a, b) =>
+			Number(a.providerEpisodeNumber) - Number(b.providerEpisodeNumber),
+	);
+}
+
 let tmdbClient: TMDB | null | undefined;
 
 function getClient(): TMDB | null {
@@ -95,7 +116,7 @@ async function resolveStoredMatch(
 		{ language: "en-US" },
 	);
 
-	const titledEpisodes = (season.episodes ?? [])
+	const titledEpisodes = sortByEpisodeNumber((season.episodes ?? [])
 		.filter((episode) => Boolean(episode.name?.trim()))
 		.map((episode) => ({
 			providerEpisodeId: String(episode.id),
@@ -104,9 +125,10 @@ async function resolveStoredMatch(
 			description: episode.overview ?? null,
 			airDate: episode.air_date ?? null,
 			providerUrl: `https://www.themoviedb.org/tv/${parsed.showId}/season/${parsed.seasonNumber}/episode/${episode.episode_number}`,
-		}));
+		})));
 
 	if (!titledEpisodes.length) return null;
+	if (hasConflictingExplicitEpisodeNumbers(titledEpisodes)) return null;
 
 	return {
 		provider: "tmdb",
@@ -183,7 +205,7 @@ export async function fetchTmdbEpisodeTitles(
 				{ language: "en-US" },
 			);
 
-			const titledEpisodes = (details.episodes ?? [])
+			const titledEpisodes = sortByEpisodeNumber((details.episodes ?? [])
 				.filter((episode: SeasonDetails["episodes"][number]) => Boolean(episode.name?.trim()))
 				.map((episode: SeasonDetails["episodes"][number]) => ({
 					providerEpisodeId: String(episode.id),
@@ -192,7 +214,7 @@ export async function fetchTmdbEpisodeTitles(
 					description: episode.overview ?? null,
 					airDate: episode.air_date ?? null,
 					providerUrl: `https://www.themoviedb.org/tv/${candidate.id}/season/${season.season_number}/episode/${episode.episode_number}`,
-				}));
+				})));
 
 			if (!titledEpisodes.length) continue;
 

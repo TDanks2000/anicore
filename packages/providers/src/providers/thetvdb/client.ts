@@ -1,3 +1,5 @@
+import { formatHttpError } from "../../lib/http";
+
 const TVDB_API_BASE = "https://api4.thetvdb.com/v4";
 
 interface TvdbEnvelope<T> {
@@ -72,7 +74,7 @@ async function getToken(): Promise<string | null> {
 	});
 
 	if (!res.ok) {
-		throw new Error(`TVDB login failed: ${res.status} ${res.statusText}`);
+		throw new Error(await formatHttpError("TVDB login failed", res));
 	}
 
 	const json = (await res.json()) as TvdbEnvelope<{ token: string }>;
@@ -111,7 +113,7 @@ async function tvdbGet<T>(
 	});
 
 	if (!res.ok) {
-		throw new Error(`TVDB request failed: ${res.status} ${res.statusText}`);
+		throw new Error(await formatHttpError("TVDB request failed", res));
 	}
 
 	const json = (await res.json()) as TvdbEnvelope<T>;

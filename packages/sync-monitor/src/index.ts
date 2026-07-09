@@ -234,9 +234,45 @@ export class SyncMonitorClient {
     });
 
     if (!response.ok) {
-      throw new Error(`Sync monitor request failed: ${response.status}`);
+      throw new Error(await formatErrorResponse(response));
     }
 
     return response.json() as Promise<T>;
+  }
+}
+
+function hasErrorMessage(value: unknown): value is { error: string } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "error" in value &&
+    typeof value.error === "string"
+  );
+}
+
+async function formatErrorResponse(response: Response): Promise<string> {
+  const status = `${response.status}${
+    response.statusText ? ` ${response.statusText}` : ""
+  }`;
+  const detail = await readErrorDetail(response);
+  return detail
+    ? `Sync monitor request failed (${status}): ${detail}`
+    : `Sync monitor request failed (${status})`;
+}
+
+async function readErrorDetail(response: Response): Promise<string | null> {
+  const contentType = response.headers.get("content-type") ?? "";
+
+  try {
+    if (contentType.includes("application/json")) {
+      const payload = (await response.json()) as unknown;
+      if (hasErrorMessage(payload)) return payload.error;
+      return JSON.stringify(payload);
+    }
+
+    const text = await response.text();
+    return text.trim() || null;
+  } catch {
+    return null;
   }
 }

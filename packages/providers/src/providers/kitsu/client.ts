@@ -1,3 +1,5 @@
+import { formatHttpError } from "../../lib/http";
+
 const KITSU_GRAPHQL_URL = "https://kitsu.io/api/graphql";
 
 // Lean search query — no episodes, so we can fetch 10 candidates without blowing up payload
@@ -113,13 +115,17 @@ async function gql<T>(
   });
 
   if (!res.ok) {
-    throw new Error(`Kitsu GraphQL error: ${res.status} ${res.statusText}`);
+    throw new Error(await formatHttpError("Kitsu GraphQL request failed", res));
   }
 
   const json = (await res.json()) as { data?: T; errors?: { message: string }[] };
 
   if (json.errors?.length) {
     throw new Error(`Kitsu GraphQL: ${json.errors.map((e) => e.message).join(", ")}`);
+  }
+
+  if (!json.data) {
+    throw new Error("Kitsu GraphQL response did not include data");
   }
 
   return json.data as T;

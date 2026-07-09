@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import type { PgTable } from "drizzle-orm/pg-core";
 
 import { db } from "@anicore/db";
 import {
@@ -22,8 +23,8 @@ import { log } from "@anicore/providers/lib/logger";
 
 const n = sql<number>`count(*)::int`;
 
-async function rowCount(table: Parameters<typeof db.select>[0] extends undefined ? never : any): Promise<number> {
-  const [row] = await db.select({ n }).from(table as any);
+async function rowCount(table: PgTable): Promise<number> {
+  const [row] = await db.select({ n }).from(table);
   return row?.n ?? 0;
 }
 
