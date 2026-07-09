@@ -2,6 +2,10 @@ import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "@anicore/db";
 import {
+  recalculateAnimeLanguageStatus,
+  syncAnimeLanguageEvidenceFromEpisodeStatuses,
+} from "@anicore/db/language-status";
+import {
   anime,
   animeLanguageEvidence,
   animeLanguageStatus,
@@ -17,7 +21,6 @@ import {
   defaultEvidenceConfidence,
   mapLegacyAudioStatusToEpisodeStatus,
   normalizeLanguageCode,
-  resolveAnimeStatusFromEvidence,
   toLegacyEpisodeAudioResponse,
   type AnimeLanguageStatusValue,
   type EpisodeLanguageStatusValue,
@@ -188,78 +191,6 @@ export async function getResolvedAnimeLanguageStatus(input: {
   };
 }
 
-async function recalculateAnimeLanguageStatus(input: {
-  animeId: number;
-  languageCode: string;
-  mediaType: LanguageMediaType;
-}): Promise<AnimeLanguageStatus> {
-  const languageCode = normalizeLanguageCode(input.languageCode);
-
-  const [existing] = await db
-    .select()
-    .from(animeLanguageStatus)
-    .where(
-      and(
-        eq(animeLanguageStatus.animeId, input.animeId),
-        eq(animeLanguageStatus.languageCode, languageCode),
-        eq(animeLanguageStatus.mediaType, input.mediaType),
-      ),
-    )
-    .limit(1);
-
-  if (existing?.isManualOverride) return existing;
-
-  const evidenceRows = await db
-    .select()
-    .from(animeLanguageEvidence)
-    .where(
-      and(
-        eq(animeLanguageEvidence.animeId, input.animeId),
-        eq(animeLanguageEvidence.languageCode, languageCode),
-        eq(animeLanguageEvidence.mediaType, input.mediaType),
-      ),
-    );
-
-  const resolved = resolveAnimeStatusFromEvidence(
-    evidenceRows.map((item) => ({
-      source: item.source as LanguageEvidenceSource,
-      evidenceType: item.evidenceType as LanguageEvidenceType,
-      value: item.value,
-      confidence: item.confidence,
-    })),
-  );
-
-  const [row] = await db
-    .insert(animeLanguageStatus)
-    .values({
-      animeId: input.animeId,
-      languageCode,
-      mediaType: input.mediaType,
-      status: resolved.status,
-      confidence: resolved.confidence,
-      isManualOverride: false,
-      checkedAt: new Date(),
-    })
-    .onConflictDoUpdate({
-      target: [
-        animeLanguageStatus.animeId,
-        animeLanguageStatus.languageCode,
-        animeLanguageStatus.mediaType,
-      ],
-      set: {
-        status: resolved.status,
-        confidence: resolved.confidence,
-        isManualOverride: false,
-        checkedAt: sql`now()`,
-        updatedAt: sql`now()`,
-      },
-    })
-    .returning();
-
-  if (!row) throw new Error("language status upsert returned no row");
-  return row;
-}
-
 export async function addAnimeLanguageEvidence(input: {
   animeId: number;
   languageCode: string;
@@ -393,6 +324,12 @@ export async function upsertEpisodeLanguageStatus(input: {
     .returning();
 
   if (!row) throw new Error("episode language status upsert returned no row");
+  await syncAnimeLanguageEvidenceFromEpisodeStatuses({
+    animeId: row.animeId,
+    languageCode: row.languageCode,
+    mediaType: row.mediaType as LanguageMediaType,
+    provider: row.provider,
+  });
   return row;
 }
 

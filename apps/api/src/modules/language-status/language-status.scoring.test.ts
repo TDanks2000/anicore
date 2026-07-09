@@ -75,6 +75,19 @@ describe("language status scoring", () => {
     ).toEqual({ status: "not_available", confidence: 90 });
   });
 
+  test("explicit partial evidence resolves to partial", () => {
+    expect(
+      resolveAnimeStatusFromEvidence([
+        {
+          source: "provider",
+          evidenceType: "provider_audio",
+          value: "partial",
+          confidence: 80,
+        },
+      ]),
+    ).toEqual({ status: "partial", confidence: 80 });
+  });
+
   test("legacy episode audio status maps to new episode language status", () => {
     expect(mapLegacyAudioStatusToEpisodeStatus("unavailable")).toBe("missing");
     expect(mapLegacyAudioStatusToEpisodeStatus("available")).toBe("available");

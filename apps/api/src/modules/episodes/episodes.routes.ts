@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 
 import { db } from "@anicore/db";
+import { syncAnimeLanguageEvidenceFromEpisodeStatuses } from "@anicore/db/language-status";
 import { episodeLanguageStatus, episodeMappings, episodes } from "@anicore/db/schema";
 import { parseId, parseLimit } from "../../lib/params";
 import {
@@ -110,10 +111,41 @@ export const episodeRoutes = new Elysia({ prefix: "/episodes" })
 						await tx.insert(episodeLanguageStatus).values(languageStatuses);
 					}
 
-					return row;
+					return { row, languageStatuses };
 				});
 
-				return created;
+				const evidenceKeys = new Map<
+					string,
+					{
+						animeId: number;
+						languageCode: string;
+						mediaType: "audio" | "subtitle";
+						provider: string;
+					}
+				>();
+
+				for (const status of created.languageStatuses) {
+					evidenceKeys.set(
+						[
+							status.animeId,
+							status.languageCode,
+							status.mediaType,
+							status.provider,
+						].join(":"),
+						{
+							animeId: status.animeId,
+							languageCode: status.languageCode,
+							mediaType: status.mediaType,
+							provider: status.provider,
+						},
+					);
+				}
+
+				for (const key of evidenceKeys.values()) {
+					await syncAnimeLanguageEvidenceFromEpisodeStatuses(key);
+				}
+
+				return created.row;
 			} catch (err: unknown) {
 				const msg = err instanceof Error ? err.message : String(err);
 				if (msg.includes("unique") || msg.includes("duplicate")) {

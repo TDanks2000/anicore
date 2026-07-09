@@ -1,6 +1,7 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "@anicore/db";
+import { syncAnimeLanguageEvidenceFromEpisodeStatuses } from "@anicore/db/language-status";
 import {
   anime,
   animeMappings,
@@ -118,6 +119,7 @@ async function storeRoute(animeId: number, route: string): Promise<void> {
 async function upsertDubStatus(
   animeId: number,
   dubStatus: "available" | "missing",
+  sourceUrl: string,
 ): Promise<number> {
   const rows = await db
     .select({ number: episodes.number })
@@ -161,6 +163,14 @@ async function upsertDubStatus(
         },
       });
   }
+
+  await syncAnimeLanguageEvidenceFromEpisodeStatuses({
+    animeId,
+    languageCode: "en",
+    mediaType: "audio",
+    provider: "animeschedule",
+    sourceUrl,
+  });
 
   return rows.length;
 }
@@ -206,7 +216,11 @@ export async function syncDubStatus(opts: {
   }
 
   if (finished) {
-    const count = await upsertDubStatus(opts.animeId, "available");
+    const count = await upsertDubStatus(
+      opts.animeId,
+      "available",
+      `https://animeschedule.net/anime/${entry.route}`,
+    );
     if (!count) return { status: "no-episodes" };
     return {
       status: "matched-fully-dubbed",

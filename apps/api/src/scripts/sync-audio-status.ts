@@ -1,6 +1,7 @@
 import { and, eq, isNotNull, lte, sql } from "drizzle-orm";
 
 import { closeDb, db } from "@anicore/db";
+import { syncAnimeLanguageEvidenceFromEpisodeStatuses } from "@anicore/db/language-status";
 import { anime, animeMappings, episodeLanguageStatus, episodes } from "@anicore/db/schema";
 import { log } from "@anicore/providers/lib/logger";
 import { installProxyFetch } from "@anicore/providers/lib/proxy";
@@ -59,6 +60,19 @@ export async function syncSubStatusForAnime(animeId: number): Promise<number> {
       ]),
     )
     .onConflictDoNothing();
+
+  await syncAnimeLanguageEvidenceFromEpisodeStatuses({
+    animeId,
+    languageCode: "ja",
+    mediaType: "audio",
+    provider: "derived-airdate",
+  });
+  await syncAnimeLanguageEvidenceFromEpisodeStatuses({
+    animeId,
+    languageCode: "en",
+    mediaType: "subtitle",
+    provider: "derived-airdate",
+  });
 
   return rows.length;
 }
@@ -158,6 +172,22 @@ export async function runSubPass(): Promise<void> {
           ]),
         )
         .onConflictDoNothing();
+
+      const animeIds = new Set(chunk.map((episode) => episode.animeId));
+      for (const animeId of animeIds) {
+        await syncAnimeLanguageEvidenceFromEpisodeStatuses({
+          animeId,
+          languageCode: "ja",
+          mediaType: "audio",
+          provider: "derived-airdate",
+        });
+        await syncAnimeLanguageEvidenceFromEpisodeStatuses({
+          animeId,
+          languageCode: "en",
+          mediaType: "subtitle",
+          provider: "derived-airdate",
+        });
+      }
 
       processed += chunk.length;
       bar.tick(chunk.length).setStats({ processed });

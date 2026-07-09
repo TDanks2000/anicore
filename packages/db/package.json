@@ -7,7 +7,9 @@
     ".": "./src/index.ts",
     "./schema": "./src/schema.ts",
     "./db-config": "./src/db-config.ts",
-    "./db-shape": "./src/db-shape.ts"
+    "./db-shape": "./src/db-shape.ts",
+    "./language-status": "./src/language-status.ts",
+    "./language-status-scoring": "./src/language-status-scoring.ts"
   },
   "scripts": {
     "build": "tsc --noEmit",
