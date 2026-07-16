@@ -1,144 +1,27 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "@anicore/db";
 import { animeMappings, episodes, episodeMappings } from "@anicore/db/schema";
-import { searchKitsuByTitle, fetchKitsuEpisodes, type KitsuSearchNode } from "./client";
+import { fetchKitsuEpisodes } from "./client";
 import { mapKitsuAnime, mapKitsuEpisodes, type MappedEpisode } from "./mapper";
 import type { ProviderAnimeData } from "../types";
+import { log } from "../../lib/logger";
+import {
+  findKitsuMatch,
+  isAuthoritativeAnilistMatch,
+  type MatchHints,
+} from "./matching";
 
-export interface MatchHints {
-  titleRomaji: string;
-  titleEnglish?: string | null;
-  season?: string | null;
-  seasonYear?: number | null;
-  episodeCount?: number | null;
-}
+export type { MatchHints } from "./matching";
 
 export type KitsuSyncResult =
   | { matched: true; kitsuId: string; kitsuSlug: string | null; data: ProviderAnimeData; episodeCount: number }
   | { matched: false };
 
-// Word-overlap similarity in [0, 1]. Ignores punctuation and casing.
-function titleSimilarity(a: string, b: string): number {
-  const normalize = (s: string) =>
-    s
-      .toLowerCase()
-      .replace(/[^a-z0-9\s]/g, " ")
-      .trim();
-
-  const aWords = normalize(a).split(/\s+/).filter(Boolean);
-  const bWords = new Set(normalize(b).split(/\s+/).filter(Boolean));
-
-  if (aWords.length === 0 || bWords.size === 0) return 0;
-
-  const overlap = aWords.filter((w) => bWords.has(w)).length;
-  return overlap / Math.max(aWords.length, bWords.size);
-}
-
-// Scores a Kitsu candidate against AniList hints.
-// Max possible: 100 pts (year 30 + season 20 + episodeCount 15 + title 35)
-function scoreCandidate(node: KitsuSearchNode, hints: MatchHints): number {
-  let score = 0;
-
-  const nodeYear = node.startDate
-    ? parseInt(node.startDate.trim().split("-")[0]!, 10)
-    : null;
-
-  if (hints.seasonYear && nodeYear) {
-    if (nodeYear === hints.seasonYear) {
-      score += 30;
-    } else if (Math.abs(nodeYear - hints.seasonYear) === 1) {
-      // Off-by-one year sometimes happens for cross-year season splits
-      score += 8;
-    }
-  }
-
-  if (hints.season && node.season) {
-    if (node.season.toUpperCase() === hints.season.toUpperCase()) {
-      score += 20;
-    }
-  }
-
-  if (hints.episodeCount && node.episodeCount) {
-    if (node.episodeCount === hints.episodeCount) {
-      score += 15;
-    } else if (Math.abs(node.episodeCount - hints.episodeCount) <= 2) {
-      score += 5;
-    }
-  }
-
-  // Collect all Kitsu titles to compare against all AniList titles
-  const kitsuTitles = [
-    node.titles?.romanized,
-    node.titles?.translated,
-    node.titles?.original,
-    ...(node.titles?.alternatives ?? []),
-    ...Object.values(node.titles?.localized ?? {}),
-  ].filter((t): t is string => Boolean(t));
-
-  const anilistTitles = [hints.titleRomaji, hints.titleEnglish].filter(
-    (t): t is string => Boolean(t),
-  );
-
-  let bestTitleScore = 0;
-  for (const kt of kitsuTitles) {
-    for (const at of anilistTitles) {
-      bestTitleScore = Math.max(bestTitleScore, titleSimilarity(kt, at));
-    }
-  }
-
-  score += Math.round(bestTitleScore * 35);
-
-  return score;
-}
-
-const MATCH_THRESHOLD = 45;
-
-// Search Kitsu with one title string, return scored candidates.
-// Throws on API/network errors so callers can report them properly.
-async function searchAndScore(
-  title: string,
-  hints: MatchHints,
-): Promise<Array<{ node: KitsuSearchNode; score: number }>> {
-  const nodes = await searchKitsuByTitle(title);
-  return nodes.map((node) => ({ node, score: scoreCandidate(node, hints) }));
-}
-
-export async function findKitsuMatch(
-  hints: MatchHints,
-): Promise<KitsuSearchNode | null> {
-  // Try romaji first; if we don't get a confident result, also try english
-  const romajiCandidates = await searchAndScore(hints.titleRomaji, hints);
-
-  const bestRomaji = romajiCandidates.sort((a, b) => b.score - a.score)[0];
-  if (bestRomaji && bestRomaji.score >= MATCH_THRESHOLD) {
-    return bestRomaji.node;
-  }
-
-  if (hints.titleEnglish && hints.titleEnglish !== hints.titleRomaji) {
-    const englishCandidates = await searchAndScore(hints.titleEnglish, hints);
-
-    // Merge both sets and pick global best
-    const all = [...romajiCandidates, ...englishCandidates];
-    const seen = new Set<string>();
-    const deduped = all.filter(({ node }) => {
-      if (seen.has(node.id)) return false;
-      seen.add(node.id);
-      return true;
-    });
-
-    const best = deduped.sort((a, b) => b.score - a.score)[0];
-    if (best && best.score >= MATCH_THRESHOLD) {
-      return best.node;
-    }
-  }
-
-  return null;
-}
-
 async function insertKitsuMapping(
   animeId: number,
   kitsuData: ProviderAnimeData,
+  authoritative: boolean,
 ): Promise<void> {
   const [mapping] = await db
     .insert(animeMappings)
@@ -148,8 +31,8 @@ async function insertKitsuMapping(
       providerId: kitsuData.providerId,
       providerSlug: kitsuData.providerSlug ?? null,
       providerUrl: kitsuData.providerUrl ?? null,
-      confidence: 90,
-      source: "fuzzy",
+      confidence: authoritative ? 100 : 90,
+      source: authoritative ? "api" : "fuzzy",
       isPrimary: false,
     })
     .onConflictDoUpdate({
@@ -157,8 +40,12 @@ async function insertKitsuMapping(
       set: {
         providerSlug: sql`excluded.provider_slug`,
         providerUrl: sql`excluded.provider_url`,
-        confidence: sql`excluded.confidence`,
-        source: sql`excluded.source`,
+        confidence: sql`greatest(${animeMappings.confidence}, excluded.confidence)`,
+        source: sql`case
+          when ${animeMappings.source} in ('manual', 'api', 'system')
+            then ${animeMappings.source}
+          else excluded.source
+        end`,
         isPrimary: sql`excluded.is_primary`,
         updatedAt: sql`now()`,
       },
@@ -167,6 +54,65 @@ async function insertKitsuMapping(
     .returning({ animeId: animeMappings.animeId });
 
   if (!mapping) {
+    const repairedFromAnimeId = await db.transaction(async (tx) => {
+      const [existing] = await tx
+        .select({
+          id: animeMappings.id,
+          animeId: animeMappings.animeId,
+          source: animeMappings.source,
+        })
+        .from(animeMappings)
+        .where(
+          and(
+            eq(animeMappings.provider, "kitsu"),
+            eq(animeMappings.providerId, kitsuData.providerId),
+          ),
+        )
+        .limit(1);
+      if (!authoritative || existing?.source !== "fuzzy") return null;
+
+      const [updated] = await tx
+        .update(animeMappings)
+        .set({
+          animeId,
+          providerSlug: kitsuData.providerSlug ?? null,
+          providerUrl: kitsuData.providerUrl ?? null,
+          confidence: 100,
+          source: "api",
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(animeMappings.id, existing.id),
+            eq(animeMappings.source, "fuzzy"),
+          ),
+        )
+        .returning({ id: animeMappings.id });
+      if (!updated) return null;
+
+      const oldEpisodeIds = tx
+        .select({ id: episodes.id })
+        .from(episodes)
+        .where(eq(episodes.animeId, existing.animeId));
+      await tx
+        .delete(episodeMappings)
+        .where(
+          and(
+            eq(episodeMappings.provider, "kitsu"),
+            inArray(episodeMappings.episodeId, oldEpisodeIds),
+          ),
+        );
+
+      return existing.animeId;
+    });
+
+    if (repairedFromAnimeId !== null) {
+      log.warn(
+        `Reassigned stale fuzzy Kitsu mapping ${kitsuData.providerId} from anime ${repairedFromAnimeId} to ${animeId} using Kitsu's AniList mapping`,
+      );
+      return;
+    }
+
     throw new Error(
       `Kitsu mapping ${kitsuData.providerId} already belongs to another anime`,
     );
@@ -200,7 +146,11 @@ export async function syncKitsuFromAnilist(
   if (!kitsuNode) return { matched: false };
 
   const kitsuData = mapKitsuAnime(kitsuNode);
-  await insertKitsuMapping(existingAnilist.animeId, kitsuData);
+  await insertKitsuMapping(
+    existingAnilist.animeId,
+    kitsuData,
+    isAuthoritativeAnilistMatch(kitsuNode, anilistId),
+  );
 
   const episodeCount = await syncKitsuEpisodes(existingAnilist.animeId, kitsuNode.id);
 

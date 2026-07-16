@@ -16,13 +16,14 @@ function mapStatus(kitsuStatus: string | null): string | null {
   }
 }
 
-function resolveTitle(titles: KitsuSearchNode["titles"]): string {
+function resolvePreferredTitle(
+  titles: KitsuSearchNode["titles"],
+): string | null {
   return (
     titles.romanized ??
-    titles.canonical ??
     titles.translated ??
     Object.values(titles.localized ?? {})[0] ??
-    "Unknown"
+    null
   );
 }
 
@@ -42,10 +43,10 @@ export function mapKitsuAnime(node: KitsuSearchNode): ProviderAnimeData {
     providerId: node.id,
     providerSlug: node.slug ?? null,
 
-    titleRomaji: resolveTitle(node.titles),
+    titleRomaji: resolvePreferredTitle(node.titles) ?? "Unknown",
     titleEnglish: node.titles.translated ?? null,
     titleNative: node.titles.original ?? null,
-    titleUserPreferred: node.titles.canonical ?? null,
+    titleUserPreferred: resolvePreferredTitle(node.titles),
 
     format: node.subtype ?? null,
     status: mapStatus(node.status),
@@ -83,7 +84,7 @@ export function mapKitsuEpisodes(nodes: KitsuEpisodeNode[]): MappedEpisode[] {
     .filter((ep) => ep.number != null)
     .map((ep) => ({
       number:       ep.number!,
-      title:        ep.titles?.canonical ?? ep.titles?.romanized ?? ep.titles?.translated ?? null,
+      title:        ep.titles?.romanized ?? ep.titles?.translated ?? null,
       titleRomaji:  ep.titles?.romanized ?? null,
       titleEnglish: ep.titles?.translated ?? null,
       description:

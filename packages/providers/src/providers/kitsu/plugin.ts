@@ -1,9 +1,11 @@
 import type { DryPluginResult, PluginResult, ProviderAnimeData, ProviderPlugin } from "../types";
 import { mapKitsuAnime } from "./mapper";
-import { fetchKitsuEpisodeData, findKitsuMatch, syncKitsuFromAnilist } from "./sync";
+import { findKitsuMatch } from "./matching";
+import { fetchKitsuEpisodeData, syncKitsuFromAnilist } from "./sync";
 
 function toHints(data: ProviderAnimeData) {
 	return {
+		anilistId:    data.provider === "anilist" ? data.providerId : undefined,
 		titleRomaji:  data.titleRomaji,
 		titleEnglish: data.titleEnglish,
 		season:       data.season,

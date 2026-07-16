@@ -22,12 +22,17 @@ query($title: String!) {
       averageRatingRank
       ageRating
       titles {
-        canonical
         romanized
         translated
         original
         localized
         alternatives
+      }
+      mappings(first: 20) {
+        nodes {
+          externalId
+          externalSite
+        }
       }
       posterImage { original { url } }
       bannerImage { original { url } }
@@ -48,7 +53,6 @@ query($id: ID!) {
         length
         createdAt
         titles {
-          canonical
           romanized
           translated
           localized
@@ -62,7 +66,6 @@ query($id: ID!) {
 `.trim();
 
 export interface KitsuTitle {
-  canonical?: string | null;
   romanized?: string | null;
   translated?: string | null;
   original?: string | null;
@@ -72,6 +75,11 @@ export interface KitsuTitle {
 
 export interface KitsuImage {
   url: string;
+}
+
+export interface KitsuExternalMapping {
+  externalId: string;
+  externalSite: string;
 }
 
 export interface KitsuSearchNode {
@@ -90,6 +98,7 @@ export interface KitsuSearchNode {
   averageRatingRank: number | null;
   ageRating: string | null;
   titles: KitsuTitle;
+  mappings?: { nodes: KitsuExternalMapping[] } | null;
   posterImage: { original: KitsuImage } | null;
   bannerImage: { original: KitsuImage } | null;
 }
