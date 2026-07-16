@@ -102,7 +102,7 @@ function formatMonitorStats(stats: SyncStats): SyncMonitorStats {
 }
 
 function announceMonitor(): void {
-	const code = ensureSyncMonitorAccessCode();
+	ensureSyncMonitorAccessCode();
 	ensureSyncMonitorRuntimeConfig({
 		parallel: PARALLEL,
 		checkpointEvery: 10,
@@ -110,7 +110,7 @@ function announceMonitor(): void {
 	const config = getSyncMonitorPublicConfig();
 	log.info("Sync monitor enabled");
 	log.info(`Access code saved locally: ${config.codePath}`);
-	log.info(`Use Authorization: Bearer ${code}`);
+	log.info(`Read the monitor access code from ${config.codePath}`);
 	log.info(`Status file: ${config.statusPath}`);
 	log.info(`Events file: ${config.eventsPath}`);
 	log.info(`Runtime config file: ${config.runtimeConfigPath}`);
@@ -434,7 +434,7 @@ async function runDryRun(): Promise<void> {
 			startIndex,
 			endIndex,
 			label: "Dry-run",
-			concurrency: activeRuntimeConfig?.parallel ?? 1,
+			concurrency: activeRuntimeConfig?.parallel ?? PARALLEL,
 			rateLimitMs: activeRuntimeConfig?.rateLimitMs,
 			getRateLimitMs: monitor
 				? () => refreshRuntimeConfig(monitor).rateLimitMs

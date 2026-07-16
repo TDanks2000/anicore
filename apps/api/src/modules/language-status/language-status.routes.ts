@@ -3,6 +3,8 @@ import { Elysia, t } from "elysia";
 import { parseId, parseLimit } from "../../lib/params";
 import {
   animeLanguageStatusEnum,
+  confidenceValue,
+  languageCodeValue,
   languageEvidenceSourceEnum,
   languageEvidenceTypeEnum,
   languageMediaTypeEnum,
@@ -42,7 +44,7 @@ export const languageStatusRoutes = new Elysia()
     },
     {
       query: t.Object({
-        languageCode: t.Optional(t.String()),
+        languageCode: t.Optional(languageCodeValue),
         mediaType: t.Optional(languageMediaTypeEnum),
       }),
     },
@@ -70,7 +72,7 @@ export const languageStatusRoutes = new Elysia()
     },
     {
       query: t.Object({
-        languageCode: t.Optional(t.String()),
+        languageCode: t.Optional(languageCodeValue),
       }),
     },
   )
@@ -97,7 +99,7 @@ export const languageStatusRoutes = new Elysia()
     },
     {
       query: t.Object({
-        languageCode: t.Optional(t.String()),
+        languageCode: t.Optional(languageCodeValue),
       }),
     },
   )
@@ -129,13 +131,13 @@ export const languageStatusRoutes = new Elysia()
     },
     {
       body: t.Object({
-        languageCode: t.String(),
+        languageCode: languageCodeValue,
         mediaType: languageMediaTypeEnum,
         source: languageEvidenceSourceEnum,
         sourceUrl: t.Optional(t.String()),
         evidenceType: languageEvidenceTypeEnum,
         value: t.String(),
-        confidence: t.Optional(t.Number()),
+        confidence: t.Optional(confidenceValue),
       }),
     },
   )
@@ -165,10 +167,10 @@ export const languageStatusRoutes = new Elysia()
     },
     {
       body: t.Object({
-        languageCode: t.String(),
+        languageCode: languageCodeValue,
         mediaType: languageMediaTypeEnum,
         status: animeLanguageStatusEnum,
-        confidence: t.Optional(t.Number()),
+        confidence: t.Optional(confidenceValue),
         notes: t.Optional(t.String()),
       }),
     },

@@ -128,7 +128,18 @@ async function resolveStoredMatch(
 		})));
 
 	if (!titledEpisodes.length) return null;
-	if (hasConflictingExplicitEpisodeNumbers(titledEpisodes)) return null;
+	if (
+		!Number.isFinite(
+			scoreEpisodeBatch(
+				context,
+				titledEpisodes.map((episode) => ({
+					number: Number(episode.providerEpisodeNumber),
+					title: episode.title,
+					airDate: episode.airDate,
+				})),
+			),
+		)
+	) return null;
 
 	return {
 		provider: "tmdb",

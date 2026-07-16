@@ -10,7 +10,7 @@ describe("Kitsu mapper", () => {
       slug: "cowboy-bebop",
       season: null,
       startDate: "1998-04-03",
-      endDate: null,
+      endDate: "1999-04-24",
       subtype: "TV",
       status: "FINISHED",
       episodeCount: 26,
@@ -21,6 +21,7 @@ describe("Kitsu mapper", () => {
       averageRatingRank: null,
       ageRating: null,
       titles: {
+        canonical: "Cowboy Bebop Preferred",
         romanized: null,
         translated: "Cowboy Bebop",
         original: "Cowboy Bebop Native",
@@ -34,11 +35,12 @@ describe("Kitsu mapper", () => {
     expect(mapKitsuAnime(node)).toMatchObject({
       provider: "kitsu",
       providerId: "1",
-      titleRomaji: "Cowboy Bebop",
+      titleRomaji: "Cowboy Bebop Preferred",
       titleEnglish: "Cowboy Bebop",
       titleNative: "Cowboy Bebop Native",
-      titleUserPreferred: null,
+      titleUserPreferred: "Cowboy Bebop Preferred",
       seasonYear: 1998,
+      endDate: "1999-04-24",
       status: "FINISHED",
     });
   });
@@ -52,6 +54,7 @@ describe("Kitsu mapper", () => {
         length: 24,
         createdAt: "1998-04-01T00:00:00.000Z",
         titles: {
+          canonical: "Asteroid Blues",
           romanized: null,
           translated: null,
           original: null,
@@ -82,7 +85,7 @@ describe("Kitsu mapper", () => {
     expect(mapKitsuEpisodes(nodes)).toEqual([
       {
         number: 1,
-        title: null,
+        title: "Asteroid Blues",
         titleRomaji: null,
         titleEnglish: null,
         description: "The first episode.",

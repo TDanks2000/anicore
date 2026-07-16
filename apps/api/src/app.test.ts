@@ -44,6 +44,80 @@ describe("app contract", () => {
     expect(await json(response)).toEqual({ error: "Invalid episode id" });
   });
 
+  test("returns safe global errors for unknown routes and invalid bodies", async () => {
+    const notFound = await app.handle(
+      new Request("http://localhost/does-not-exist"),
+    );
+    expect(notFound.status).toBe(404);
+    expect(await json(notFound)).toEqual({ error: "Not found" });
+
+    const invalidBody = await app.handle(
+      new Request("http://localhost/anime/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ titleRomaji: 42, secret: "must-not-leak" }),
+      }),
+    );
+    expect(invalidBody.status).toBe(400);
+    expect(await json(invalidBody)).toEqual({ error: "Validation failed" });
+  });
+
+  test("rejects values that cannot be represented by the database schema", async () => {
+    const fractionalEpisode = await app.handle(
+      new Request("http://localhost/episodes/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ animeId: 1.5, number: 1.5 }),
+      }),
+    );
+    expect(fractionalEpisode.status).toBe(400);
+    expect(await json(fractionalEpisode)).toEqual({ error: "Validation failed" });
+
+    const invalidMappingConfidence = await app.handle(
+      new Request("http://localhost/mappings/anime", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          animeId: 1,
+          provider: "kitsu",
+          providerId: "1",
+          confidence: 101,
+        }),
+      }),
+    );
+    expect(invalidMappingConfidence.status).toBe(400);
+
+    const emptyLanguage = await app.handle(
+      new Request("http://localhost/admin/anime/1/language-evidence", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          languageCode: "   ",
+          mediaType: "audio",
+          source: "manual",
+          evidenceType: "manual_verified",
+          value: "available",
+        }),
+      }),
+    );
+    expect(emptyLanguage.status).toBe(400);
+  });
+
+  test("does not allow cross-origin browser access by default", async () => {
+    const response = await app.handle(
+      new Request("http://localhost/admin/anime/1/language-override", {
+        method: "OPTIONS",
+        headers: {
+          Origin: "https://evil.example",
+          "Access-Control-Request-Method": "POST",
+        },
+      }),
+    );
+
+    expect(response.headers.get("access-control-allow-origin")).toBeNull();
+    expect(response.headers.get("access-control-allow-credentials")).toBeNull();
+  });
+
   test("guards sync monitor endpoints until a valid code is supplied", async () => {
     const dir = mkdtempSync(join(tmpdir(), "anicore-monitor-"));
     process.env.ANICORE_SYNC_MONITOR_DIR = dir;
@@ -136,7 +210,7 @@ describe("app contract", () => {
     });
     expect(statusPayload.files.statusExists).toBe(true);
     expect(statusPayload.files.eventsExists).toBe(true);
-    expect(statusPayload.files.controlExists).toBe(false);
+    expect(statusPayload.files.controlExists).toBe(true);
     expect(statusPayload.files.runtimeConfigExists).toBe(false);
 
     const eventsResponse = await app.handle(

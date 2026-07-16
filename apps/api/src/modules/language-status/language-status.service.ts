@@ -292,7 +292,9 @@ export async function upsertEpisodeLanguageStatus(input: {
 }) {
   const languageCode = normalizeLanguageCode(input.languageCode);
   const provider = input.provider?.trim() || "manual";
-  const confidence = clampConfidence(input.confidence ?? 75);
+  const confidence = clampConfidence(
+    input.confidence ?? (provider === "manual" ? 100 : 75),
+  );
 
   const [row] = await db
     .insert(episodeLanguageStatus)
@@ -365,14 +367,16 @@ export async function upsertLegacyEpisodeAudioStatus(input: {
   const episode = await getEpisodeById(input.episodeId);
   if (!episode) return null;
 
+  const provider = input.sourceProvider?.trim() || "manual";
+
   const row = await upsertEpisodeLanguageStatus({
     animeId: episode.animeId,
     episodeNumber: episode.number,
     languageCode: input.locale ?? (input.audioMode === "original" ? "ja" : "en"),
     mediaType: "audio",
     status: mapLegacyAudioStatusToEpisodeStatus(input.status ?? "unknown"),
-    provider: input.sourceProvider ?? "manual",
-    confidence: input.sourceProvider === "manual" ? 100 : 75,
+    provider,
+    confidence: provider === "manual" ? 100 : 75,
   });
 
   return toLegacyEpisodeAudioResponse(episode, [row])[0] ?? null;

@@ -9,13 +9,29 @@ import { mappingRoutes } from "./modules/mappings/mappings.routes";
 import { syncMonitorRoutes } from "./modules/sync-monitor/sync-monitor.routes";
 
 export const app = new Elysia()
+  .onError({ as: "global" }, ({ code, error, set }) => {
+    if (code === "VALIDATION" || code === "PARSE") {
+      set.status = 400;
+      return { error: "Validation failed" };
+    }
+
+    if (code === "NOT_FOUND") {
+      set.status = 404;
+      return { error: "Not found" };
+    }
+
+    console.error(error);
+    set.status = 500;
+    return { error: "Internal server error" };
+  })
   .use(
     cors({
       origin: process.env.CORS_ORIGIN
         ? process.env.CORS_ORIGIN.split(",").map((origin) => origin.trim())
-        : true,
+        : false,
       allowedHeaders: ["Content-Type", "Authorization", "X-Sync-Monitor-Code"],
       methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+      credentials: false,
       preflight: true,
     }),
   )
@@ -24,22 +40,4 @@ export const app = new Elysia()
   .use(languageStatusRoutes)
   .use(animeRoutes)
   .use(episodeRoutes)
-  .use(mappingRoutes)
-  .onError(({ code, error, set }) => {
-    console.error(error);
-
-    if (code === "VALIDATION") {
-      set.status = 400;
-
-      return {
-        error: "Validation failed",
-        details: error.message,
-      };
-    }
-
-    set.status = 500;
-
-    return {
-      error: "Internal server error",
-    };
-  });
+  .use(mappingRoutes);

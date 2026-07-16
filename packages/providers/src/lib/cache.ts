@@ -54,10 +54,6 @@ export async function loadIds(forceRefresh = false): Promise<number[]> {
   if (forceRefresh || stale) {
     log.info("Downloading AniList ID list…");
     let lastError: Error | null = null;
-    const localIds = existsSync(IDS_FILE)
-      ? parseIdText(readFileSync(IDS_FILE, "utf-8"))
-      : [];
-
     for (const url of IDS_URLS) {
       try {
         const response = await fetch(url);
@@ -66,9 +62,14 @@ export async function loadIds(forceRefresh = false): Promise<number[]> {
         }
 
         const text = await response.text();
-        await Bun.write(
+        // Re-read immediately before the synchronous replace so IDs appended while the
+        // network request was in flight are preserved.
+        const latestLocalIds = existsSync(IDS_FILE)
+          ? parseIdText(readFileSync(IDS_FILE, "utf-8"))
+          : [];
+        writeFileSync(
           IDS_FILE,
-          serializeIds(uniqueSortedIds([...localIds, ...parseIdText(text)])),
+          serializeIds(uniqueSortedIds([...latestLocalIds, ...parseIdText(text)])),
         );
         log.success(`Saved → ${IDS_FILE}`);
         lastError = null;

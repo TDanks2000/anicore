@@ -1,4 +1,4 @@
-import { and, eq, like, or } from "drizzle-orm";
+import { and, eq, ilike, or } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 
 import { db } from "@anicore/db";
@@ -14,7 +14,13 @@ import { withAnilistRetry } from "@anicore/providers/lib/anilist-rate-limit";
 import { appendAnilistId } from "@anicore/providers/lib/cache";
 import { toJsonArray } from "@anicore/providers/lib/json";
 import { parseId, parseLimit } from "../../lib/params";
-import { providerEnum, sourceEnum } from "../../lib/validators";
+import {
+	confidenceValue,
+	nonNegativeInteger,
+	positiveInteger,
+	providerEnum,
+	sourceEnum,
+} from "../../lib/validators";
 import { anilistClient } from "@anicore/providers/anilist/client";
 import { syncAnilistAnime } from "@anicore/providers/anilist/sync";
 import { formatAnime, getStudiosForAnime, getTagsForAnime } from "./anime.service";
@@ -109,10 +115,10 @@ export const animeRoutes = new Elysia({ prefix: "/anime" })
 				.from(anime)
 				.where(
 					or(
-						like(anime.titleRomaji, pattern),
-						like(anime.titleEnglish, pattern),
-						like(anime.titleNative, pattern),
-						like(anime.slug, pattern),
+						ilike(anime.titleRomaji, pattern),
+						ilike(anime.titleEnglish, pattern),
+						ilike(anime.titleNative, pattern),
+						ilike(anime.slug, pattern),
 					),
 				)
 				.limit(limit);
@@ -131,11 +137,9 @@ export const animeRoutes = new Elysia({ prefix: "/anime" })
 				const synced = await syncMissingAnilistAnime(match.id);
 				return synced ? [formatAnime(synced)] : [];
 			} catch (err) {
+				console.error("Failed to sync missing anime from AniList", err);
 				set.status = 502;
-				return {
-					error: "Failed to sync missing anime from AniList",
-					message: err instanceof Error ? err.message : String(err),
-				};
+				return { error: "Failed to sync missing anime from AniList" };
 			}
 		},
 		{
@@ -237,12 +241,12 @@ export const animeRoutes = new Elysia({ prefix: "/anime" })
 				source: t.Optional(t.String()),
 
 				season: t.Optional(t.String()),
-				seasonYear: t.Optional(t.Number()),
+				seasonYear: t.Optional(nonNegativeInteger),
 				startDate: t.Optional(t.String()),
 				endDate: t.Optional(t.String()),
 
-				episodeCount: t.Optional(t.Number()),
-				durationMinutes: t.Optional(t.Number()),
+				episodeCount: t.Optional(nonNegativeInteger),
+				durationMinutes: t.Optional(nonNegativeInteger),
 
 				countryOfOrigin: t.Optional(t.String()),
 				isAdult: t.Optional(t.Boolean()),
@@ -250,11 +254,11 @@ export const animeRoutes = new Elysia({ prefix: "/anime" })
 				genres: t.Optional(t.Array(t.String())),
 				synonyms: t.Optional(t.Array(t.String())),
 
-				averageScore: t.Optional(t.Number()),
-				meanScore: t.Optional(t.Number()),
-				popularity: t.Optional(t.Number()),
-				favourites: t.Optional(t.Number()),
-				trending: t.Optional(t.Number()),
+				averageScore: t.Optional(confidenceValue),
+				meanScore: t.Optional(confidenceValue),
+				popularity: t.Optional(nonNegativeInteger),
+				favourites: t.Optional(nonNegativeInteger),
+				trending: t.Optional(nonNegativeInteger),
 
 				coverImage: t.Optional(t.String()),
 				coverImageColor: t.Optional(t.String()),
@@ -264,8 +268,8 @@ export const animeRoutes = new Elysia({ prefix: "/anime" })
 				trailerSite: t.Optional(t.String()),
 				trailerThumbnail: t.Optional(t.String()),
 
-				nextEpisodeNumber: t.Optional(t.Number()),
-				nextEpisodeAirsAt: t.Optional(t.Number()),
+				nextEpisodeNumber: t.Optional(positiveInteger),
+				nextEpisodeAirsAt: t.Optional(nonNegativeInteger),
 
 				hashtag: t.Optional(t.String()),
 
@@ -273,10 +277,10 @@ export const animeRoutes = new Elysia({ prefix: "/anime" })
 					t.Array(
 						t.Object({
 							provider: providerEnum,
-							providerId: t.String(),
+							providerId: t.String({ minLength: 1 }),
 							providerSlug: t.Optional(t.String()),
 							providerUrl: t.Optional(t.String()),
-							confidence: t.Optional(t.Number()),
+							confidence: t.Optional(confidenceValue),
 							source: t.Optional(sourceEnum),
 							isPrimary: t.Optional(t.Boolean()),
 						}),
@@ -306,11 +310,9 @@ export const animeRoutes = new Elysia({ prefix: "/anime" })
 						params.providerId,
 					);
 				} catch (err) {
+					console.error("Failed to sync missing anime from AniList", err);
 					set.status = 502;
-					return {
-						error: "Failed to sync missing anime from AniList",
-						message: err instanceof Error ? err.message : String(err),
-					};
+					return { error: "Failed to sync missing anime from AniList" };
 				}
 			}
 

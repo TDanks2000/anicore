@@ -55,7 +55,9 @@ export function clampConfidence(confidence: number): number {
 }
 
 export function normalizeLanguageCode(languageCode: string): string {
-	return languageCode.trim().toLowerCase();
+	const normalized = languageCode.trim().toLowerCase();
+	if (!normalized) throw new Error("languageCode must not be empty");
+	return normalized;
 }
 
 export function defaultEvidenceConfidence(input: {

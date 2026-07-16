@@ -8,9 +8,13 @@ import { parseId, parseLimit } from "../../lib/params";
 import {
 	audioModeEnum,
 	audioStatusEnum,
+	confidenceValue,
 	episodeKindEnum,
 	episodeLanguageStatusEnum,
+	languageCodeValue,
 	languageMediaTypeEnum,
+	nonNegativeInteger,
+	positiveInteger,
 	providerEnum,
 	sourceEnum,
 } from "../../lib/validators";
@@ -83,28 +87,35 @@ export const episodeRoutes = new Elysia({ prefix: "/episodes" })
 					}
 
 					const languageStatuses = [
-						...(body.languageStatuses ?? []).map((status) => ({
-							animeId: row.animeId,
-							episodeNumber: row.number,
-							languageCode: normalizeLanguageCode(status.languageCode),
-							mediaType: status.mediaType,
-							status: status.status ?? "unknown",
-							provider: status.provider ?? "manual",
-							confidence: status.confidence ?? 75,
-						})),
-						...(body.audioStatuses ?? []).map((status) => ({
-							animeId: row.animeId,
-							episodeNumber: row.number,
-							languageCode: normalizeLanguageCode(
-								status.locale ?? (status.audioMode === "original" ? "ja" : "en"),
-							),
-							mediaType: "audio" as const,
-							status: mapLegacyAudioStatusToEpisodeStatus(
-								status.status ?? "unknown",
-							),
-							provider: status.sourceProvider ?? "manual",
-							confidence: status.sourceProvider === "manual" ? 100 : 75,
-						})),
+						...(body.languageStatuses ?? []).map((status) => {
+							const provider = status.provider?.trim() || "manual";
+							return {
+								animeId: row.animeId,
+								episodeNumber: row.number,
+								languageCode: normalizeLanguageCode(status.languageCode),
+								mediaType: status.mediaType,
+								status: status.status ?? "unknown",
+								provider,
+								confidence:
+									status.confidence ?? (provider === "manual" ? 100 : 75),
+							};
+						}),
+						...(body.audioStatuses ?? []).map((status) => {
+							const provider = status.sourceProvider?.trim() || "manual";
+							return {
+								animeId: row.animeId,
+								episodeNumber: row.number,
+								languageCode: normalizeLanguageCode(
+									status.locale ?? (status.audioMode === "original" ? "ja" : "en"),
+								),
+								mediaType: "audio" as const,
+								status: mapLegacyAudioStatusToEpisodeStatus(
+									status.status ?? "unknown",
+								),
+								provider,
+								confidence: provider === "manual" ? 100 : 75,
+							};
+						}),
 					];
 
 					if (languageStatuses.length) {
@@ -158,13 +169,13 @@ export const episodeRoutes = new Elysia({ prefix: "/episodes" })
 		},
 		{
 			body: t.Object({
-				animeId: t.Number(),
-				number: t.Number(),
+				animeId: positiveInteger,
+				number: positiveInteger,
 				displayNumber: t.Optional(t.String()),
 				sortNumber: t.Optional(t.Number()),
 
-				seasonNumber: t.Optional(t.Number()),
-				absoluteNumber: t.Optional(t.Number()),
+				seasonNumber: t.Optional(nonNegativeInteger),
+				absoluteNumber: t.Optional(nonNegativeInteger),
 
 				title: t.Optional(t.String()),
 				titleRomaji: t.Optional(t.String()),
@@ -176,7 +187,7 @@ export const episodeRoutes = new Elysia({ prefix: "/episodes" })
 				airDate: t.Optional(t.String()),
 				thumbnail: t.Optional(t.String()),
 
-				lengthMinutes: t.Optional(t.Number()),
+				lengthMinutes: t.Optional(nonNegativeInteger),
 
 				kind: t.Optional(episodeKindEnum),
 
@@ -184,11 +195,11 @@ export const episodeRoutes = new Elysia({ prefix: "/episodes" })
 					t.Array(
 						t.Object({
 							provider: providerEnum,
-							providerId: t.String(),
+							providerId: t.String({ minLength: 1 }),
 							providerSlug: t.Optional(t.String()),
 							providerUrl: t.Optional(t.String()),
 							providerEpisodeNumber: t.Optional(t.String()),
-							confidence: t.Optional(t.Number()),
+							confidence: t.Optional(confidenceValue),
 							source: t.Optional(sourceEnum),
 						}),
 					),
@@ -198,7 +209,7 @@ export const episodeRoutes = new Elysia({ prefix: "/episodes" })
 					t.Array(
 						t.Object({
 							audioMode: audioModeEnum,
-							locale: t.Optional(t.String()),
+							locale: t.Optional(languageCodeValue),
 							status: t.Optional(audioStatusEnum),
 							sourceProvider: t.Optional(t.String()),
 							notes: t.Optional(t.String()),
@@ -209,11 +220,11 @@ export const episodeRoutes = new Elysia({ prefix: "/episodes" })
 				languageStatuses: t.Optional(
 					t.Array(
 						t.Object({
-							languageCode: t.String(),
+							languageCode: languageCodeValue,
 							mediaType: languageMediaTypeEnum,
 							status: t.Optional(episodeLanguageStatusEnum),
 							provider: t.Optional(t.String()),
-							confidence: t.Optional(t.Number()),
+							confidence: t.Optional(confidenceValue),
 						}),
 					),
 				),
@@ -345,7 +356,7 @@ export const episodeRoutes = new Elysia({ prefix: "/episodes" })
 		{
 			body: t.Object({
 				audioMode: audioModeEnum,
-				locale: t.Optional(t.String()),
+				locale: t.Optional(languageCodeValue),
 				status: t.Optional(audioStatusEnum),
 				sourceProvider: t.Optional(t.String()),
 				notes: t.Optional(t.String()),

@@ -155,7 +155,10 @@ function proxyAttemptTimeoutMs(): number {
 	return DEFAULT_PROXY_ATTEMPT_TIMEOUT_MS;
 }
 
-function shouldBypassProxy(input: FetchInput): boolean {
+function shouldBypassProxy(
+	input: FetchInput,
+	includeDefaultHosts: boolean,
+): boolean {
 	const target =
 		typeof input === "string"
 			? input
@@ -169,7 +172,7 @@ function shouldBypassProxy(input: FetchInput): boolean {
 		return false;
 	}
 
-	if (DEFAULT_PROXY_BYPASS_HOSTS.has(hostname)) return true;
+	if (includeDefaultHosts && DEFAULT_PROXY_BYPASS_HOSTS.has(hostname)) return true;
 
 	const noProxy = process.env.NO_PROXY ?? process.env.no_proxy;
 	if (!noProxy) return false;
@@ -286,11 +289,6 @@ async function fetchWithFreeProxyFallback(
 				continue;
 			}
 
-			if (!response.ok) {
-				if (isUntested) removeProxyFromUntestedList(proxy);
-				continue;
-			}
-
 			if (isUntested) removeProxyFromUntestedList(proxy);
 			try { markWorkingProxy(proxy); } catch { /* ignore disk errors */ }
 			return response;
@@ -312,20 +310,17 @@ export function installProxyFetch(): void {
 	const rawFetch = globalThis.fetch.bind(globalThis);
 
 	globalThis.fetch = (async (input: FetchInput, init?: FetchInit) => {
-		if (shouldBypassProxy(input)) {
+		const configuredProxy = readConfiguredProxy();
+		if (shouldBypassProxy(input, !configuredProxy)) {
 			return rawFetch(input, init);
 		}
 
-		const configuredProxy = readConfiguredProxy();
 		if (configuredProxy) {
 			try {
-				const response = await rawFetch(input, {
+				return await rawFetch(input, {
 					...(init ?? {}),
 					proxy: normalizeProxyUrl(configuredProxy),
 				} as BunProxyFetchInit);
-				if (response.ok) return response;
-
-				return rawFetch(input, init);
 			} catch (err) {
 				// If the caller's signal fired during the proxy attempt, propagate rather than
 				// retrying with an already-aborted signal against the direct path.

@@ -6,6 +6,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { appendAnilistId, loadIds } from "./cache";
 
 const originalCwd = process.cwd();
+const originalFetch = globalThis.fetch;
 let tmp: string | null = null;
 
 function useTempCwd(): string {
@@ -15,6 +16,7 @@ function useTempCwd(): string {
 }
 
 afterEach(() => {
+	globalThis.fetch = originalFetch;
   process.chdir(originalCwd);
   if (tmp) {
     rmSync(tmp, { recursive: true, force: true });
@@ -42,4 +44,28 @@ describe("AniList ID cache", () => {
     expect(() => appendAnilistId(0)).toThrow("Invalid AniList ID: 0");
     expect(() => appendAnilistId(1.5)).toThrow("Invalid AniList ID: 1.5");
   });
+
+	test("preserves ids appended while a refresh request is in flight", async () => {
+		useTempCwd();
+		appendAnilistId(7);
+
+		let releaseFetch: (() => void) | undefined;
+		const waiting = new Promise<void>((resolve) => {
+			releaseFetch = resolve;
+		});
+		globalThis.fetch = Object.assign(
+			async () => {
+				await waiting;
+				return new Response("1\n");
+			},
+			{ preconnect: () => undefined },
+		);
+
+		const refreshing = loadIds(true);
+		await Promise.resolve();
+		appendAnilistId(42);
+		releaseFetch?.();
+
+		expect(await refreshing).toEqual([1, 7, 42]);
+	});
 });

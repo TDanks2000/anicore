@@ -23,7 +23,7 @@ import {
 	Sun,
 	TerminalSquare,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -42,8 +42,11 @@ import { useTheme } from "./theme-provider";
 
 const defaultApiUrl =
 	import.meta.env.VITE_ANICORE_API_URL?.trim() || "http://localhost:3000";
-const defaultAccessCode = import.meta.env.VITE_SYNC_MONITOR_CODE?.trim() || "";
-const pollMs = Number(import.meta.env.VITE_SYNC_MONITOR_POLL_MS ?? 2500);
+const configuredPollMs = Number(import.meta.env.VITE_SYNC_MONITOR_POLL_MS);
+const pollMs =
+	Number.isFinite(configuredPollMs) && configuredPollMs >= 1000
+		? configuredPollMs
+		: 2500;
 
 type ConnectionState = "idle" | "loading" | "ready" | "error";
 
@@ -126,7 +129,9 @@ export function App() {
 		loadStoredValue("anicore.apiUrl", defaultApiUrl),
 	);
 	const [accessCode, setAccessCode] = useState(() =>
-		loadStoredValue("anicore.monitorCode", defaultAccessCode),
+		typeof window === "undefined"
+			? ""
+			: (window.sessionStorage.getItem("anicore.monitorCode") ?? ""),
 	);
 	const [statusPayload, setStatusPayload] =
 		useState<SyncMonitorStatusResponse | null>(null);
@@ -152,6 +157,8 @@ export function App() {
 		useState<ConnectionState>("idle");
 	const [error, setError] = useState<string | null>(null);
 	const [lastRefresh, setLastRefresh] = useState<string | null>(null);
+	const refreshSequence = useRef(0);
+	const refreshInFlight = useRef<SyncMonitorClient | null>(null);
 
 	const client = useMemo(() => {
 		if (!apiUrl || !accessCode) return null;
@@ -160,10 +167,15 @@ export function App() {
 
 	const refresh = useCallback(async () => {
 		if (!client) {
+			refreshSequence.current++;
 			setConnectionState("idle");
 			setError("Enter the API URL and monitor code to connect.");
 			return;
 		}
+		if (refreshInFlight.current === client) return;
+
+		const sequence = ++refreshSequence.current;
+		refreshInFlight.current = client;
 
 		setConnectionState((state) => (state === "ready" ? "ready" : "loading"));
 		try {
@@ -172,6 +184,7 @@ export function App() {
 				client.getEvents(80),
 				client.getConfig(),
 			]);
+			if (sequence !== refreshSequence.current) return;
 			setStatusPayload(nextStatus);
 			setEvents(nextEvents.events);
 			setConfigPayload(nextConfig);
@@ -179,8 +192,11 @@ export function App() {
 			setError(null);
 			setConnectionState("ready");
 		} catch (err) {
+			if (sequence !== refreshSequence.current) return;
 			setConnectionState("error");
 			setError(err instanceof Error ? err.message : String(err));
+		} finally {
+			if (refreshInFlight.current === client) refreshInFlight.current = null;
 		}
 	}, [client]);
 
@@ -189,17 +205,17 @@ export function App() {
 	}, [apiUrl]);
 
 	useEffect(() => {
-		window.localStorage.setItem("anicore.monitorCode", accessCode);
+		window.sessionStorage.setItem("anicore.monitorCode", accessCode);
 	}, [accessCode]);
 
 	useEffect(() => {
 		void refresh();
 		if (!client) return;
-		const interval = window.setInterval(
-			() => void refresh(),
-			Math.max(1000, pollMs),
-		);
-		return () => window.clearInterval(interval);
+		const interval = window.setInterval(() => void refresh(), pollMs);
+		return () => {
+			window.clearInterval(interval);
+			refreshSequence.current++;
+		};
 	}, [client, refresh]);
 
 	useEffect(() => {

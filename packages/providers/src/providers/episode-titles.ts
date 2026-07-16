@@ -111,7 +111,7 @@ async function upsertAnimeSourceMapping(
 	animeId: number,
 	match: TitleSourceMatch,
 ): Promise<void> {
-	await db
+	const [mapping] = await db
 		.insert(animeMappings)
 		.values({
 			animeId,
@@ -126,7 +126,6 @@ async function upsertAnimeSourceMapping(
 		.onConflictDoUpdate({
 			target: [animeMappings.provider, animeMappings.providerId],
 			set: {
-				animeId,
 				providerSlug: match.animeProviderSlug ?? null,
 				providerUrl: match.animeProviderUrl ?? null,
 				confidence: 85,
@@ -134,7 +133,15 @@ async function upsertAnimeSourceMapping(
 				isPrimary: false,
 				updatedAt: new Date(),
 			},
-		});
+			setWhere: eq(animeMappings.animeId, animeId),
+		})
+		.returning({ animeId: animeMappings.animeId });
+
+	if (!mapping) {
+		throw new Error(
+			`${match.provider} mapping ${match.animeProviderId} already belongs to another anime`,
+		);
+	}
 }
 
 async function applySourceMatch(
@@ -153,19 +160,7 @@ async function applySourceMatch(
 			continue;
 		}
 
-		await db
-			.update(episodes)
-			.set({
-				title: row.title ?? episode.title,
-				titleEnglish: row.titleEnglish ?? episode.title,
-				synopsis: row.synopsis ?? episode.description ?? null,
-				airDate: row.airDate ?? episode.airDate ?? null,
-				seasonNumber: row.seasonNumber ?? match.seasonNumber,
-				updatedAt: new Date(),
-			})
-			.where(eq(episodes.id, row.id));
-
-		await db
+		const [mapping] = await db
 			.insert(episodeMappings)
 			.values({
 				episodeId: row.id,
@@ -180,7 +175,6 @@ async function applySourceMatch(
 			.onConflictDoUpdate({
 				target: [episodeMappings.provider, episodeMappings.providerId],
 				set: {
-					episodeId: row.id,
 					providerSlug: null,
 					providerUrl: episode.providerUrl ?? null,
 					providerEpisodeNumber: episode.providerEpisodeNumber,
@@ -188,7 +182,27 @@ async function applySourceMatch(
 					source: "api",
 					updatedAt: new Date(),
 				},
-			});
+				setWhere: eq(episodeMappings.episodeId, row.id),
+			})
+			.returning({ episodeId: episodeMappings.episodeId });
+
+		if (!mapping) {
+			throw new Error(
+				`${match.provider} episode mapping ${episode.providerEpisodeId} already belongs to another episode`,
+			);
+		}
+
+		await db
+			.update(episodes)
+			.set({
+				title: row.title ?? episode.title,
+				titleEnglish: row.titleEnglish ?? episode.title,
+				synopsis: row.synopsis ?? episode.description ?? null,
+				airDate: row.airDate ?? episode.airDate ?? null,
+				seasonNumber: row.seasonNumber ?? match.seasonNumber,
+				updatedAt: new Date(),
+			})
+			.where(eq(episodes.id, row.id));
 
 		row.title = episode.title;
 		row.titleEnglish = episode.title;

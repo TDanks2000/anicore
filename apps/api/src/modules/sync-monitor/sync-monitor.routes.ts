@@ -107,7 +107,17 @@ function parseStartArgs(body: {
 	return args;
 }
 
+let activeSyncChild: ReturnType<typeof Bun.spawn> | null = null;
+
+function hasApiStartedSyncProcess(): boolean {
+	return activeSyncChild !== null;
+}
+
 function startSyncProcess(args: string[]): number {
+	if (activeSyncChild) {
+		throw new Error("A sync process started by this API is already active");
+	}
+
 	const config = getSyncMonitorPublicConfig();
 	const code = ensureSyncMonitorAccessCode();
 	const child = Bun.spawn(["bun", syncScriptPath, ...args], {
@@ -122,6 +132,15 @@ function startSyncProcess(args: string[]): number {
 		stderr: "inherit",
 		stdin: "ignore",
 	});
+	activeSyncChild = child;
+	void child.exited.then(
+		() => {
+			if (activeSyncChild === child) activeSyncChild = null;
+		},
+		() => {
+			if (activeSyncChild === child) activeSyncChild = null;
+		},
+	);
 	child.unref();
 	return child.pid;
 }
@@ -346,7 +365,7 @@ export const syncMonitorRoutes = new Elysia({ prefix: "/sync-monitor" })
 			if (!auth.ok) return auth.body;
 
 			const status = readSyncMonitorStatus();
-			if (SyncMonitor.isLikelyActive(status)) {
+			if (SyncMonitor.isLikelyActive(status) || hasApiStartedSyncProcess()) {
 				set.status = 409;
 				return { error: "A sync process is already active" };
 			}
@@ -364,8 +383,8 @@ export const syncMonitorRoutes = new Elysia({ prefix: "/sync-monitor" })
 		{
 			body: t.Object({
 				dryRun: t.Optional(t.Boolean()),
-				limit: t.Optional(t.Number({ minimum: 1, maximum: 1_000_000 })),
-				fromIndex: t.Optional(t.Number({ minimum: 0 })),
+					limit: t.Optional(t.Integer({ minimum: 1, maximum: 1_000_000 })),
+					fromIndex: t.Optional(t.Integer({ minimum: 0 })),
 				refreshIds: t.Optional(t.Boolean()),
 				resetAll: t.Optional(t.Boolean()),
 			}),

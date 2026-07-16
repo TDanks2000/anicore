@@ -140,7 +140,7 @@ async function insertKitsuMapping(
   animeId: number,
   kitsuData: ProviderAnimeData,
 ): Promise<void> {
-  await db
+  const [mapping] = await db
     .insert(animeMappings)
     .values({
       animeId,
@@ -155,7 +155,6 @@ async function insertKitsuMapping(
     .onConflictDoUpdate({
       target: [animeMappings.provider, animeMappings.providerId],
       set: {
-        animeId: sql`excluded.anime_id`,
         providerSlug: sql`excluded.provider_slug`,
         providerUrl: sql`excluded.provider_url`,
         confidence: sql`excluded.confidence`,
@@ -163,7 +162,15 @@ async function insertKitsuMapping(
         isPrimary: sql`excluded.is_primary`,
         updatedAt: sql`now()`,
       },
-    });
+      setWhere: eq(animeMappings.animeId, animeId),
+    })
+    .returning({ animeId: animeMappings.animeId });
+
+  if (!mapping) {
+    throw new Error(
+      `Kitsu mapping ${kitsuData.providerId} already belongs to another anime`,
+    );
+  }
 }
 
 // Given an AniList anime already in the DB, find and persist its Kitsu mapping.
@@ -284,13 +291,13 @@ export async function syncKitsuEpisodes(
     .filter((r): r is NonNullable<typeof r> => r !== null);
 
   for (let i = 0; i < mappingRows.length; i += EPISODE_CHUNK) {
-    await db
+    const batch = mappingRows.slice(i, i + EPISODE_CHUNK);
+    const written = await db
       .insert(episodeMappings)
-      .values(mappingRows.slice(i, i + EPISODE_CHUNK))
+      .values(batch)
       .onConflictDoUpdate({
         target: [episodeMappings.provider, episodeMappings.providerId],
         set: {
-          episodeId:              sql`excluded.episode_id`,
           providerSlug:           sql`excluded.provider_slug`,
           providerUrl:            sql`excluded.provider_url`,
           providerEpisodeNumber:  sql`excluded.provider_episode_number`,
@@ -298,7 +305,15 @@ export async function syncKitsuEpisodes(
           source:                 sql`excluded.source`,
           updatedAt:              sql`now()`,
         },
-      });
+        setWhere: sql`${episodeMappings.episodeId} = excluded.episode_id`,
+      })
+      .returning({ id: episodeMappings.id });
+
+    if (written.length !== batch.length) {
+      throw new Error(
+        "One or more Kitsu episode mappings belong to another episode",
+      );
+    }
   }
 
   return mapped.length;

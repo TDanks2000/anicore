@@ -8,7 +8,17 @@ import {
 	episodeMappings,
 	episodes,
 } from "@anicore/db/schema";
-import { providerEnum, sourceEnum } from "../../lib/validators";
+import {
+	confidenceValue,
+	positiveInteger,
+	providerEnum,
+	sourceEnum,
+} from "../../lib/validators";
+
+function isUniqueConstraintError(error: unknown): boolean {
+	const message = error instanceof Error ? error.message : String(error);
+	return message.includes("unique") || message.includes("duplicate key");
+}
 
 export const mappingRoutes = new Elysia({ prefix: "/mappings" })
 	.get(
@@ -42,35 +52,46 @@ export const mappingRoutes = new Elysia({ prefix: "/mappings" })
 	.post(
 		"/anime",
 		async ({ body, set }) => {
-			if (body.animeId <= 0) {
-				set.status = 400;
-				return { error: "Invalid anime id" };
+			const [parent] = await db
+				.select({ id: anime.id })
+				.from(anime)
+				.where(eq(anime.id, body.animeId))
+				.limit(1);
+			if (!parent) {
+				set.status = 404;
+				return { error: "Anime not found" };
 			}
 
-			const [created] = await db
-				.insert(animeMappings)
-				.values({
-					animeId: body.animeId,
-					provider: body.provider,
-					providerId: body.providerId,
-					providerSlug: body.providerSlug,
-					providerUrl: body.providerUrl,
-					confidence: body.confidence ?? 100,
-					source: body.source ?? "manual",
-					isPrimary: body.isPrimary ?? false,
-				})
-				.returning();
+			try {
+				const [created] = await db
+					.insert(animeMappings)
+					.values({
+						animeId: body.animeId,
+						provider: body.provider,
+						providerId: body.providerId,
+						providerSlug: body.providerSlug,
+						providerUrl: body.providerUrl,
+						confidence: body.confidence ?? 100,
+						source: body.source ?? "manual",
+						isPrimary: body.isPrimary ?? false,
+					})
+					.returning();
 
-			return created;
+				return created;
+			} catch (error) {
+				if (!isUniqueConstraintError(error)) throw error;
+				set.status = 409;
+				return { error: "Anime mapping already exists" };
+			}
 		},
 		{
 			body: t.Object({
-				animeId: t.Integer(),
+				animeId: positiveInteger,
 				provider: providerEnum,
-				providerId: t.String(),
+				providerId: t.String({ minLength: 1 }),
 				providerSlug: t.Optional(t.String()),
 				providerUrl: t.Optional(t.String()),
-				confidence: t.Optional(t.Number()),
+				confidence: t.Optional(confidenceValue),
 				source: t.Optional(sourceEnum),
 				isPrimary: t.Optional(t.Boolean()),
 			}),
@@ -108,36 +129,47 @@ export const mappingRoutes = new Elysia({ prefix: "/mappings" })
 	.post(
 		"/episode",
 		async ({ body, set }) => {
-			if (body.episodeId <= 0) {
-				set.status = 400;
-				return { error: "Invalid episode id" };
+			const [parent] = await db
+				.select({ id: episodes.id })
+				.from(episodes)
+				.where(eq(episodes.id, body.episodeId))
+				.limit(1);
+			if (!parent) {
+				set.status = 404;
+				return { error: "Episode not found" };
 			}
 
-			const [created] = await db
-				.insert(episodeMappings)
-				.values({
-					episodeId: body.episodeId,
-					provider: body.provider,
-					providerId: body.providerId,
-					providerSlug: body.providerSlug,
-					providerUrl: body.providerUrl,
-					providerEpisodeNumber: body.providerEpisodeNumber,
-					confidence: body.confidence ?? 100,
-					source: body.source ?? "manual",
-				})
-				.returning();
+			try {
+				const [created] = await db
+					.insert(episodeMappings)
+					.values({
+						episodeId: body.episodeId,
+						provider: body.provider,
+						providerId: body.providerId,
+						providerSlug: body.providerSlug,
+						providerUrl: body.providerUrl,
+						providerEpisodeNumber: body.providerEpisodeNumber,
+						confidence: body.confidence ?? 100,
+						source: body.source ?? "manual",
+					})
+					.returning();
 
-			return created;
+				return created;
+			} catch (error) {
+				if (!isUniqueConstraintError(error)) throw error;
+				set.status = 409;
+				return { error: "Episode mapping already exists" };
+			}
 		},
 		{
 			body: t.Object({
-				episodeId: t.Integer(),
+				episodeId: positiveInteger,
 				provider: providerEnum,
-				providerId: t.String(),
+				providerId: t.String({ minLength: 1 }),
 				providerSlug: t.Optional(t.String()),
 				providerUrl: t.Optional(t.String()),
 				providerEpisodeNumber: t.Optional(t.String()),
-				confidence: t.Optional(t.Number()),
+				confidence: t.Optional(confidenceValue),
 				source: t.Optional(sourceEnum),
 			}),
 		},

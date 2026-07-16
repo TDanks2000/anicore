@@ -153,17 +153,20 @@ export interface SyncMonitorClientOptions {
   baseUrl: string;
   accessCode: string;
   fetcher?: typeof fetch;
+  timeoutMs?: number;
 }
 
 export class SyncMonitorClient {
   private readonly baseUrl: string;
   private readonly accessCode: string;
   private readonly fetcher: typeof fetch;
+  private readonly timeoutMs: number;
 
   constructor(options: SyncMonitorClientOptions) {
     this.baseUrl = options.baseUrl.replace(/\/+$/, "");
     this.accessCode = options.accessCode;
     this.fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis);
+    this.timeoutMs = options.timeoutMs ?? 15_000;
   }
 
   async getStatus(): Promise<SyncMonitorStatusResponse> {
@@ -227,6 +230,7 @@ export class SyncMonitorClient {
   ): Promise<T> {
     const response = await this.fetcher(`${this.baseUrl}${path}`, {
       ...init,
+      signal: init.signal ?? AbortSignal.timeout(this.timeoutMs),
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${this.accessCode}`,

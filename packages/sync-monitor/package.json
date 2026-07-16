@@ -9,7 +9,7 @@
   "scripts": {
     "build": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
-    "test": "tsc --noEmit"
+    "test": "bun test"
   },
   "devDependencies": {
     "typescript": "catalog:"

@@ -22,6 +22,7 @@ query($title: String!) {
       averageRatingRank
       ageRating
       titles {
+        canonical
         romanized
         translated
         original
@@ -47,6 +48,7 @@ query($id: ID!) {
         length
         createdAt
         titles {
+          canonical
           romanized
           translated
           localized

@@ -113,11 +113,27 @@ export async function recalculateAnimeLanguageStatus(input: {
 				checkedAt: sql`now()`,
 				updatedAt: sql`now()`,
 			},
+			setWhere: eq(animeLanguageStatus.isManualOverride, false),
 		})
 		.returning();
 
-	if (!row) throw new Error("language status upsert returned no row");
-	return row;
+	if (row) return row;
+
+	const [manualOverride] = await db
+		.select()
+		.from(animeLanguageStatus)
+		.where(
+			and(
+				eq(animeLanguageStatus.animeId, input.animeId),
+				eq(animeLanguageStatus.languageCode, languageCode),
+				eq(animeLanguageStatus.mediaType, input.mediaType),
+				eq(animeLanguageStatus.isManualOverride, true),
+			),
+		)
+		.limit(1);
+
+	if (!manualOverride) throw new Error("language status upsert returned no row");
+	return manualOverride;
 }
 
 export async function syncAnimeLanguageEvidenceFromEpisodeStatuses(input: {

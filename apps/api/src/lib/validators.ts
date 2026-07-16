@@ -1,5 +1,14 @@
 import { t } from "elysia";
 
+export const positiveInteger = t.Integer({ minimum: 1 });
+export const nonNegativeInteger = t.Integer({ minimum: 0 });
+export const confidenceValue = t.Integer({ minimum: 0, maximum: 100 });
+export const languageCodeValue = t.String({
+  minLength: 1,
+  maxLength: 35,
+  pattern: ".*\\S.*",
+});
+
 export const providerEnum = t.Union([
   t.Literal("anilist"),
   t.Literal("kitsu"),

@@ -60,7 +60,7 @@ Start a sync with a local file-backed monitor:
 bun run sync --monitor
 ```
 
-This writes live status to `data/sync-monitor/status.json`, event history to `data/sync-monitor/events.jsonl`, and a generated access code to `data/sync-monitor/access-code.txt`. These files are local runtime state and are not stored in the database.
+This writes live status to `data/sync-monitor/status.json`, event history to `data/sync-monitor/events.jsonl`, and a generated access code to `data/sync-monitor/access-code.txt`. These files are local runtime state and are not stored in the database. The monitor directory and access-code file are restricted to the current OS user.
 
 Run the API so another device on your LAN can reach it:
 
@@ -80,11 +80,11 @@ Opening `http://<your-ip>:3000/sync-monitor/` in a browser will prompt for HTTP 
 You can also provide a stable code yourself:
 
 ```sh
-ANICORE_SYNC_MONITOR_CODE=change-me HOST=0.0.0.0 bun run start
-ANICORE_SYNC_MONITOR_CODE=change-me bun run sync --monitor
+ANICORE_SYNC_MONITOR_CODE=<long-random-code> HOST=0.0.0.0 bun run start
+ANICORE_SYNC_MONITOR_CODE=<long-random-code> bun run sync --monitor
 ```
 
-Keep `HOST=localhost` unless you intentionally want LAN access, and do not expose the monitor port directly to the public internet.
+Keep `HOST=localhost` unless you intentionally want LAN access, and do not expose the monitor port directly to the public internet. Use a VPN or TLS-terminating reverse proxy if monitor traffic must leave a trusted LAN.
 
 ### Web dashboard
 
@@ -100,11 +100,7 @@ Start the web dashboard:
 VITE_ANICORE_API_URL=http://<api-ip>:3000 bun run dev:web
 ```
 
-You can either paste the monitor code into the dashboard or set it before startup:
-
-```sh
-VITE_SYNC_MONITOR_CODE=<code> VITE_ANICORE_API_URL=http://<api-ip>:3000 bun run dev:web
-```
+Paste the monitor code into the dashboard after it loads. The dashboard keeps it in session storage, so the code is not compiled into the public web bundle or persisted across browser sessions.
 
 For Windows PowerShell:
 

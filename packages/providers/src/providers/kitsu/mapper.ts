@@ -51,6 +51,7 @@ export function mapKitsuAnime(node: KitsuSearchNode): ProviderAnimeData {
     status: mapStatus(node.status),
     season: node.season ?? null,
     seasonYear: year !== null && !isNaN(year) ? year : null,
+    endDate: node.endDate ?? null,
     episodeCount: node.episodeCount ?? null,
     durationMinutes: node.episodeLength ?? null,
     isAdult: node.ageRating === "R18",

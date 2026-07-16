@@ -3,9 +3,8 @@
 	"compilerOptions": {
 		"lib": ["ESNext", "DOM", "DOM.Iterable"],
 		"types": ["vite/client"],
-		"baseUrl": ".",
 		"paths": {
-			"@/*": ["src/*"]
+			"@/*": ["./src/*"]
 		}
 	},
 	"include": ["src/**/*.ts", "src/**/*.tsx", "vite.config.ts"]

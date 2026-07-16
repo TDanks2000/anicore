@@ -1,5 +1,6 @@
 import {
 	appendFileSync,
+	chmodSync,
 	existsSync,
 	mkdirSync,
 	readFileSync,
@@ -69,7 +70,8 @@ function codeFile(): string {
 }
 
 function ensureMonitorDir(): void {
-	mkdirSync(monitorDir(), { recursive: true });
+	mkdirSync(monitorDir(), { recursive: true, mode: 0o700 });
+	chmodSync(monitorDir(), 0o700);
 }
 
 function nowIso(): string {
@@ -381,11 +383,18 @@ function secureEqual(a: string, b: string): boolean {
 
 export function ensureSyncMonitorAccessCode(): string {
 	const existing = readAccessCode();
-	if (existing) return existing;
+	if (existing) {
+		if (existsSync(codeFile())) {
+			ensureMonitorDir();
+			chmodSync(codeFile(), 0o600);
+		}
+		return existing;
+	}
 
 	ensureMonitorDir();
 	const code = randomBytes(24).toString("base64url");
-	writeFileSync(codeFile(), `${code}\n`);
+	writeFileSync(codeFile(), `${code}\n`, { mode: 0o600 });
+	chmodSync(codeFile(), 0o600);
 	return code;
 }
 
@@ -454,6 +463,7 @@ export class SyncMonitor {
 		parallel: number;
 		providers: string[];
 	}) {
+		writeSyncMonitorControlState(null, null, "sync");
 		const at = nowIso();
 		this.status = {
 			version: 1,
