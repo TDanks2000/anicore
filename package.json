@@ -38,7 +38,7 @@
     "dev": "turbo run dev --ui=stream",
     "dev:api": "turbo run dev --filter=@anicore/api --ui=stream",
     "dev:web": "turbo run dev --filter=@anicore/web --ui=stream",
-    "start": "turbo run start --filter=@anicore/api --ui=stream",
+    "start": "turbo run start --ui=stream",
     "build": "turbo run build --ui=stream",
     "typecheck": "turbo run typecheck --ui=stream",
     "test": "turbo run test --ui=stream",

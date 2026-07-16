@@ -28,7 +28,7 @@ export const app = new Elysia()
     cors({
       origin: process.env.CORS_ORIGIN
         ? process.env.CORS_ORIGIN.split(",").map((origin) => origin.trim())
-        : false,
+        : ["http://localhost:5173", "http://localhost:4173"],
       allowedHeaders: ["Content-Type", "Authorization", "X-Sync-Monitor-Code"],
       methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       credentials: false,

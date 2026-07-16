@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
@@ -226,6 +226,55 @@ describe("app contract", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
+  test("normalizes automation defaults in legacy monitor status", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "anicore-monitor-"));
+    process.env.ANICORE_SYNC_MONITOR_DIR = dir;
+    process.env.ANICORE_SYNC_MONITOR_CODE = "test-code";
+    writeFileSync(
+      join(dir, "status.json"),
+      JSON.stringify({
+        version: 1,
+        runId: "legacy",
+        state: "completed",
+        mode: "sync",
+        pid: 1,
+        startedAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:01:00.000Z",
+        runtimeConfig: {
+          version: 1,
+          parallel: 2,
+          checkpointEvery: 10,
+          rateLimitMs: 1500,
+          startMode: "sync",
+          startLimit: null,
+          startFromIndex: null,
+          refreshIds: false,
+          resetAll: false,
+          updatedAt: "2026-01-01T00:00:00.000Z",
+          updatedBy: "api",
+        },
+      }),
+    );
+
+    const response = await app.handle(
+      new Request("http://localhost/sync-monitor/", {
+        headers: { Authorization: "Bearer test-code" },
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(await json(response)).toMatchObject({
+      status: {
+        runtimeConfig: {
+          parallel: 2,
+          autoSyncEnabled: true,
+          autoSyncIntervalMinutes: 1440,
+        },
+      },
+    });
+
+    rmSync(dir, { recursive: true, force: true });
+  });
+
   test("allows authenticated monitor config edits", async () => {
     const dir = mkdtempSync(join(tmpdir(), "anicore-monitor-"));
     process.env.ANICORE_SYNC_MONITOR_DIR = dir;
@@ -247,6 +296,8 @@ describe("app contract", () => {
           startFromIndex: 10,
           refreshIds: true,
           resetAll: false,
+          autoSyncEnabled: true,
+          autoSyncIntervalMinutes: 60,
         }),
       }),
     );
@@ -262,6 +313,8 @@ describe("app contract", () => {
         startFromIndex: 10,
         refreshIds: true,
         resetAll: false,
+        autoSyncEnabled: true,
+        autoSyncIntervalMinutes: 60,
         updatedBy: "api",
       },
     });
@@ -282,6 +335,18 @@ describe("app contract", () => {
       error: "parallel must be between 1 and 32",
     });
 
+    const invalidScheduleResponse = await app.handle(
+      new Request("http://localhost/sync-monitor/config", {
+        method: "PATCH",
+        headers: {
+          Authorization: "Bearer test-code",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ autoSyncIntervalMinutes: 0 }),
+      }),
+    );
+    expect(invalidScheduleResponse.status).toBe(400);
+
     const configResponse = await app.handle(
       new Request("http://localhost/sync-monitor/config", {
         headers: { Authorization: "Bearer test-code" },
@@ -298,8 +363,33 @@ describe("app contract", () => {
         startFromIndex: 10,
         refreshIds: true,
         resetAll: false,
+        autoSyncEnabled: true,
+        autoSyncIntervalMinutes: 60,
         updatedBy: "api",
       },
+    });
+
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("fails closed when persisted automation config is malformed", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "anicore-monitor-"));
+    process.env.ANICORE_SYNC_MONITOR_DIR = dir;
+    process.env.ANICORE_SYNC_MONITOR_CODE = "test-code";
+    writeFileSync(
+      join(dir, "runtime-config.json"),
+      JSON.stringify({ parallel: 0, autoSyncEnabled: true }),
+    );
+
+    const response = await app.handle(
+      new Request("http://localhost/sync-monitor/config", {
+        headers: { Authorization: "Bearer test-code" },
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await json(response)).toMatchObject({
+      runtime: { autoSyncEnabled: false },
     });
 
     rmSync(dir, { recursive: true, force: true });

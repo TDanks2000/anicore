@@ -7,6 +7,9 @@ export type SyncMonitorState =
   | "completed"
   | "failed";
 
+export const DEFAULT_AUTO_SYNC_INTERVAL_MINUTES = 24 * 60;
+export const MAX_AUTO_SYNC_INTERVAL_MINUTES = 365 * 24 * 60;
+
 export interface SyncMonitorStats {
   created: number;
   updated: number;
@@ -66,6 +69,8 @@ export interface SyncMonitorRuntimeConfig {
   startFromIndex: number | null;
   refreshIds: boolean;
   resetAll: boolean;
+  autoSyncEnabled: boolean;
+  autoSyncIntervalMinutes: number;
   updatedAt: string;
   updatedBy: "default" | "api" | "sync";
 }
@@ -79,6 +84,16 @@ export interface SyncMonitorRuntimeConfigPatch {
   startFromIndex?: number | null;
   refreshIds?: boolean;
   resetAll?: boolean;
+  autoSyncEnabled?: boolean;
+  autoSyncIntervalMinutes?: number;
+}
+
+export interface SyncMonitorAutomationStatus {
+  state: "not-started" | "disabled" | "waiting" | "sync-active" | "error";
+  lastCheckedAt: string | null;
+  lastStartedAt: string | null;
+  nextRunAt: string | null;
+  lastMessage: string;
 }
 
 export type SyncMonitorControlCommand = "pause" | "resume" | "stop" | "start";
@@ -112,8 +127,12 @@ export interface SyncMonitorStartResponse extends SyncMonitorControlResponse {
 
 export interface SyncMonitorEvent {
   at: string;
+  event?: string;
   level: "info" | "warn" | "error";
   message: string;
+  source?: "api" | "automatic";
+  pid?: number;
+  exitCode?: number;
   index?: number;
   anilistId?: number;
   stage?: string;
@@ -147,7 +166,9 @@ export interface SyncMonitorEventsResponse {
   events: SyncMonitorEvent[];
 }
 
-export interface SyncMonitorConfigResponse extends SyncMonitorPublicConfig {}
+export interface SyncMonitorConfigResponse extends SyncMonitorPublicConfig {
+  automation: SyncMonitorAutomationStatus;
+}
 
 export interface SyncMonitorClientOptions {
   baseUrl: string;

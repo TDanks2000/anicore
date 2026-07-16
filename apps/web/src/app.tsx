@@ -4,7 +4,11 @@ import type {
 	SyncMonitorStatus,
 	SyncMonitorStatusResponse,
 } from "@anicore/sync-monitor";
-import { SyncMonitorClient } from "@anicore/sync-monitor";
+import {
+	DEFAULT_AUTO_SYNC_INTERVAL_MINUTES,
+	MAX_AUTO_SYNC_INTERVAL_MINUTES,
+	SyncMonitorClient,
+} from "@anicore/sync-monitor";
 import {
 	Activity,
 	AlertTriangle,
@@ -49,6 +53,7 @@ const pollMs =
 		: 2500;
 
 type ConnectionState = "idle" | "loading" | "ready" | "error";
+type ConfigMessage = { kind: "success" | "error"; text: string };
 
 function loadStoredValue(key: string, fallback: string): string {
 	if (typeof window === "undefined") return fallback;
@@ -147,9 +152,13 @@ export function App() {
 	const [startFromIndexDraft, setStartFromIndexDraft] = useState("");
 	const [refreshIdsDraft, setRefreshIdsDraft] = useState(false);
 	const [resetAllDraft, setResetAllDraft] = useState(false);
+	const [autoSyncEnabledDraft, setAutoSyncEnabledDraft] = useState(true);
+	const [autoSyncIntervalDraft, setAutoSyncIntervalDraft] = useState(
+		String(DEFAULT_AUTO_SYNC_INTERVAL_MINUTES),
+	);
 	const [configDirty, setConfigDirty] = useState(false);
 	const [configSaving, setConfigSaving] = useState(false);
-	const [configMessage, setConfigMessage] = useState<string | null>(null);
+	const [configMessage, setConfigMessage] = useState<ConfigMessage | null>(null);
 	const [controlBusy, setControlBusy] = useState<string | null>(null);
 	const [controlMessage, setControlMessage] = useState<string | null>(null);
 	const [events, setEvents] = useState<SyncMonitorEvent[]>([]);
@@ -158,24 +167,24 @@ export function App() {
 	const [error, setError] = useState<string | null>(null);
 	const [lastRefresh, setLastRefresh] = useState<string | null>(null);
 	const refreshSequence = useRef(0);
-	const refreshInFlight = useRef<SyncMonitorClient | null>(null);
+	const refreshInFlight = useRef<number | null>(null);
 
 	const client = useMemo(() => {
 		if (!apiUrl || !accessCode) return null;
 		return new SyncMonitorClient({ baseUrl: apiUrl, accessCode });
 	}, [apiUrl, accessCode]);
 
-	const refresh = useCallback(async () => {
+	const refresh = useCallback(async (force = false) => {
 		if (!client) {
 			refreshSequence.current++;
 			setConnectionState("idle");
 			setError("Enter the API URL and monitor code to connect.");
 			return;
 		}
-		if (refreshInFlight.current === client) return;
+		if (refreshInFlight.current !== null && !force) return;
 
 		const sequence = ++refreshSequence.current;
-		refreshInFlight.current = client;
+		refreshInFlight.current = sequence;
 
 		setConnectionState((state) => (state === "ready" ? "ready" : "loading"));
 		try {
@@ -196,7 +205,7 @@ export function App() {
 			setConnectionState("error");
 			setError(err instanceof Error ? err.message : String(err));
 		} finally {
-			if (refreshInFlight.current === client) refreshInFlight.current = null;
+			if (refreshInFlight.current === sequence) refreshInFlight.current = null;
 		}
 	}, [client]);
 
@@ -211,7 +220,9 @@ export function App() {
 	useEffect(() => {
 		void refresh();
 		if (!client) return;
-		const interval = window.setInterval(() => void refresh(), pollMs);
+		const interval = window.setInterval(() => {
+			if (!document.hidden) void refresh();
+		}, pollMs);
 		return () => {
 			window.clearInterval(interval);
 			refreshSequence.current++;
@@ -233,6 +244,8 @@ export function App() {
 		);
 		setRefreshIdsDraft(runtime.refreshIds);
 		setResetAllDraft(runtime.resetAll);
+		setAutoSyncEnabledDraft(runtime.autoSyncEnabled);
+		setAutoSyncIntervalDraft(String(runtime.autoSyncIntervalMinutes));
 	}, [configDirty, configPayload, statusPayload]);
 
 	const saveRuntimeConfig = useCallback(async () => {
@@ -245,6 +258,13 @@ export function App() {
 			startLimitDraft.trim() === "" ? null : Number(startLimitDraft);
 		const startFromIndex =
 			startFromIndexDraft.trim() === "" ? null : Number(startFromIndexDraft);
+		const savedAutoSyncInterval =
+			configPayload?.runtime.autoSyncIntervalMinutes ??
+			statusPayload?.status?.runtimeConfig.autoSyncIntervalMinutes ??
+			DEFAULT_AUTO_SYNC_INTERVAL_MINUTES;
+		const autoSyncIntervalMinutes = autoSyncEnabledDraft
+			? Number(autoSyncIntervalDraft)
+			: savedAutoSyncInterval;
 		setConfigSaving(true);
 		setConfigMessage(null);
 
@@ -282,6 +302,16 @@ export function App() {
 					"Start index must be empty or an integer from 0 to 1000000.",
 				);
 			}
+			if (
+				autoSyncEnabledDraft &&
+				(!Number.isInteger(autoSyncIntervalMinutes) ||
+					autoSyncIntervalMinutes < 1 ||
+					autoSyncIntervalMinutes > MAX_AUTO_SYNC_INTERVAL_MINUTES)
+			) {
+				throw new Error(
+					`Automatic sync interval must be an integer from 1 to ${MAX_AUTO_SYNC_INTERVAL_MINUTES} minutes.`,
+				);
+			}
 			const nextConfig = await client.updateConfig({
 				parallel,
 				checkpointEvery,
@@ -291,6 +321,8 @@ export function App() {
 				startFromIndex,
 				refreshIds: refreshIdsDraft,
 				resetAll: resetAllDraft,
+				autoSyncEnabled: autoSyncEnabledDraft,
+				autoSyncIntervalMinutes,
 			});
 			setConfigPayload(nextConfig);
 			setParallelDraft(String(nextConfig.runtime.parallel));
@@ -309,24 +341,36 @@ export function App() {
 			);
 			setRefreshIdsDraft(nextConfig.runtime.refreshIds);
 			setResetAllDraft(nextConfig.runtime.resetAll);
-			setConfigDirty(false);
-			setConfigMessage(
-				"Runtime config saved. Active sync applies live settings at the next boundary.",
+			setAutoSyncEnabledDraft(nextConfig.runtime.autoSyncEnabled);
+			setAutoSyncIntervalDraft(
+				String(nextConfig.runtime.autoSyncIntervalMinutes),
 			);
-			await refresh();
+			setConfigDirty(false);
+			setConfigMessage({
+				kind: "success",
+				text: "Runtime and automatic sync settings saved.",
+			});
+			await refresh(true);
 		} catch (err) {
-			setConfigMessage(err instanceof Error ? err.message : String(err));
+			setConfigMessage({
+				kind: "error",
+				text: err instanceof Error ? err.message : String(err),
+			});
 		} finally {
 			setConfigSaving(false);
 		}
 	}, [
+		autoSyncEnabledDraft,
+		autoSyncIntervalDraft,
 		checkpointDraft,
 		client,
+		configPayload?.runtime.autoSyncIntervalMinutes,
 		parallelDraft,
 		rateLimitDraft,
 		refresh,
 		refreshIdsDraft,
 		resetAllDraft,
+		statusPayload?.status?.runtimeConfig.autoSyncIntervalMinutes,
 		startFromIndexDraft,
 		startLimitDraft,
 		startModeDraft,
@@ -335,6 +379,43 @@ export function App() {
 	const status = statusPayload?.status ?? null;
 	const control = statusPayload?.control ?? null;
 	const runtime = configPayload?.runtime ?? status?.runtimeConfig ?? null;
+	const automation = configPayload?.automation ?? null;
+	const autoSyncIntervalInvalid =
+		autoSyncEnabledDraft &&
+		(!Number.isInteger(Number(autoSyncIntervalDraft)) ||
+			Number(autoSyncIntervalDraft) < 1 ||
+			Number(autoSyncIntervalDraft) > MAX_AUTO_SYNC_INTERVAL_MINUTES);
+	const saveShortcut =
+		typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform)
+			? "⌘S"
+			: "Ctrl+S";
+
+	useEffect(() => {
+		const onKeyDown = (event: KeyboardEvent) => {
+			if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "s") {
+				return;
+			}
+			if (
+				!client ||
+				!configDirty ||
+				configSaving ||
+				autoSyncIntervalInvalid
+			) {
+				return;
+			}
+			event.preventDefault();
+			void saveRuntimeConfig();
+		};
+
+		window.addEventListener("keydown", onKeyDown);
+		return () => window.removeEventListener("keydown", onKeyDown);
+	}, [
+		autoSyncIntervalInvalid,
+		client,
+		configDirty,
+		configSaving,
+		saveRuntimeConfig,
+	]);
 	const completion = percent(status);
 	const processed = status?.progress?.processed ?? 0;
 	const active = statusPayload?.active ?? false;
@@ -686,11 +767,56 @@ export function App() {
 							<CardHeader>
 								<CardTitle>Runtime Config</CardTitle>
 								<CardDescription>
-									Updates are written to the API host and picked up by sync
-									between batches.
+									Updates are written to the API host. Automatic runs refresh
+									the AniList ID list and resync from index 0.
 								</CardDescription>
 							</CardHeader>
 							<CardContent className="flex flex-col gap-3">
+								<div className="rounded-md border border-border bg-muted/30 p-3">
+									<div className="flex flex-col gap-3">
+										<label className="flex items-center gap-2 text-sm font-medium">
+											<input
+												checked={autoSyncEnabledDraft}
+												className="size-4 accent-primary"
+												type="checkbox"
+												onChange={(event) => {
+													setConfigDirty(true);
+													setAutoSyncEnabledDraft(event.target.checked);
+												}}
+											/>
+											Run sync automatically
+										</label>
+										<label className="flex flex-col gap-2 text-sm font-medium">
+											Run every (minutes)
+											<Input
+												aria-invalid={autoSyncIntervalInvalid}
+												disabled={!autoSyncEnabledDraft}
+												min={1}
+												max={MAX_AUTO_SYNC_INTERVAL_MINUTES}
+												step={1}
+												type="number"
+												value={autoSyncIntervalDraft}
+												onChange={(event) => {
+													setConfigDirty(true);
+													setAutoSyncIntervalDraft(event.target.value);
+												}}
+											/>
+										</label>
+										<div className="grid gap-2 text-xs text-muted-foreground">
+											<div className="flex items-center justify-between gap-3">
+												<span>Scheduler</span>
+												<span>{automation?.state ?? "Not started"}</span>
+											</div>
+											<div className="flex items-center justify-between gap-3">
+												<span>Next run</span>
+												<span>{formatDate(automation?.nextRunAt ?? undefined)}</span>
+											</div>
+											{automation?.lastMessage ? (
+												<p className="leading-5">{automation.lastMessage}</p>
+											) : null}
+										</div>
+									</div>
+								</div>
 								<label className="flex flex-col gap-2 text-sm font-medium">
 									Parallel fetches
 									<Input
@@ -807,18 +933,26 @@ export function App() {
 								</label>
 								<Button
 									onClick={() => void saveRuntimeConfig()}
-									disabled={!client || configSaving}
+									disabled={
+										!client ||
+										!configDirty ||
+										configSaving ||
+										autoSyncIntervalInvalid
+									}
 								>
 									{configSaving ? (
-										<RefreshCw data-icon="inline-start" />
+										<RefreshCw className="animate-spin" data-icon="inline-start" />
 									) : (
 										<Save data-icon="inline-start" />
 									)}
-									Save
+									{configSaving ? "Saving…" : `Save ${saveShortcut}`}
 								</Button>
 								{configMessage ? (
-									<div className="rounded-md border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
-										{configMessage}
+									<div
+										className="rounded-md border border-border bg-muted/40 p-3 text-sm text-muted-foreground"
+										role={configMessage.kind === "error" ? "alert" : "status"}
+									>
+										{configMessage.text}
 									</div>
 								) : null}
 								<div className="grid gap-2 text-xs text-muted-foreground">

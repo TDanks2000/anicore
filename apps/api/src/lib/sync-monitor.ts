@@ -9,6 +9,10 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { randomBytes, timingSafeEqual } from "node:crypto";
+import {
+	DEFAULT_AUTO_SYNC_INTERVAL_MINUTES,
+	MAX_AUTO_SYNC_INTERVAL_MINUTES,
+} from "@anicore/sync-monitor";
 import type {
 	SyncMonitorEvent,
 	SyncMonitorBatch,
@@ -18,6 +22,7 @@ import type {
 	SyncMonitorPublicConfig,
 	SyncMonitorRuntimeConfig,
 	SyncMonitorRuntimeConfigPatch,
+	SyncMonitorAutomationStatus,
 	SyncMonitorStats,
 	SyncMonitorStatus,
 } from "@anicore/sync-monitor";
@@ -31,12 +36,14 @@ export type {
 	SyncMonitorPublicConfig,
 	SyncMonitorRuntimeConfig,
 	SyncMonitorRuntimeConfigPatch,
+	SyncMonitorAutomationStatus,
 	SyncMonitorStats,
 	SyncMonitorStatus,
 } from "@anicore/sync-monitor";
 
 const MAX_RECENT_ERRORS = 20;
 const MAX_EVENT_LINE_BYTES = 16 * 1024;
+const MAX_ACTIVE_STATUS_SILENCE_MS = 30 * 60 * 1000;
 const DEFAULT_PARALLEL = 4;
 const DEFAULT_CHECKPOINT_EVERY = 10;
 const DEFAULT_RATE_LIMIT_MS = 1500;
@@ -63,6 +70,10 @@ function runtimeConfigFile(): string {
 
 function controlFile(): string {
 	return `${monitorDir()}/control.json`;
+}
+
+function automationHistoryFile(): string {
+	return `${monitorDir()}/automation-history.json`;
 }
 
 function codeFile(): string {
@@ -143,6 +154,8 @@ function defaultRuntimeConfig(): SyncMonitorRuntimeConfig {
 		startFromIndex: null,
 		refreshIds: false,
 		resetAll: false,
+		autoSyncEnabled: true,
+		autoSyncIntervalMinutes: DEFAULT_AUTO_SYNC_INTERVAL_MINUTES,
 		updatedAt: nowIso(),
 		updatedBy: "default",
 	};
@@ -228,6 +241,18 @@ function normalizeRuntimeConfig(
 					: fallback.refreshIds,
 			resetAll:
 				typeof input.resetAll === "boolean" ? input.resetAll : fallback.resetAll,
+			autoSyncEnabled:
+				typeof input.autoSyncEnabled === "boolean"
+					? input.autoSyncEnabled
+					: fallback.autoSyncEnabled,
+			autoSyncIntervalMinutes:
+				input.autoSyncIntervalMinutes === undefined
+					? fallback.autoSyncIntervalMinutes
+					: parsePositiveInteger(
+							input.autoSyncIntervalMinutes,
+							"autoSyncIntervalMinutes",
+							MAX_AUTO_SYNC_INTERVAL_MINUTES,
+						),
 			updatedAt:
 				typeof input.updatedAt === "string" && input.updatedAt
 					? input.updatedAt
@@ -238,7 +263,7 @@ function normalizeRuntimeConfig(
 					: fallback.updatedBy,
 		};
 	} catch {
-		return fallback;
+		return { ...fallback, autoSyncEnabled: false };
 	}
 }
 
@@ -276,8 +301,26 @@ export function readSyncMonitorRuntimeConfig(): SyncMonitorRuntimeConfig {
 	try {
 		return normalizeRuntimeConfig(JSON.parse(text));
 	} catch {
-		return defaultRuntimeConfig();
+		return { ...defaultRuntimeConfig(), autoSyncEnabled: false };
 	}
+}
+
+export function readLastSuccessfulSyncAt(): string | null {
+	const text = safeReadText(automationHistoryFile());
+	if (!text) return null;
+
+	try {
+		const value = JSON.parse(text) as { lastSuccessfulSyncAt?: unknown };
+		return typeof value.lastSuccessfulSyncAt === "string"
+			? value.lastSuccessfulSyncAt
+			: null;
+	} catch {
+		return null;
+	}
+}
+
+function writeLastSuccessfulSyncAt(at: string): void {
+	atomicWriteJson(automationHistoryFile(), { version: 1, lastSuccessfulSyncAt: at });
 }
 
 export function writeSyncMonitorRuntimeConfig(
@@ -357,6 +400,21 @@ export function validateSyncMonitorRuntimeConfigPatch(
 		output.resetAll = parseBoolean(patch.resetAll, "resetAll");
 	}
 
+	if (patch.autoSyncEnabled !== undefined) {
+		output.autoSyncEnabled = parseBoolean(
+			patch.autoSyncEnabled,
+			"autoSyncEnabled",
+		);
+	}
+
+	if (patch.autoSyncIntervalMinutes !== undefined) {
+		output.autoSyncIntervalMinutes = parsePositiveInteger(
+			patch.autoSyncIntervalMinutes,
+			"autoSyncIntervalMinutes",
+			MAX_AUTO_SYNC_INTERVAL_MINUTES,
+		);
+	}
+
 	if (Object.keys(output).length === 0) {
 		throw new Error("At least one config setting must be supplied");
 	}
@@ -424,7 +482,11 @@ export function readSyncMonitorStatus(): SyncMonitorStatus | null {
 	if (!text) return null;
 
 	try {
-		return JSON.parse(text) as SyncMonitorStatus;
+		const status = JSON.parse(text) as SyncMonitorStatus;
+		return {
+			...status,
+			runtimeConfig: normalizeRuntimeConfig(status.runtimeConfig),
+		};
 	} catch {
 		return null;
 	}
@@ -450,6 +512,16 @@ export function readSyncMonitorEvents(limit = 100): SyncMonitorEvent[] {
 		}
 	}
 	return events;
+}
+
+export function appendSyncMonitorEvent(
+	level: SyncMonitorEvent["level"],
+	message: string,
+	extra: Omit<SyncMonitorEvent, "at" | "level" | "message"> = {},
+): void {
+	ensureMonitorDir();
+	const event: SyncMonitorEvent = { at: nowIso(), level, message, ...extra };
+	appendFileSync(eventsFile(), `${JSON.stringify(event)}\n`);
 }
 
 export class SyncMonitor {
@@ -504,10 +576,27 @@ export class SyncMonitor {
 		) {
 			return false;
 		}
+		if (status.state !== "paused") {
+			const updatedAt = Date.parse(status.updatedAt);
+			if (
+				!Number.isFinite(updatedAt) ||
+				Date.now() - updatedAt > MAX_ACTIVE_STATUS_SILENCE_MS
+			) {
+				return false;
+			}
+		}
 		try {
 			process.kill(status.pid, 0);
 			return true;
-		} catch {
+		} catch (error) {
+			if (
+				typeof error === "object" &&
+				error !== null &&
+				"code" in error &&
+				error.code === "EPERM"
+			) {
+				return true;
+			}
 			return false;
 		}
 	}
@@ -574,9 +663,7 @@ export class SyncMonitor {
 		message: string,
 		extra: Omit<SyncMonitorEvent, "at" | "level" | "message"> = {},
 	): void {
-		ensureMonitorDir();
-		const event: SyncMonitorEvent = { at: nowIso(), level, message, ...extra };
-		appendFileSync(eventsFile(), `${JSON.stringify(event)}\n`);
+		appendSyncMonitorEvent(level, message, extra);
 	}
 
 	complete(stats: SyncMonitorStats): void {
@@ -597,6 +684,18 @@ export class SyncMonitor {
 			}),
 		};
 		this.writeStatus();
+		if (this.status.mode === "sync") {
+			try {
+				writeLastSuccessfulSyncAt(at);
+			} catch (error) {
+				console.error(
+					JSON.stringify({
+						event: "file.sync_history.failed",
+						err: error instanceof Error ? error.message : String(error),
+					}),
+				);
+			}
+		}
 		this.event("info", "Sync complete", { stage: "complete" });
 	}
 

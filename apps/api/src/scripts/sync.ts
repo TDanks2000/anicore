@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { and, eq } from "drizzle-orm";
 
-import { closeDb, db } from "@anicore/db";
+import { closeDb, db, tryAcquireSyncLease, type SyncLease } from "@anicore/db";
 import { anime, animeMappings } from "@anicore/db/schema";
 import {
 	appendUnmatched,
@@ -13,6 +13,7 @@ import {
 	resetProgress,
 	saveProgress,
 } from "@anicore/providers/lib/cache";
+import { DEFAULT_AUTO_SYNC_INTERVAL_MINUTES } from "@anicore/sync-monitor";
 import { log, type ProgressBar } from "@anicore/providers/lib/logger";
 import { withAnilistRetry } from "@anicore/providers/lib/anilist-rate-limit";
 import { installProxyFetch } from "@anicore/providers/lib/proxy";
@@ -247,7 +248,6 @@ async function runVerify(): Promise<void> {
 	}
 	log.divider();
 
-	process.exit(0);
 }
 
 // ── Provider-reset mode ───────────────────────────────────────────────────────
@@ -325,7 +325,6 @@ async function runProviderReset(
 	log.success(
 		`'${providerName}' reset done — matched=${matched} unmatched=${unmatched} errors=${errors}`,
 	);
-	process.exit(0);
 }
 
 // ── Dry-run mode ──────────────────────────────────────────────────────────────
@@ -388,8 +387,7 @@ async function runDryRun(): Promise<void> {
 		const targetId = parseInt(FROM_ID);
 		const idx = ids.indexOf(targetId);
 		if (idx === -1) {
-			log.error(`ID ${FROM_ID} not found in the ID list`);
-			process.exit(1);
+			throw new Error(`ID ${FROM_ID} not found in the ID list`);
 		}
 		startIndex = idx;
 		log.info(`Starting from ID ${FROM_ID} (index ${idx})`);
@@ -648,22 +646,25 @@ async function processFetchedAnime(
 }
 
 async function main(): Promise<void> {
-	if (VERIFY) await runVerify();
+	if (VERIFY) {
+		await runVerify();
+		return;
+	}
 	if (DRY_RUN) {
 		await runDryRun();
-		process.exit(0);
+		return;
 	}
 
 	for (const name of RESET_PROVIDERS) {
 		const plugin = PLUGINS.find((p) => p.name === name);
 		if (!plugin) {
-			log.error(
+			throw new Error(
 				`Unknown provider '${name}'. Available: ${PLUGINS.map((p) => p.name).join(", ")}`,
 			);
-			process.exit(1);
 		}
 		await runProviderReset(name, plugin);
 	}
+	if (RESET_PROVIDERS.length > 0) return;
 
 	if (RESET_ALL) {
 		await resetProgress();
@@ -681,8 +682,7 @@ async function main(): Promise<void> {
 		const targetId = parseInt(FROM_ID);
 		const idx = ids.indexOf(targetId);
 		if (idx === -1) {
-			log.error(`ID ${FROM_ID} not found in the ID list`);
-			process.exit(1);
+			throw new Error(`ID ${FROM_ID} not found in the ID list`);
 		}
 		startIndex = idx;
 		progress = { ...progress, lastIndex: idx, stats: { created: 0, updated: 0, failed: 0 } };
@@ -724,6 +724,8 @@ async function main(): Promise<void> {
 				startFromIndex: null,
 				refreshIds: false,
 				resetAll: false,
+				autoSyncEnabled: true,
+				autoSyncIntervalMinutes: DEFAULT_AUTO_SYNC_INTERVAL_MINUTES,
 				updatedAt: new Date().toISOString(),
 				updatedBy: "sync" as const,
 			};
@@ -856,13 +858,34 @@ async function main(): Promise<void> {
 	log.divider();
 }
 
+let syncLease: SyncLease | null = null;
+let syncSucceeded = false;
 try {
+	syncLease = await tryAcquireSyncLease();
+	if (!syncLease) {
+		throw new Error("Another AniCore sync process already holds the database lease");
+	}
+	log.info(JSON.stringify({ event: "sync.lease.acquired" }));
 	await main();
-	await closeDb();
+	syncSucceeded = true;
 } catch (err) {
 	const message = err instanceof Error ? err.message : String(err);
 	log.error(`Fatal: ${message}`);
 	failActiveMonitor(message);
+	process.exitCode = 1;
+} finally {
+	if (syncLease) {
+		try {
+			await syncLease.release(syncSucceeded);
+			log.info(JSON.stringify({ event: "sync.lease.released" }));
+		} catch (error) {
+			log.error(
+				JSON.stringify({
+					event: "sync.lease.failed",
+					err: error instanceof Error ? error.message : String(error),
+				}),
+			);
+		}
+	}
 	await closeDb().catch(() => undefined);
-	process.exit(1);
 }

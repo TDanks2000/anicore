@@ -1,9 +1,5 @@
 import { Elysia, t } from "elysia";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-
 import {
-	ensureSyncMonitorAccessCode,
 	getSyncMonitorFileInfo,
 	getSyncMonitorPublicConfig,
 	isSyncMonitorAuthorized,
@@ -15,12 +11,16 @@ import {
 	writeSyncMonitorControlState,
 	writeSyncMonitorRuntimeConfig,
 } from "../../lib/sync-monitor";
-
-const apiRoot = resolve(
-	dirname(fileURLToPath(import.meta.url)),
-	"../../..",
-);
-const syncScriptPath = resolve(apiRoot, "src/scripts/sync.ts");
+import {
+	checkAutomaticSyncNow,
+	getAutomaticSyncState,
+} from "../../lib/automatic-sync";
+import {
+	buildSyncStartArgs,
+	isAnySyncActive,
+	startSyncProcess,
+} from "../../lib/sync-process";
+import { MAX_AUTO_SYNC_INTERVAL_MINUTES } from "@anicore/sync-monitor";
 
 function extractAccessCode(
 	headers: Record<string, string | undefined>,
@@ -79,70 +79,8 @@ function controlPayload() {
 	return {
 		control: readSyncMonitorControlState(),
 		status,
-		active: SyncMonitor.isLikelyActive(status),
+		active: isAnySyncActive(),
 	};
-}
-
-function parseStartArgs(body: {
-	dryRun?: boolean;
-	limit?: number;
-	fromIndex?: number;
-	refreshIds?: boolean;
-	resetAll?: boolean;
-}): string[] {
-	const runtime = getSyncMonitorPublicConfig().runtime;
-	const dryRun = body.dryRun ?? runtime.startMode === "dry-run";
-	const limit = body.limit ?? runtime.startLimit ?? undefined;
-	const fromIndex = body.fromIndex ?? runtime.startFromIndex ?? undefined;
-	const refreshIds = body.refreshIds ?? runtime.refreshIds;
-	const resetAll = body.resetAll ?? runtime.resetAll;
-	const args = ["--monitor"];
-
-	if (dryRun) args.push("--dry-run");
-	if (refreshIds) args.push("--refresh-ids");
-	if (resetAll) args.push("--reset=all");
-	if (limit !== undefined) args.push(`--limit=${limit}`);
-	if (fromIndex !== undefined) args.push(`--from-index=${fromIndex}`);
-
-	return args;
-}
-
-let activeSyncChild: ReturnType<typeof Bun.spawn> | null = null;
-
-function hasApiStartedSyncProcess(): boolean {
-	return activeSyncChild !== null;
-}
-
-function startSyncProcess(args: string[]): number {
-	if (activeSyncChild) {
-		throw new Error("A sync process started by this API is already active");
-	}
-
-	const config = getSyncMonitorPublicConfig();
-	const code = ensureSyncMonitorAccessCode();
-	const child = Bun.spawn(["bun", syncScriptPath, ...args], {
-		cwd: apiRoot,
-		env: {
-			...process.env,
-			ANICORE_SYNC_MONITOR: "1",
-			ANICORE_SYNC_MONITOR_CODE: code,
-			ANICORE_SYNC_MONITOR_DIR: config.statusPath.replace(/\/status\.json$/, ""),
-		},
-		stdout: "inherit",
-		stderr: "inherit",
-		stdin: "ignore",
-	});
-	activeSyncChild = child;
-	void child.exited.then(
-		() => {
-			if (activeSyncChild === child) activeSyncChild = null;
-		},
-		() => {
-			if (activeSyncChild === child) activeSyncChild = null;
-		},
-	);
-	child.unref();
-	return child.pid;
 }
 
 export const syncMonitorRoutes = new Elysia({ prefix: "/sync-monitor" })
@@ -164,7 +102,7 @@ export const syncMonitorRoutes = new Elysia({ prefix: "/sync-monitor" })
 			const status = readSyncMonitorStatus();
 			return {
 				status,
-				active: SyncMonitor.isLikelyActive(status),
+				active: isAnySyncActive(),
 				control: readSyncMonitorControlState(),
 				files: getSyncMonitorFileInfo(),
 			};
@@ -214,7 +152,10 @@ export const syncMonitorRoutes = new Elysia({ prefix: "/sync-monitor" })
 			);
 			if (!auth.ok) return auth.body;
 
-			return getSyncMonitorPublicConfig();
+			return {
+				...getSyncMonitorPublicConfig(),
+				automation: getAutomaticSyncState(),
+			};
 		},
 	)
 	.patch(
@@ -235,7 +176,11 @@ export const syncMonitorRoutes = new Elysia({ prefix: "/sync-monitor" })
 			try {
 				const patch = validateSyncMonitorRuntimeConfigPatch(body);
 				writeSyncMonitorRuntimeConfig(patch, "api");
-				return getSyncMonitorPublicConfig();
+				checkAutomaticSyncNow();
+				return {
+					...getSyncMonitorPublicConfig(),
+					automation: getAutomaticSyncState(),
+				};
 			} catch (err) {
 				set.status = 400;
 				return {
@@ -253,6 +198,10 @@ export const syncMonitorRoutes = new Elysia({ prefix: "/sync-monitor" })
 				startFromIndex: t.Optional(t.Nullable(t.Number())),
 				refreshIds: t.Optional(t.Boolean()),
 				resetAll: t.Optional(t.Boolean()),
+				autoSyncEnabled: t.Optional(t.Boolean()),
+				autoSyncIntervalMinutes: t.Optional(
+					t.Integer({ minimum: 1, maximum: MAX_AUTO_SYNC_INTERVAL_MINUTES }),
+				),
 			}),
 		},
 	)
@@ -365,13 +314,12 @@ export const syncMonitorRoutes = new Elysia({ prefix: "/sync-monitor" })
 			if (!auth.ok) return auth.body;
 
 			const status = readSyncMonitorStatus();
-			if (SyncMonitor.isLikelyActive(status) || hasApiStartedSyncProcess()) {
+			if (isAnySyncActive()) {
 				set.status = 409;
 				return { error: "A sync process is already active" };
 			}
 
-			writeSyncMonitorControlState(null, null, "sync");
-			const pid = startSyncProcess(parseStartArgs(body));
+			const pid = startSyncProcess(buildSyncStartArgs(body), "api");
 			const payload = controlPayload();
 			return {
 				...payload,

@@ -21,12 +21,16 @@ Useful root commands:
 ```sh
 bun run dev:api
 bun run dev:web
+bun run dev
+bun run start
 bun run build
 bun run typecheck
 bun run test
 ```
 
 Root commands force Turbo's stream UI so Windows shells avoid the interactive UI path that can fail with exit code 56.
+
+`bun run dev` starts the API and Vite dashboard together for development. `bun run start` builds the workspaces, starts the API, enables the automatic sync scheduler, and serves the built dashboard from one command.
 
 Put API secrets in `apps/api/.env`. The old root `.env` was copied locally to `apps/api/.env` during the migration if it existed.
 
@@ -53,6 +57,14 @@ bun run sync --parallel=1
 Parallel mode batches external fetches, waits out the equivalent AniList request budget after each batch, and temporarily falls back to sequential fetches when rate-limit or fetch errors become frequent.
 
 ### Remote sync monitor
+
+When the API starts, it also starts AniCore's automatic sync scheduler. By default, the scheduler runs once every 24 hours, starts immediately when no recent run exists, refreshes the AniList ID list, and performs a real sync from index `0`. It never starts another process while a manual or automatic sync is active. Change the enabled state or interval from the dashboard's Runtime Config card; the settings persist in `data/sync-monitor/runtime-config.json`.
+
+The scheduler lives inside the API process, so keep `bun run dev` or `bun run start` running for unattended syncs. On shutdown, the API stops future scheduling, asks any sync child it started to stop gracefully, and terminates it if it does not respond within five seconds.
+
+Set `ANICORE_AUTO_SYNC_ENABLED=false` as an operational kill switch when the scheduler must stay off regardless of the saved dashboard setting.
+
+Automatic-sync evidence is written to API stdout and `data/sync-monitor/events.jsonl`. Grep for `sync.automatic.*` to trace scheduler dispatch/failure, `spawn.sync.*` for child-process lifecycle, `sync.lease.*` for the cross-process database lease, and `env.sync.injected` to verify the monitor environment names were supplied without exposing their values.
 
 Start a sync with a local file-backed monitor:
 
