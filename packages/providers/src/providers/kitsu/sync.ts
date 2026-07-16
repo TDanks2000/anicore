@@ -18,10 +18,68 @@ export type KitsuSyncResult =
   | { matched: true; kitsuId: string; kitsuSlug: string | null; data: ProviderAnimeData; episodeCount: number }
   | { matched: false };
 
+async function repairAuthoritativeKitsuMapping(
+  animeId: number,
+  kitsuData: ProviderAnimeData,
+  isAuthoritative: boolean,
+): Promise<number | null> {
+  return db.transaction(async (tx) => {
+    const [existing] = await tx
+      .select({
+        id: animeMappings.id,
+        animeId: animeMappings.animeId,
+        source: animeMappings.source,
+      })
+      .from(animeMappings)
+      .where(
+        and(
+          eq(animeMappings.provider, "kitsu"),
+          eq(animeMappings.providerId, kitsuData.providerId),
+        ),
+      )
+      .limit(1);
+    if (!isAuthoritative || existing?.source !== "fuzzy") return null;
+
+    const [updated] = await tx
+      .update(animeMappings)
+      .set({
+        animeId,
+        providerSlug: kitsuData.providerSlug ?? null,
+        providerUrl: kitsuData.providerUrl ?? null,
+        confidence: 100,
+        source: "api",
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(animeMappings.id, existing.id),
+          eq(animeMappings.source, "fuzzy"),
+        ),
+      )
+      .returning({ id: animeMappings.id });
+    if (!updated) return null;
+
+    const oldEpisodeIds = tx
+      .select({ id: episodes.id })
+      .from(episodes)
+      .where(eq(episodes.animeId, existing.animeId));
+    await tx
+      .delete(episodeMappings)
+      .where(
+        and(
+          eq(episodeMappings.provider, "kitsu"),
+          inArray(episodeMappings.episodeId, oldEpisodeIds),
+        ),
+      );
+
+    return existing.animeId;
+  });
+}
+
 async function insertKitsuMapping(
   animeId: number,
   kitsuData: ProviderAnimeData,
-  authoritative: boolean,
+  isAuthoritative: boolean,
 ): Promise<void> {
   const [mapping] = await db
     .insert(animeMappings)
@@ -31,8 +89,8 @@ async function insertKitsuMapping(
       providerId: kitsuData.providerId,
       providerSlug: kitsuData.providerSlug ?? null,
       providerUrl: kitsuData.providerUrl ?? null,
-      confidence: authoritative ? 100 : 90,
-      source: authoritative ? "api" : "fuzzy",
+      confidence: isAuthoritative ? 100 : 90,
+      source: isAuthoritative ? "api" : "fuzzy",
       isPrimary: false,
     })
     .onConflictDoUpdate({
@@ -54,57 +112,11 @@ async function insertKitsuMapping(
     .returning({ animeId: animeMappings.animeId });
 
   if (!mapping) {
-    const repairedFromAnimeId = await db.transaction(async (tx) => {
-      const [existing] = await tx
-        .select({
-          id: animeMappings.id,
-          animeId: animeMappings.animeId,
-          source: animeMappings.source,
-        })
-        .from(animeMappings)
-        .where(
-          and(
-            eq(animeMappings.provider, "kitsu"),
-            eq(animeMappings.providerId, kitsuData.providerId),
-          ),
-        )
-        .limit(1);
-      if (!authoritative || existing?.source !== "fuzzy") return null;
-
-      const [updated] = await tx
-        .update(animeMappings)
-        .set({
-          animeId,
-          providerSlug: kitsuData.providerSlug ?? null,
-          providerUrl: kitsuData.providerUrl ?? null,
-          confidence: 100,
-          source: "api",
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            eq(animeMappings.id, existing.id),
-            eq(animeMappings.source, "fuzzy"),
-          ),
-        )
-        .returning({ id: animeMappings.id });
-      if (!updated) return null;
-
-      const oldEpisodeIds = tx
-        .select({ id: episodes.id })
-        .from(episodes)
-        .where(eq(episodes.animeId, existing.animeId));
-      await tx
-        .delete(episodeMappings)
-        .where(
-          and(
-            eq(episodeMappings.provider, "kitsu"),
-            inArray(episodeMappings.episodeId, oldEpisodeIds),
-          ),
-        );
-
-      return existing.animeId;
-    });
+    const repairedFromAnimeId = await repairAuthoritativeKitsuMapping(
+      animeId,
+      kitsuData,
+      isAuthoritative,
+    );
 
     if (repairedFromAnimeId !== null) {
       log.warn(

@@ -28,7 +28,8 @@ query($title: String!) {
         localized
         alternatives
       }
-      mappings(first: 20) {
+      mappings(first: 100) {
+        pageInfo { hasNextPage }
         nodes {
           externalId
           externalSite
@@ -98,7 +99,10 @@ export interface KitsuSearchNode {
   averageRatingRank: number | null;
   ageRating: string | null;
   titles: KitsuTitle;
-  mappings?: { nodes: KitsuExternalMapping[] } | null;
+  mappings?: {
+    nodes: KitsuExternalMapping[];
+    pageInfo?: { hasNextPage: boolean };
+  } | null;
   posterImage: { original: KitsuImage } | null;
   bannerImage: { original: KitsuImage } | null;
 }

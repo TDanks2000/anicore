@@ -10,7 +10,7 @@
     "db:push": "drizzle-kit push",
     "db:seed": "bun src/scripts/seed.ts",
     "db:studio": "drizzle-kit studio",
-    "dev": "bun --watch ../../scripts/dev-api.ts",
+    "dev": "bun --cwd ../.. --watch --preload ./scripts/api-cwd.ts apps/api/src/index.ts",
     "start": "bun src/index.ts",
     "sync": "bun src/scripts/sync.ts",
     "sync:anilist": "bun src/scripts/sync-anilist.ts",

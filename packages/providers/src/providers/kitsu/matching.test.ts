@@ -32,6 +32,7 @@ function candidate(anilistId: string): KitsuSearchNode {
     },
     mappings: {
       nodes: [{ externalId: anilistId, externalSite: "ANILIST_ANIME" }],
+      pageInfo: { hasNextPage: false },
     },
     posterImage: null,
     bannerImage: null,
@@ -47,7 +48,7 @@ const hints: MatchHints = {
   episodeCount: 52,
 };
 
-describe("Kitsu matching", () => {
+describe("Kitsu authoritative matching", () => {
   test("prioritizes an authoritative AniList mapping", () => {
     const node = candidate("8");
 
@@ -59,6 +60,16 @@ describe("Kitsu matching", () => {
     const node = candidate("1123");
 
     expect(isAuthoritativeAnilistMatch(node, "8")).toBe(false);
+    expect(scoreKitsuCandidate(node, hints)).toBe(-1);
+  });
+
+  test("does not fuzzy-match when the authoritative mapping page is incomplete", () => {
+    const node = candidate("8");
+    node.mappings = {
+      nodes: [],
+      pageInfo: { hasNextPage: true },
+    };
+
     expect(scoreKitsuCandidate(node, hints)).toBe(-1);
   });
 });

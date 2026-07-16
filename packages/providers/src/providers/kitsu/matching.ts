@@ -48,10 +48,14 @@ export function scoreKitsuCandidate(
   hints: MatchHints,
 ): number {
   const mappedAnilistId = anilistMappingFor(node);
+  // Kitsu's direct AniList link is authoritative over title metadata.
   if (hints.anilistId && mappedAnilistId) {
     return mappedAnilistId === hints.anilistId
       ? AUTHORITATIVE_MATCH_SCORE
       : CONFLICTING_MAPPING_SCORE;
+  }
+  if (hints.anilistId && node.mappings?.pageInfo?.hasNextPage) {
+    return CONFLICTING_MAPPING_SCORE;
   }
 
   let score = 0;
