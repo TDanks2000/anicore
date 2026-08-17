@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 
-import { authorizeAdminWrite } from "./admin-auth";
+import { authorizeAdminWrite, isAdminAuthenticated } from "./admin-auth";
 
 describe("admin write authentication", () => {
 	afterEach(() => {
@@ -59,6 +59,23 @@ describe("admin write authentication", () => {
 				headers: { "x-anicore-admin-token": "test-admin-token" },
 			}),
 		).toEqual({ ok: true });
+	});
+
+	test("exposes a boolean admin check without converting public reads into write auth failures", () => {
+		expect(isAdminAuthenticated({})).toBe(false);
+
+		process.env.ANICORE_ADMIN_TOKEN = "test-admin-token";
+		expect(
+			isAdminAuthenticated({ authorization: "Bearer wrong-token" }),
+		).toBe(false);
+		expect(
+			isAdminAuthenticated({ authorization: "Bearer test-admin-token" }),
+		).toBe(true);
+		expect(
+			isAdminAuthenticated({
+				"x-anicore-admin-token": "test-admin-token",
+			}),
+		).toBe(true);
 	});
 
 	test("rejects invalid admin tokens", () => {
