@@ -34,6 +34,9 @@
       "cache": false,
       "persistent": true
     },
+    "db:audit-mappings": {
+      "cache": false
+    },
     "db:generate": {
       "cache": false
     },

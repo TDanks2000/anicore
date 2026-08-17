@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "scripts": {
     "build": "tsc --noEmit",
+    "db:audit-mappings": "bun src/scripts/audit-mappings.ts",
     "db:check-shape": "bun src/scripts/check-db-shape.ts",
     "db:empty": "bun src/scripts/empty-db.ts",
     "db:generate": "drizzle-kit generate",
