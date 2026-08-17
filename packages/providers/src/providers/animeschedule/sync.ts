@@ -7,6 +7,7 @@ import {
   episodeLanguageStatus,
   episodes,
 } from "@anicore/db/schema";
+import { titleSimilarity } from "../title-similarity";
 import {
   fetchByRoute,
   hasDub,
@@ -29,29 +30,8 @@ export interface DubSyncResult {
   episodesMarked?: number;
 }
 
-// Rate limit: 250 ms between requests (conservative for public API)
 const RATE_MS = 250;
 export const sleep = (ms: number) => Bun.sleep(ms);
-
-function normalizeTitle(value: string): string {
-  return value
-    .normalize("NFKD")
-    .replace(/\p{M}/gu, "")
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s]/gu, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function titleSimilarity(a: string, b: string): number {
-  const aWords = normalizeTitle(a).split(/\s+/).filter(Boolean);
-  const bWords = new Set(normalizeTitle(b).split(/\s+/).filter(Boolean));
-  if (!aWords.length || !bWords.size) return 0;
-  return (
-    aWords.filter((word) => bWords.has(word)).length /
-    Math.max(aWords.length, bWords.size)
-  );
-}
 
 export function isAnimeScheduleEntryForAnilist(
   entry: AnimeScheduleEntry | null,
@@ -62,9 +42,6 @@ export function isAnimeScheduleEntryForAnilist(
   );
 }
 
-// Attempt to find the anime-schedule.net entry for an anime. Every accepted
-// route is verified using AnimeSchedule's AniList website link; title scoring is
-// only used to decide which search results to verify first.
 async function findEntry(opts: {
   anilistId: string;
   slug: string | null;
@@ -110,9 +87,6 @@ async function findEntry(opts: {
         return full;
       }
     }
-
-    // Do not stop just because the Romaji search returned unverified results.
-    // The English title can rank the same verified entry very differently.
   }
 
   return null;
@@ -189,14 +163,10 @@ async function loadVerifiedCachedEntry(opts: {
     );
   }
 
-  // Automatically-created cached mappings are safe to discard when the
-  // provider no longer verifies them. This prevents a stale route from being
-  // trusted forever and lets the verified search path repair it immediately.
   await db.delete(animeMappings).where(eq(animeMappings.id, existing.id));
   return null;
 }
 
-// Upsert dub status rows for every episode of an anime in 500-row chunks.
 async function upsertDubStatus(
   animeId: number,
   dubStatus: "available" | "missing",
@@ -277,8 +247,6 @@ export async function syncDubStatus(opts: {
 
   if (!entry) return { status: "unmatched" };
 
-  // This invariant is intentionally checked again immediately before evidence
-  // is written, so future refactors cannot accidentally bypass verification.
   if (!isAnimeScheduleEntryForAnilist(entry, opts.anilistId)) {
     throw new Error(
       `AnimeSchedule route ${entry.route} does not match AniList ${opts.anilistId}`,
@@ -289,8 +257,6 @@ export async function syncDubStatus(opts: {
   const finished = isFinished(entry);
 
   if (!dubbed) {
-    // anime-schedule.net has incomplete dub coverage for older shows — absence
-    // of their dub data doesn't mean no dub exists, so we don't write "unavailable".
     return { status: "matched-no-dub", route: entry.route, episodesMarked: 0 };
   }
 
@@ -308,7 +274,5 @@ export async function syncDubStatus(opts: {
     };
   }
 
-  // Ongoing with a dub — we know it exists but can't count episodes without
-  // an API token (timetable endpoint requires auth). Leave as "unknown".
   return { status: "matched-ongoing-dub", route: entry.route, episodesMarked: 0 };
 }
