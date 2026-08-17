@@ -155,7 +155,7 @@ export async function runSubPass(): Promise<void> {
   const airedJapaneseWhere = and(
     isNotNull(episodes.airDate),
     lte(episodes.airDate, today),
-    eq(anime.countryOfOrigin, "JP"),
+    sql`upper(trim(${anime.countryOfOrigin})) = 'JP'`,
   );
 
   const [countRow] = await db
