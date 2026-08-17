@@ -79,23 +79,50 @@ export interface MappedEpisode extends ProviderEpisodeData {
   kitsuId: string;
 }
 
+function mapEpisode(ep: KitsuEpisodeNode & { number: number }): MappedEpisode {
+  return {
+    number: ep.number,
+    title: ep.titles?.romanized ?? ep.titles?.translated ?? null,
+    titleRomaji: ep.titles?.romanized ?? null,
+    titleEnglish: ep.titles?.translated ?? null,
+    description:
+      ep.description?.en ??
+      (ep.description ? Object.values(ep.description)[0] : null) ??
+      null,
+    airDate: ep.releasedAt?.slice(0, 10) ?? null,
+    lengthMinutes: ep.length ?? null,
+    thumbnail: ep.thumbnail?.original?.url ?? null,
+    kitsuId: ep.id,
+    providerId: ep.id,
+    providerEpisodeNumber: String(ep.number),
+  };
+}
+
 export function mapKitsuEpisodes(nodes: KitsuEpisodeNode[]): MappedEpisode[] {
-  return nodes
-    .filter((ep) => ep.number != null)
-    .map((ep) => ({
-      number:       ep.number!,
-      title:        ep.titles?.romanized ?? ep.titles?.translated ?? null,
-      titleRomaji:  ep.titles?.romanized ?? null,
-      titleEnglish: ep.titles?.translated ?? null,
-      description:
-        ep.description?.en ??
-        (ep.description ? Object.values(ep.description)[0] : null) ??
-        null,
-      airDate:      ep.releasedAt?.slice(0, 10) ?? null,
-      lengthMinutes: ep.length ?? null,
-      thumbnail:    ep.thumbnail?.original?.url ?? null,
-      kitsuId:      ep.id,
-      providerId:   ep.id,
-      providerEpisodeNumber: String(ep.number),
-    }));
+  const byNumber = new Map<number, MappedEpisode>();
+  const ambiguousNumbers = new Set<number>();
+
+  for (const ep of nodes) {
+    if (!Number.isInteger(ep.number) || (ep.number ?? 0) <= 0) continue;
+
+    const number = ep.number!;
+    const mapped = mapEpisode({ ...ep, number });
+    const existing = byNumber.get(number);
+
+    if (!existing) {
+      byNumber.set(number, mapped);
+      continue;
+    }
+
+    // Duplicate copies of the exact same provider episode are harmless, but two
+    // distinct Kitsu episode IDs claiming the same canonical number are
+    // ambiguous. Drop that number entirely rather than choosing provider order.
+    if (existing.kitsuId !== mapped.kitsuId) {
+      ambiguousNumbers.add(number);
+    }
+  }
+
+  return [...byNumber.values()]
+    .filter((episode) => !ambiguousNumbers.has(episode.number))
+    .sort((a, b) => a.number - b.number);
 }
