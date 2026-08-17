@@ -8,6 +8,8 @@ function toHints(data: ProviderAnimeData) {
 		anilistId:    data.provider === "anilist" ? data.providerId : undefined,
 		titleRomaji:  data.titleRomaji,
 		titleEnglish: data.titleEnglish,
+		titleNative:  data.titleNative,
+		synonyms:     data.synonyms,
 		season:       data.season,
 		seasonYear:   data.seasonYear,
 		episodeCount: data.episodeCount,
