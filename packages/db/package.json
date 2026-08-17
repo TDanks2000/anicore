@@ -8,6 +8,7 @@
     "./schema": "./src/schema.ts",
     "./db-config": "./src/db-config.ts",
     "./db-shape": "./src/db-shape.ts",
+    "./mapping-policy": "./src/mapping-policy.ts",
     "./language-status": "./src/language-status.ts",
     "./language-status-scoring": "./src/language-status-scoring.ts"
   },
