@@ -1,10 +1,12 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 import { db } from "@anicore/db";
 import { animeMappings, episodeMappings, episodes } from "@anicore/db/schema";
 import { fetchTvdbEpisodeTitles } from "./thetvdb/episodes";
 import { fetchTmdbEpisodeTitles } from "./tmdb/episodes";
 import type { ProviderAnimeData } from "./types";
+
+type MappingSource = "manual" | "api" | "import" | "fuzzy" | "system";
 
 interface EpisodeRow {
 	id: number;
@@ -70,6 +72,43 @@ export interface EpisodeTitleEnrichmentPreview {
 	}>;
 }
 
+export interface ExistingAnimeSourceMapping {
+	id: number;
+	providerId: string;
+	providerSlug: string | null;
+	providerUrl: string | null;
+	confidence: number;
+	source: MappingSource;
+	isPrimary: boolean;
+	updatedAt: Date;
+}
+
+const SOURCE_PRIORITY: Record<MappingSource, number> = {
+	manual: 5,
+	system: 4,
+	api: 3,
+	import: 3,
+	fuzzy: 1,
+};
+
+export function selectPreferredAnimeSourceMapping<
+	T extends Pick<
+		ExistingAnimeSourceMapping,
+		"id" | "confidence" | "source" | "isPrimary" | "updatedAt"
+	>,
+>(rows: T[]): T | null {
+	const sorted = [...rows].sort((a, b) => {
+		if (a.isPrimary !== b.isPrimary) return a.isPrimary ? -1 : 1;
+		const sourceDiff = SOURCE_PRIORITY[b.source] - SOURCE_PRIORITY[a.source];
+		if (sourceDiff !== 0) return sourceDiff;
+		if (a.confidence !== b.confidence) return b.confidence - a.confidence;
+		const updatedDiff = b.updatedAt.getTime() - a.updatedAt.getTime();
+		if (updatedDiff !== 0) return updatedDiff;
+		return b.id - a.id;
+	});
+	return sorted[0] ?? null;
+}
+
 async function loadEpisodeRows(animeId: number): Promise<EpisodeRow[]> {
 	return db
 		.select({
@@ -120,18 +159,22 @@ async function upsertAnimeSourceMapping(
 			providerSlug: match.animeProviderSlug ?? null,
 			providerUrl: match.animeProviderUrl ?? null,
 			confidence: 85,
-			source: "api",
+			source: "fuzzy",
 			isPrimary: false,
 		})
 		.onConflictDoUpdate({
 			target: [animeMappings.provider, animeMappings.providerId],
 			set: {
-				providerSlug: match.animeProviderSlug ?? null,
-				providerUrl: match.animeProviderUrl ?? null,
-				confidence: 85,
-				source: "api",
-				isPrimary: false,
-				updatedAt: new Date(),
+				providerSlug: sql`coalesce(excluded.provider_slug, ${animeMappings.providerSlug})`,
+				providerUrl: sql`coalesce(excluded.provider_url, ${animeMappings.providerUrl})`,
+				confidence: sql`greatest(${animeMappings.confidence}, excluded.confidence)`,
+				source: sql`case
+					when ${animeMappings.source} in ('manual', 'api', 'import', 'system')
+						then ${animeMappings.source}
+					else excluded.source
+				end`,
+				isPrimary: sql`${animeMappings.isPrimary}`,
+				updatedAt: sql`now()`,
 			},
 			setWhere: eq(animeMappings.animeId, animeId),
 		})
@@ -170,17 +213,27 @@ async function applySourceMatch(
 				providerUrl: episode.providerUrl ?? null,
 				providerEpisodeNumber: episode.providerEpisodeNumber,
 				confidence: 85,
-				source: "api",
+				source: "fuzzy",
 			})
 			.onConflictDoUpdate({
 				target: [episodeMappings.provider, episodeMappings.providerId],
 				set: {
-					providerSlug: null,
-					providerUrl: episode.providerUrl ?? null,
+					providerSlug: sql`coalesce(excluded.provider_slug, ${episodeMappings.providerSlug})`,
+					providerUrl: sql`coalesce(excluded.provider_url, ${episodeMappings.providerUrl})`,
 					providerEpisodeNumber: episode.providerEpisodeNumber,
-					confidence: 85,
-					source: "api",
-					updatedAt: new Date(),
+					confidence: sql`case
+						when ${episodeMappings.source} in ('manual', 'import', 'system')
+							or (${episodeMappings.source} = 'api' and ${episodeMappings.confidence} > 85)
+							then greatest(${episodeMappings.confidence}, excluded.confidence)
+						else excluded.confidence
+					end`,
+					source: sql`case
+						when ${episodeMappings.source} in ('manual', 'import', 'system')
+							or (${episodeMappings.source} = 'api' and ${episodeMappings.confidence} > 85)
+							then ${episodeMappings.source}
+						else excluded.source
+					end`,
+					updatedAt: sql`now()`,
 				},
 				setWhere: eq(episodeMappings.episodeId, row.id),
 			})
@@ -401,16 +454,17 @@ export async function previewEpisodeTitleEnrichment(
 export async function loadExistingAnimeSourceMapping(
 	animeId: number,
 	provider: "thetvdb" | "tmdb",
-): Promise<{
-	providerId: string;
-	providerSlug: string | null;
-	providerUrl: string | null;
-} | null> {
-	const [row] = await db
+): Promise<ExistingAnimeSourceMapping | null> {
+	const rows = await db
 		.select({
+			id: animeMappings.id,
 			providerId: animeMappings.providerId,
 			providerSlug: animeMappings.providerSlug,
 			providerUrl: animeMappings.providerUrl,
+			confidence: animeMappings.confidence,
+			source: animeMappings.source,
+			isPrimary: animeMappings.isPrimary,
+			updatedAt: animeMappings.updatedAt,
 		})
 		.from(animeMappings)
 		.where(
@@ -418,10 +472,11 @@ export async function loadExistingAnimeSourceMapping(
 				eq(animeMappings.animeId, animeId),
 				eq(animeMappings.provider, provider),
 			),
-		)
-		.limit(1);
+		);
 
-	return row ?? null;
+	return selectPreferredAnimeSourceMapping(
+		rows as ExistingAnimeSourceMapping[],
+	);
 }
 
 export type { EnrichmentContext, EpisodeTitleMatch, TitleSourceMatch };
