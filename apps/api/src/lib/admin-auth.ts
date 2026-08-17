@@ -18,6 +18,16 @@ function extractAdminToken(headers: Record<string, string | undefined>): string 
 	return headers["x-anicore-admin-token"]?.trim() || null;
 }
 
+export function isAdminAuthenticated(
+	headers: Record<string, string | undefined>,
+): boolean {
+	const configuredToken = process.env.ANICORE_ADMIN_TOKEN?.trim();
+	if (!configuredToken) return false;
+
+	const candidate = extractAdminToken(headers);
+	return Boolean(candidate && secureEqual(candidate, configuredToken));
+}
+
 export type AdminWriteAuthorization =
 	| { ok: true }
 	| { ok: false; status: 401 | 503; error: string };
@@ -45,8 +55,7 @@ export function authorizeAdminWrite(input: {
 		};
 	}
 
-	const candidate = extractAdminToken(input.headers);
-	if (!candidate || !secureEqual(candidate, configuredToken)) {
+	if (!isAdminAuthenticated(input.headers)) {
 		return { ok: false, status: 401, error: "Invalid admin token" };
 	}
 
