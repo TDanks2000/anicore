@@ -39,6 +39,23 @@ export function kitsuEpisodeProviderIdsForRepair(
   return [...new Set(mappedEpisodes.map((episode) => episode.kitsuId))];
 }
 
+export function limitKitsuEpisodesToCanonicalCount(
+  mappedEpisodes: MappedEpisode[],
+  canonicalEpisodeCount?: number | null,
+): MappedEpisode[] {
+  if (
+    canonicalEpisodeCount == null ||
+    !Number.isInteger(canonicalEpisodeCount) ||
+    canonicalEpisodeCount <= 0
+  ) {
+    return mappedEpisodes;
+  }
+
+  return mappedEpisodes.filter(
+    (episode) => episode.number >= 1 && episode.number <= canonicalEpisodeCount,
+  );
+}
+
 async function repairAuthoritativeKitsuMapping(
   animeId: number,
   kitsuData: ProviderAnimeData,
@@ -163,7 +180,6 @@ async function insertKitsuMapping(
   }
 }
 
-// Given an AniList anime already in the DB, find and persist its Kitsu mapping.
 export async function syncKitsuFromAnilist(
   anilistId: string,
   hints: MatchHints,
@@ -191,10 +207,12 @@ export async function syncKitsuFromAnilist(
   const isAuthoritative = isAuthoritativeAnilistMatch(kitsuNode, anilistId);
   const provenance = kitsuMappingProvenance(isAuthoritative);
 
-  // Fetch this exact Kitsu series' episodes before a possible mapping repair so
-  // stale cleanup can target only episode mappings owned by this Kitsu series.
-  const mappedEpisodes = await fetchKitsuEpisodeData(kitsuNode.id);
-  const kitsuEpisodeProviderIds = kitsuEpisodeProviderIdsForRepair(mappedEpisodes);
+  const allMappedEpisodes = await fetchKitsuEpisodeData(kitsuNode.id);
+  const kitsuEpisodeProviderIds = kitsuEpisodeProviderIdsForRepair(allMappedEpisodes);
+  const mappedEpisodes = limitKitsuEpisodesToCanonicalCount(
+    allMappedEpisodes,
+    hints.episodeCount,
+  );
 
   const kitsuData = mapKitsuAnime(kitsuNode);
   await insertKitsuMapping(
@@ -220,8 +238,6 @@ export async function syncKitsuFromAnilist(
   };
 }
 
-// Fetch and return Kitsu episode data for enrichment (does not write to DB —
-// let the caller decide how to store it).
 export async function fetchKitsuEpisodeData(
   kitsuId: string,
 ): Promise<MappedEpisode[]> {
@@ -229,7 +245,6 @@ export async function fetchKitsuEpisodeData(
   return mapKitsuEpisodes(nodes);
 }
 
-// Upsert episodes + episode_mappings for a Kitsu anime. Returns count written.
 export async function syncKitsuEpisodes(
   animeId: number,
   kitsuAnimeId: string,
