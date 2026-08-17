@@ -34,6 +34,8 @@ export interface DubSyncResult {
   episodesMarked?: number;
 }
 
+export type AnimeScheduleDubEvidenceAction = "available" | "missing" | "clear";
+
 const RATE_MS = 250;
 export const sleep = (ms: number) => Bun.sleep(ms);
 
@@ -44,6 +46,13 @@ export function isAnimeScheduleEntryForAnilist(
   return Boolean(
     entry?.websites && parseAnilistId(entry.websites.aniList) === anilistId,
   );
+}
+
+export function animeScheduleDubEvidenceAction(
+  entry: AnimeScheduleEntry,
+): AnimeScheduleDubEvidenceAction {
+  if (!hasDub(entry)) return "missing";
+  return isFinished(entry) ? "available" : "clear";
 }
 
 async function findEntry(opts: {
@@ -192,6 +201,34 @@ async function loadVerifiedCachedEntry(opts: {
   return null;
 }
 
+function animeScheduleEvidenceSourceUrl(route: string): string {
+  return `https://animeschedule.net/anime/${route}`;
+}
+
+async function clearDubStatus(
+  animeId: number,
+  sourceUrl: string,
+): Promise<void> {
+  await db
+    .delete(episodeLanguageStatus)
+    .where(
+      and(
+        eq(episodeLanguageStatus.animeId, animeId),
+        eq(episodeLanguageStatus.languageCode, "en"),
+        eq(episodeLanguageStatus.mediaType, "audio"),
+        eq(episodeLanguageStatus.provider, "animeschedule"),
+      ),
+    );
+
+  await syncAnimeLanguageEvidenceFromEpisodeStatuses({
+    animeId,
+    languageCode: "en",
+    mediaType: "audio",
+    provider: "animeschedule",
+    sourceUrl,
+  });
+}
+
 async function upsertDubStatus(
   animeId: number,
   dubStatus: "available" | "missing",
@@ -202,7 +239,10 @@ async function upsertDubStatus(
     .from(episodes)
     .where(eq(episodes.animeId, animeId));
 
-  if (!rows.length) return 0;
+  if (!rows.length) {
+    await clearDubStatus(animeId, sourceUrl);
+    return 0;
+  }
 
   const checkedAt = new Date();
   const CHUNK = 500;
@@ -278,19 +318,20 @@ export async function syncDubStatus(opts: {
     );
   }
 
-  const dubbed = hasDub(entry);
-  const finished = isFinished(entry);
+  const sourceUrl = animeScheduleEvidenceSourceUrl(entry.route);
+  const evidenceAction = animeScheduleDubEvidenceAction(entry);
 
-  if (!dubbed) {
-    return { status: "matched-no-dub", route: entry.route, episodesMarked: 0 };
+  if (evidenceAction === "missing") {
+    const count = await upsertDubStatus(opts.animeId, "missing", sourceUrl);
+    return {
+      status: "matched-no-dub",
+      route: entry.route,
+      episodesMarked: count,
+    };
   }
 
-  if (finished) {
-    const count = await upsertDubStatus(
-      opts.animeId,
-      "available",
-      `https://animeschedule.net/anime/${entry.route}`,
-    );
+  if (evidenceAction === "available") {
+    const count = await upsertDubStatus(opts.animeId, "available", sourceUrl);
     if (!count) return { status: "no-episodes" };
     return {
       status: "matched-fully-dubbed",
@@ -299,5 +340,6 @@ export async function syncDubStatus(opts: {
     };
   }
 
+  await clearDubStatus(opts.animeId, sourceUrl);
   return { status: "matched-ongoing-dub", route: entry.route, episodesMarked: 0 };
 }
