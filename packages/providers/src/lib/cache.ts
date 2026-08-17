@@ -8,6 +8,7 @@ import {
   unlinkSync,
   readdirSync,
   renameSync,
+  utimesSync,
 } from "node:fs";
 
 import { log } from "./logger";
@@ -63,17 +64,21 @@ export async function loadIds(forceRefresh = false): Promise<number[]> {
           throw new Error(await formatHttpError("Failed to fetch IDs", response));
         }
 
-        const text = await response.text();
-        // Re-read immediately before the synchronous replace so IDs appended while the
-        // network request was in flight are preserved.
+        const remoteIds = uniqueSortedIds(parseIdText(await response.text()));
         const latestLocalIds = existsSync(IDS_FILE)
           ? parseIdText(readFileSync(IDS_FILE, "utf-8"))
           : [];
-        writeFileSync(
-          IDS_FILE,
-          serializeIds(uniqueSortedIds([...latestLocalIds, ...parseIdText(text)])),
-        );
-        log.success(`Saved → ${IDS_FILE}`);
+        const localIds = new Set(latestLocalIds);
+        const missingRemoteIds = remoteIds.filter((id) => !localIds.has(id));
+
+        // Never replace the live ID file during refresh. API on-demand imports can
+        // append IDs from another process while this network request is in flight;
+        // O_APPEND-style writes preserve both sides instead of letting a refresh
+        // overwrite a newly discovered ID.
+        appendFileSync(IDS_FILE, serializeIds(missingRemoteIds));
+        const refreshedAt = new Date();
+        utimesSync(IDS_FILE, refreshedAt, refreshedAt);
+        log.success(`Refreshed → ${IDS_FILE}`);
         lastError = null;
         break;
       } catch (error) {
@@ -93,7 +98,7 @@ export async function loadIds(forceRefresh = false): Promise<number[]> {
   }
 
   const text = await Bun.file(IDS_FILE).text();
-  return parseIdText(text);
+  return uniqueSortedIds(parseIdText(text));
 }
 
 export function appendAnilistId(id: number): boolean {
@@ -108,8 +113,10 @@ export function appendAnilistId(id: number): boolean {
 
   if (existingIds.includes(id)) return false;
 
-  const ids = uniqueSortedIds([...existingIds, id]);
-  writeFileSync(IDS_FILE, serializeIds(ids));
+  // Appending a single line is cross-process safe in the way replacing the full
+  // cache is not. Concurrent writers may create duplicate lines, which loadIds()
+  // intentionally deduplicates in memory.
+  appendFileSync(IDS_FILE, `${id}\n`);
   return true;
 }
 
