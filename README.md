@@ -34,6 +34,27 @@ Root commands force Turbo's stream UI so Windows shells avoid the interactive UI
 
 Put API secrets in `apps/api/.env`. The old root `.env` was copied locally to `apps/api/.env` during the migration if it existed.
 
+### API write authentication
+
+Read-only API routes remain public. All non-monitor `POST`, `PUT`, `PATCH`, and `DELETE` requests require `ANICORE_ADMIN_TOKEN`. If the token is not configured, write routes fail closed with `503` instead of allowing unauthenticated database changes.
+
+Set a long random token in `apps/api/.env`:
+
+```sh
+ANICORE_ADMIN_TOKEN=<long-random-token>
+```
+
+Send it as either a bearer token or the explicit admin-token header:
+
+```sh
+curl -H "Authorization: Bearer <long-random-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"titleRomaji":"Example"}' \
+  http://localhost:3000/anime/
+```
+
+`/sync-monitor` keeps its separate monitor access-code authentication and does not require the admin token.
+
 ## Sync
 
 The main sync fetches AniList entries in parallel by default while keeping database writes and downstream provider sync sequential:
