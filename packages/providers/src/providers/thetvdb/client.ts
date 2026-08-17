@@ -7,6 +7,8 @@ interface TvdbEnvelope<T> {
 	status: string;
 	links?: {
 		next?: string | null;
+		prev?: string | null;
+		self?: string | null;
 	};
 }
 
@@ -32,7 +34,7 @@ interface TvdbSeriesExtended {
 	seasons?: TvdbSeasonRecord[];
 }
 
-interface TvdbEpisodeBase {
+export interface TvdbEpisodeBase {
 	id: number;
 	name?: string;
 	number?: number;
@@ -90,10 +92,10 @@ async function getToken(): Promise<string | null> {
 	return token;
 }
 
-async function tvdbGet<T>(
+async function tvdbGetEnvelope<T>(
 	path: string,
 	query?: Record<string, string | number | undefined>,
-): Promise<T | null> {
+): Promise<TvdbEnvelope<T> | null> {
 	const token = await getToken();
 	if (!token) return null;
 
@@ -116,8 +118,15 @@ async function tvdbGet<T>(
 		throw new Error(await formatHttpError("TVDB request failed", res));
 	}
 
-	const json = (await res.json()) as TvdbEnvelope<T>;
-	return json.data ?? null;
+	return (await res.json()) as TvdbEnvelope<T>;
+}
+
+async function tvdbGet<T>(
+	path: string,
+	query?: Record<string, string | number | undefined>,
+): Promise<T | null> {
+	const envelope = await tvdbGetEnvelope<T>(path, query);
+	return envelope?.data ?? null;
 }
 
 export async function searchTvdbSeries(
@@ -141,36 +150,66 @@ export async function getTvdbSeriesExtended(
 	});
 }
 
-export async function getTvdbSeasonEpisodes(
+async function fetchTvdbEpisodePages(
 	seriesId: number,
-	seasonNumber: number,
-	lang?: string,
+	options: { lang?: string; seasonNumber?: number } = {},
 ): Promise<TvdbEpisodeBase[]> {
 	const episodes: TvdbEpisodeBase[] = [];
 	let page = 0;
 
 	while (true) {
-		const path = lang
-			? `/series/${seriesId}/episodes/official/${lang}`
+		const path = options.lang
+			? `/series/${seriesId}/episodes/official/${options.lang}`
 			: `/series/${seriesId}/episodes/official`;
+		const query = options.lang
+			? { page }
+			: { page, season: options.seasonNumber };
 
-		// When a language is in the URL path, the ?season= query param is silently
-		// ignored by TVDB v4 and all seasons' episodes are returned. Filter client-side.
-		const query = lang ? { page } : { page, season: seasonNumber };
-
-		const data = await tvdbGet<{ episodes?: TvdbEpisodeBase[] }>(path, query);
-		const rawBatch = data?.episodes ?? [];
-
+		const envelope = await tvdbGetEnvelope<{ episodes?: TvdbEpisodeBase[] }>(
+			path,
+			query,
+		);
+		const rawBatch = envelope?.data?.episodes ?? [];
 		if (!rawBatch.length) break;
 
-		const batch = lang
-			? rawBatch.filter((e) => e.seasonNumber === seasonNumber)
-			: rawBatch;
+		episodes.push(...rawBatch);
 
-		episodes.push(...batch);
-		if (rawBatch.length < 100) break;
+		// Prefer TVDB's pagination links when present. Keep the old page-size
+		// fallback for responses that omit links so older/self-hosted responses do
+		// not accidentally loop forever.
+		if (envelope?.links) {
+			if (!envelope.links.next) break;
+		} else if (rawBatch.length < 100) {
+			break;
+		}
 		page++;
 	}
 
 	return episodes;
+}
+
+/**
+ * Fetch all official episodes once. This is especially important for the
+ * language-specific TVDB endpoint, which ignores the season query and returns
+ * every season; callers can group/filter the result locally without repeating
+ * the same full-series request for each season candidate.
+ */
+export async function getTvdbOfficialEpisodes(
+	seriesId: number,
+	lang?: string,
+): Promise<TvdbEpisodeBase[]> {
+	return fetchTvdbEpisodePages(seriesId, { lang });
+}
+
+export async function getTvdbSeasonEpisodes(
+	seriesId: number,
+	seasonNumber: number,
+	lang?: string,
+): Promise<TvdbEpisodeBase[]> {
+	if (lang) {
+		const allEpisodes = await getTvdbOfficialEpisodes(seriesId, lang);
+		return allEpisodes.filter((episode) => episode.seasonNumber === seasonNumber);
+	}
+
+	return fetchTvdbEpisodePages(seriesId, { seasonNumber });
 }
