@@ -1,6 +1,7 @@
 import { Elysia } from "elysia";
 import { cors } from "@elysia/cors";
 
+import { authorizeAdminWrite } from "./lib/admin-auth";
 import { animeRoutes } from "./modules/anime/anime.routes";
 import { episodeRoutes } from "./modules/episodes/episodes.routes";
 import { healthRoutes } from "./modules/health/health.routes";
@@ -24,12 +25,31 @@ export const app = new Elysia()
     set.status = 500;
     return { error: "Internal server error" };
   })
+  .onBeforeHandle({ as: "global" }, ({ request, headers, set }) => {
+    const auth = authorizeAdminWrite({
+      method: request.method,
+      pathname: new URL(request.url).pathname,
+      headers,
+    });
+    if (auth.ok) return;
+
+    set.status = auth.status;
+    if (auth.status === 401) {
+      set.headers["WWW-Authenticate"] = 'Bearer realm="AniCore Admin"';
+    }
+    return { error: auth.error };
+  })
   .use(
     cors({
       origin: process.env.CORS_ORIGIN
         ? process.env.CORS_ORIGIN.split(",").map((origin) => origin.trim())
         : ["http://localhost:5173", "http://localhost:4173"],
-      allowedHeaders: ["Content-Type", "Authorization", "X-Sync-Monitor-Code"],
+      allowedHeaders: [
+        "Content-Type",
+        "Authorization",
+        "X-Anicore-Admin-Token",
+        "X-Sync-Monitor-Code",
+      ],
       methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       credentials: false,
       preflight: true,
