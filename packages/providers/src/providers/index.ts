@@ -234,10 +234,7 @@ async function upsertRelatedData(
               .where(eq(tags.id, tagRow.id))
               .returning();
 
-            byNormalizedName.set(studioRow.normalizedName, studioRow);
-            if (studioRow.anilistStudioId != null) {
-              byAnilistId.set(studioRow.anilistStudioId, studioRow);
-            }
+            byNormalizedName.set(normalizedName, tagRow);
           }
         }
 
