@@ -4,6 +4,7 @@ import type { KitsuSearchNode } from "./client";
 import {
   hasKitsuStructuralConflict,
   isAuthoritativeAnilistMatch,
+  kitsuSearchTitles,
   scoreKitsuCandidate,
   selectKitsuMatch,
   type MatchHints,
@@ -96,6 +97,46 @@ describe("Kitsu authoritative matching", () => {
     };
 
     expect(scoreKitsuCandidate(node, hints)).toBe(-1);
+  });
+});
+
+describe("Kitsu title discovery", () => {
+  test("uses native titles and bounded unique synonyms only as fallbacks", () => {
+    const titles = kitsuSearchTitles({
+      ...hints,
+      titleEnglish: "Bouken Ou Beet",
+      titleNative: "冒険王ビィト",
+      synonyms: [
+        "Beet the Vandel Buster",
+        "Bouken Ou Beet",
+        "Adventure King Beet",
+        "Boken Ou Beet",
+        "Beet",
+        "Extra synonym beyond cap",
+      ],
+    });
+
+    expect(titles.primary).toEqual(["Bouken Ou Beet"]);
+    expect(titles.fallback).toEqual([
+      "冒険王ビィト",
+      "Beet the Vandel Buster",
+      "Adventure King Beet",
+      "Boken Ou Beet",
+    ]);
+  });
+
+  test("lets an AniList synonym contribute to fuzzy title evidence", () => {
+    const node = candidate("8");
+    node.mappings = { nodes: [], pageInfo: { hasNextPage: false } };
+
+    expect(
+      scoreKitsuCandidate(node, {
+        ...hints,
+        titleRomaji: "Unhelpful Primary Title",
+        titleEnglish: null,
+        synonyms: ["Beet the Vandel Buster"],
+      }),
+    ).toBeGreaterThanOrEqual(45);
   });
 });
 
