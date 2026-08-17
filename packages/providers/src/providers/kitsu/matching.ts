@@ -1,3 +1,4 @@
+import { titleSimilarity } from "../title-similarity";
 import { searchKitsuByTitle, type KitsuSearchNode } from "./client";
 
 export interface MatchHints {
@@ -33,25 +34,6 @@ export function isAuthoritativeAnilistMatch(
   anilistId: string | undefined,
 ): boolean {
   return Boolean(anilistId && anilistMappingsFor(node).includes(anilistId));
-}
-
-function normalizeTitle(value: string): string {
-  return value
-    .normalize("NFKD")
-    .replace(/\p{M}/gu, "")
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s]/gu, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function titleSimilarity(a: string, b: string): number {
-  const aWords = normalizeTitle(a).split(/\s+/).filter(Boolean);
-  const bWords = new Set(normalizeTitle(b).split(/\s+/).filter(Boolean));
-  if (aWords.length === 0 || bWords.size === 0) return 0;
-
-  const overlap = aWords.filter((word) => bWords.has(word)).length;
-  return overlap / Math.max(aWords.length, bWords.size);
 }
 
 function bestTitleSimilarity(node: KitsuSearchNode, hints: MatchHints): number {
