@@ -8,6 +8,11 @@ export const languageCodeValue = t.String({
   maxLength: 35,
   pattern: ".*\\S.*",
 });
+export const providerIdValue = t.String({
+  minLength: 1,
+  maxLength: 512,
+  pattern: ".*\\S.*",
+});
 
 export const providerEnum = t.Union([
   t.Literal("anilist"),
