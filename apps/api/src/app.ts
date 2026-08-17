@@ -2,6 +2,7 @@ import { Elysia } from "elysia";
 import { cors } from "@elysia/cors";
 
 import { authorizeAdminWrite } from "./lib/admin-auth";
+import { enforceMappingWriteInvariants } from "./lib/mapping-write-invariants";
 import { animeRoutes } from "./modules/anime/anime.routes";
 import { episodeRoutes } from "./modules/episodes/episodes.routes";
 import { healthRoutes } from "./modules/health/health.routes";
@@ -38,6 +39,17 @@ export const app = new Elysia()
       set.headers["WWW-Authenticate"] = 'Bearer realm="AniCore Admin"';
     }
     return { error: auth.error };
+  })
+  .onBeforeHandle({ as: "global" }, async ({ request, body, set }) => {
+    const result = await enforceMappingWriteInvariants({
+      method: request.method,
+      pathname: new URL(request.url).pathname,
+      body,
+    });
+    if (result.ok) return;
+
+    set.status = result.status;
+    return { error: result.error };
   })
   .use(
     cors({
