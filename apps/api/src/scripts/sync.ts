@@ -47,6 +47,10 @@ import {
 	syncDubStatusForAnime,
 	syncSubStatusForAnime,
 } from "./sync-audio-status";
+import {
+	advanceSyncCheckpoint,
+	createSyncCheckpointState,
+} from "../lib/sync-progress";
 
 // ── CLI flags ─────────────────────────────────────────────────────────────────
 
@@ -755,6 +759,7 @@ async function main(): Promise<void> {
 
 	const engine = new SyncEngine(PLUGINS);
 	let processedSinceCheckpoint = 0;
+	let checkpointState = createSyncCheckpointState();
 
 	const iterateOptions = {
 		ids,
@@ -762,8 +767,7 @@ async function main(): Promise<void> {
 		endIndex,
 		label: "Sync",
 		onAfterEach: async ({ stats: s, index }: { stats: SyncStats; index: number }) => {
-			progress.lastIndex = index + 1;
-			progress.stats = s;
+			checkpointState = advanceSyncCheckpoint(progress, s, index, checkpointState);
 			monitor?.update({ stats: formatMonitorStats(s), currentIndex: index });
 			const checkpointEvery =
 				activeRuntimeConfig?.checkpointEvery ??
@@ -831,17 +835,27 @@ async function main(): Promise<void> {
 
 	await saveProgress(progress);
 
+	const incompleteMessage =
+		stats.failed > 0
+			? `Sync incomplete — ${stats.failed.toLocaleString()} ID${stats.failed === 1 ? "" : "s"} failed; retry will resume from index ${progress.lastIndex}`
+			: null;
+
 	log.divider();
-	log.success(
-		stopRequested
-			? "Sync stopped by monitor request"
-			: `Sync complete — ${remaining.toLocaleString()} IDs processed`,
-	);
+	if (stopRequested) {
+		log.warn("Sync stopped by monitor request");
+	} else if (incompleteMessage) {
+		log.error(incompleteMessage);
+	} else {
+		log.success(`Sync complete — ${remaining.toLocaleString()} IDs processed`);
+	}
 	log.info(`  Created  : ${stats.created.toLocaleString()}`);
 	log.info(`  Updated  : ${stats.updated.toLocaleString()}`);
 	log.info(`  Failed   : ${stats.failed.toLocaleString()}`);
+
 	if (stopRequested) {
 		monitor?.stop(formatMonitorStats(stats));
+	} else if (incompleteMessage) {
+		monitor?.fail(incompleteMessage);
 	} else {
 		monitor?.complete(formatMonitorStats(stats));
 	}
@@ -856,6 +870,10 @@ async function main(): Promise<void> {
 	}
 
 	log.divider();
+
+	if (incompleteMessage) {
+		throw new Error(incompleteMessage);
+	}
 }
 
 let syncLease: SyncLease | null = null;
