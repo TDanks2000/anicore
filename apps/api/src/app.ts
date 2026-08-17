@@ -3,6 +3,7 @@ import { cors } from "@elysia/cors";
 
 import { authorizeAdminWrite } from "./lib/admin-auth";
 import { enforceMappingWriteInvariants } from "./lib/mapping-write-invariants";
+import { handlePublicAnimeRead } from "./lib/public-anime-read";
 import { animeRoutes } from "./modules/anime/anime.routes";
 import { episodeRoutes } from "./modules/episodes/episodes.routes";
 import { healthRoutes } from "./modules/health/health.routes";
@@ -26,19 +27,26 @@ export const app = new Elysia()
     set.status = 500;
     return { error: "Internal server error" };
   })
-  .onBeforeHandle({ as: "global" }, ({ request, headers, set }) => {
+  .onBeforeHandle({ as: "global" }, async ({ request, headers, set }) => {
     const auth = authorizeAdminWrite({
       method: request.method,
       pathname: new URL(request.url).pathname,
       headers,
     });
-    if (auth.ok) return;
-
-    set.status = auth.status;
-    if (auth.status === 401) {
-      set.headers["WWW-Authenticate"] = 'Bearer realm="AniCore Admin"';
+    if (!auth.ok) {
+      set.status = auth.status;
+      if (auth.status === 401) {
+        set.headers["WWW-Authenticate"] = 'Bearer realm="AniCore Admin"';
+      }
+      return { error: auth.error };
     }
-    return { error: auth.error };
+
+    const publicAnimeRead = await handlePublicAnimeRead({
+      method: request.method,
+      requestUrl: request.url,
+      headers,
+    });
+    if (publicAnimeRead.handled) return publicAnimeRead.value;
   })
   .onBeforeHandle({ as: "global" }, async ({ request, body, set }) => {
     const result = await enforceMappingWriteInvariants({
