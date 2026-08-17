@@ -20,6 +20,7 @@ const IDS_URLS = [
   "https://raw.githubusercontent.com/TDanks2000/anilistIds/main/anime_ids.txt",
 ] as const;
 const IDS_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+export const UNMATCHED_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 function ensureCacheDir(): void {
   mkdirSync(CACHE_DIR, { recursive: true });
@@ -150,23 +151,71 @@ function unmatchedPath(provider: string): string {
   return `${CACHE_DIR}/${provider}_unmatched.txt`;
 }
 
-export function loadUnmatched(provider: string): Set<number> {
-  const path = unmatchedPath(provider);
-  if (!existsSync(path)) return new Set();
-  const text = readFileSync(path, "utf-8");
-  return new Set(
-    text
-      .split("\n")
-      .map((l) => l.trim())
-      .filter(Boolean)
-      .map(Number)
-      .filter((n) => !isNaN(n)),
-  );
+interface UnmatchedCacheEntry {
+  id: number;
+  recordedAt: number;
 }
 
-export function appendUnmatched(provider: string, id: number): void {
+function parseUnmatchedEntry(line: string): UnmatchedCacheEntry | null {
+  const [idText, recordedAtText] = line.trim().split(/\s+/, 2);
+  const id = Number(idText);
+  const recordedAt = Number(recordedAtText);
+  if (!Number.isInteger(id) || id <= 0) return null;
+  if (!Number.isFinite(recordedAt) || recordedAt <= 0) return null;
+  return { id, recordedAt };
+}
+
+function serializeUnmatchedEntries(entries: UnmatchedCacheEntry[]): string {
+  return entries.length
+    ? `${entries.map((entry) => `${entry.id}\t${entry.recordedAt}`).join("\n")}\n`
+    : "";
+}
+
+export function loadUnmatched(provider: string, nowMs = Date.now()): Set<number> {
+  const path = unmatchedPath(provider);
+  if (!existsSync(path)) return new Set();
+
+  const latestById = new Map<number, UnmatchedCacheEntry>();
+  for (const line of readFileSync(path, "utf-8").split("\n")) {
+    if (!line.trim()) continue;
+    const entry = parseUnmatchedEntry(line);
+    if (!entry) continue;
+    const previous = latestById.get(entry.id);
+    if (!previous || entry.recordedAt > previous.recordedAt) {
+      latestById.set(entry.id, entry);
+    }
+  }
+
+  const activeEntries = [...latestById.values()]
+    .filter(
+      (entry) =>
+        entry.recordedAt <= nowMs && nowMs - entry.recordedAt <= UNMATCHED_CACHE_TTL_MS,
+    )
+    .sort((a, b) => a.id - b.id);
+
+  // Compact the cache while loading so expired entries and the old bare-ID format
+  // do not accumulate forever. Legacy entries intentionally expire on upgrade and
+  // are retried once under the timestamped cache format.
   ensureCacheDir();
-  appendFileSync(unmatchedPath(provider), `${id}\n`);
+  writeFileSync(path, serializeUnmatchedEntries(activeEntries));
+
+  return new Set(activeEntries.map((entry) => entry.id));
+}
+
+export function appendUnmatched(
+  provider: string,
+  id: number,
+  recordedAt = Date.now(),
+): void {
+  if (!Number.isInteger(id) || id <= 0) {
+    throw new Error(`Invalid unmatched AniList ID: ${id}`);
+  }
+  if (!Number.isFinite(recordedAt) || recordedAt <= 0) {
+    throw new Error(`Invalid unmatched timestamp: ${recordedAt}`);
+  }
+
+  ensureCacheDir();
+  appendFileSync(unmatchedPath(provider), `${id}\t${recordedAt}\n`);
 }
 
 export function clearUnmatched(provider: string): void {
