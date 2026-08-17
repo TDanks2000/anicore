@@ -1,9 +1,8 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 import { db } from "@anicore/db";
 import { syncAnimeLanguageEvidenceFromEpisodeStatuses } from "@anicore/db/language-status";
 import {
-  anime,
   animeMappings,
   episodeLanguageStatus,
   episodes,
@@ -34,38 +33,55 @@ export interface DubSyncResult {
 const RATE_MS = 250;
 export const sleep = (ms: number) => Bun.sleep(ms);
 
-// Word-overlap title similarity in [0, 1]
-function titleSimilarity(a: string, b: string): number {
-  const norm = (s: string) =>
-    s.toLowerCase().replace(/[^a-z0-9\s]/g, " ").trim();
-  const aWords = norm(a).split(/\s+/).filter(Boolean);
-  const bWords = new Set(norm(b).split(/\s+/).filter(Boolean));
-  if (!aWords.length || !bWords.size) return 0;
-  return aWords.filter((w) => bWords.has(w)).length /
-    Math.max(aWords.length, bWords.size);
+function normalizeTitle(value: string): string {
+  return value
+    .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
-// Attempt to find the anime-schedule.net entry for an anime.
-// Fast path: slug matches their route and AniList ID confirms it.
-// Slow path: title search → fetch top matches → verify via AniList ID.
+function titleSimilarity(a: string, b: string): number {
+  const aWords = normalizeTitle(a).split(/\s+/).filter(Boolean);
+  const bWords = new Set(normalizeTitle(b).split(/\s+/).filter(Boolean));
+  if (!aWords.length || !bWords.size) return 0;
+  return (
+    aWords.filter((word) => bWords.has(word)).length /
+    Math.max(aWords.length, bWords.size)
+  );
+}
+
+export function isAnimeScheduleEntryForAnilist(
+  entry: AnimeScheduleEntry | null,
+  anilistId: string,
+): entry is AnimeScheduleEntry {
+  return Boolean(
+    entry?.websites && parseAnilistId(entry.websites.aniList) === anilistId,
+  );
+}
+
+// Attempt to find the anime-schedule.net entry for an anime. Every accepted
+// route is verified using AnimeSchedule's AniList website link; title scoring is
+// only used to decide which search results to verify first.
 async function findEntry(opts: {
   anilistId: string;
   slug: string | null;
   titleRomaji: string;
   titleEnglish: string | null;
 }): Promise<AnimeScheduleEntry | null> {
-  // Fast path: direct slug lookup
+  const checkedRoutes = new Set<string>();
+
   if (opts.slug) {
     await sleep(RATE_MS);
     const entry = await fetchByRoute(opts.slug);
-    if (entry?.websites) {
-      if (parseAnilistId(entry.websites.aniList) === opts.anilistId) {
-        return entry;
-      }
+    checkedRoutes.add(opts.slug);
+    if (isAnimeScheduleEntryForAnilist(entry, opts.anilistId)) {
+      return entry;
     }
   }
 
-  // Slow path: search by title, verify each result's AniList ID
   const searchTitles = [opts.titleRomaji];
   if (opts.titleEnglish && opts.titleEnglish !== opts.titleRomaji) {
     searchTitles.push(opts.titleEnglish);
@@ -76,31 +92,34 @@ async function findEntry(opts: {
     const results = await searchByTitle(title);
     if (!results.length) continue;
 
-    // Sort by title similarity, take top 3 to verify
     const ranked = results
-      .map((r) => ({ r, score: titleSimilarity(r.title, title) }))
+      .map((result) => ({
+        result,
+        score: titleSimilarity(result.title, title),
+      }))
       .sort((a, b) => b.score - a.score)
-      .slice(0, 3);
+      .slice(0, 5);
 
-    for (const { r } of ranked) {
+    for (const { result } of ranked) {
+      if (checkedRoutes.has(result.route)) continue;
+      checkedRoutes.add(result.route);
+
       await sleep(RATE_MS);
-      const full = await fetchByRoute(r.route);
-      if (!full?.websites) continue;
-      if (parseAnilistId(full.websites.aniList) === opts.anilistId) {
+      const full = await fetchByRoute(result.route);
+      if (isAnimeScheduleEntryForAnilist(full, opts.anilistId)) {
         return full;
       }
     }
 
-    // Found search results but none verified — don't bother with English title
-    if (results.length > 0) break;
+    // Do not stop just because the Romaji search returned unverified results.
+    // The English title can rank the same verified entry very differently.
   }
 
   return null;
 }
 
-// Store the animeschedule route in animeMappings so future runs skip the search
 async function storeRoute(animeId: number, route: string): Promise<void> {
-  await db
+  const [mapping] = await db
     .insert(animeMappings)
     .values({
       animeId,
@@ -108,11 +127,73 @@ async function storeRoute(animeId: number, route: string): Promise<void> {
       providerId: route,
       providerSlug: route,
       providerUrl: `https://animeschedule.net/anime/${route}`,
-      confidence: 95,
+      confidence: 100,
       source: "api",
       isPrimary: false,
     })
-    .onConflictDoNothing();
+    .onConflictDoUpdate({
+      target: [animeMappings.provider, animeMappings.providerId],
+      set: {
+        providerSlug: route,
+        providerUrl: `https://animeschedule.net/anime/${route}`,
+        confidence: sql`greatest(${animeMappings.confidence}, 100)`,
+        source: sql`case
+          when ${animeMappings.source} in ('manual', 'import', 'system')
+            then ${animeMappings.source}
+          else 'api'
+        end`,
+        isPrimary: animeMappings.isPrimary,
+        updatedAt: sql`now()`,
+      },
+      setWhere: eq(animeMappings.animeId, animeId),
+    })
+    .returning({ animeId: animeMappings.animeId });
+
+  if (!mapping) {
+    throw new Error(
+      `AnimeSchedule route ${route} already belongs to another anime`,
+    );
+  }
+}
+
+async function loadVerifiedCachedEntry(opts: {
+  animeId: number;
+  anilistId: string;
+}): Promise<AnimeScheduleEntry | null> {
+  const [existing] = await db
+    .select({
+      id: animeMappings.id,
+      providerId: animeMappings.providerId,
+      source: animeMappings.source,
+    })
+    .from(animeMappings)
+    .where(
+      and(
+        eq(animeMappings.animeId, opts.animeId),
+        eq(animeMappings.provider, "animeschedule"),
+      ),
+    )
+    .limit(1);
+
+  if (!existing) return null;
+
+  await sleep(RATE_MS);
+  const entry = await fetchByRoute(existing.providerId);
+  if (isAnimeScheduleEntryForAnilist(entry, opts.anilistId)) {
+    return entry;
+  }
+
+  if (["manual", "import", "system"].includes(existing.source)) {
+    throw new Error(
+      `Stored AnimeSchedule mapping ${existing.providerId} does not verify against AniList ${opts.anilistId}; refusing to override ${existing.source} mapping`,
+    );
+  }
+
+  // Automatically-created cached mappings are safe to discard when the
+  // provider no longer verifies them. This prevents a stale route from being
+  // trusted forever and lets the verified search path repair it immediately.
+  await db.delete(animeMappings).where(eq(animeMappings.id, existing.id));
+  return null;
 }
 
 // Upsert dub status rows for every episode of an anime in 500-row chunks.
@@ -136,9 +217,9 @@ async function upsertDubStatus(
     await db
       .insert(episodeLanguageStatus)
       .values(
-        chunk.map((ep) => ({
+        chunk.map((episode) => ({
           animeId,
-          episodeNumber: ep.number,
+          episodeNumber: episode.number,
           languageCode: "en",
           mediaType: "audio" as const,
           status: dubStatus,
@@ -182,29 +263,27 @@ export async function syncDubStatus(opts: {
   titleRomaji: string;
   titleEnglish: string | null;
 }): Promise<DubSyncResult> {
-  // Check if we already have a cached animeschedule route
-  const [existing] = await db
-    .select({ providerId: animeMappings.providerId })
-    .from(animeMappings)
-    .where(
-      and(
-        eq(animeMappings.animeId, opts.animeId),
-        eq(animeMappings.provider, "animeschedule"),
-      ),
-    )
-    .limit(1);
+  let entry = await loadVerifiedCachedEntry({
+    animeId: opts.animeId,
+    anilistId: opts.anilistId,
+  });
 
-  let entry: AnimeScheduleEntry | null = null;
-
-  if (existing) {
-    await sleep(RATE_MS);
-    entry = await fetchByRoute(existing.providerId);
-  } else {
+  if (!entry) {
     entry = await findEntry(opts);
-    if (entry) await storeRoute(opts.animeId, entry.route);
+    if (entry) {
+      await storeRoute(opts.animeId, entry.route);
+    }
   }
 
   if (!entry) return { status: "unmatched" };
+
+  // This invariant is intentionally checked again immediately before evidence
+  // is written, so future refactors cannot accidentally bypass verification.
+  if (!isAnimeScheduleEntryForAnilist(entry, opts.anilistId)) {
+    throw new Error(
+      `AnimeSchedule route ${entry.route} does not match AniList ${opts.anilistId}`,
+    );
+  }
 
   const dubbed = hasDub(entry);
   const finished = isFinished(entry);
