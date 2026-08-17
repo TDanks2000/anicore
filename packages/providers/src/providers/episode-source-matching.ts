@@ -1,4 +1,8 @@
 import { hasConflictingExplicitEpisodeNumbers } from "./episode-title-scoring";
+import {
+  normalizeComparableTitle,
+  titleSimilarity,
+} from "./title-similarity";
 
 export const MIN_SOURCE_TITLE_SIMILARITY = 0.5;
 export const SOURCE_MATCH_AMBIGUITY_MARGIN = 10;
@@ -23,24 +27,10 @@ export interface ScoredSourceCandidate<T> {
   score: number;
 }
 
-export function normalizeSourceTitle(value: string): string {
-  return value
-    .normalize("NFKD")
-    .replace(/\p{M}/gu, "")
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s]/gu, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-export function sourceTitleSimilarity(a: string, b: string): number {
-  const aWords = normalizeSourceTitle(a).split(/\s+/).filter(Boolean);
-  const bWords = new Set(normalizeSourceTitle(b).split(/\s+/).filter(Boolean));
-  if (!aWords.length || !bWords.size) return 0;
-
-  const overlap = aWords.filter((word) => bWords.has(word)).length;
-  return overlap / Math.max(aWords.length, bWords.size);
-}
+// Kept as named exports for compatibility with the existing provider tests and
+// callers, but both now use the same identity-matching implementation as Kitsu.
+export const normalizeSourceTitle = normalizeComparableTitle;
+export const sourceTitleSimilarity = titleSimilarity;
 
 function earliestEpisodeYear(titles: EpisodeSourceTitle[]): number | null {
   const dates = titles
