@@ -278,13 +278,17 @@ export async function syncKitsuEpisodes(
       .onConflictDoUpdate({
         target: [episodes.animeId, episodes.number, episodes.kind],
         set: {
-          title:         sql`coalesce(excluded.title, episodes.title)`,
-          titleRomaji:   sql`coalesce(excluded.title_romaji, episodes.title_romaji)`,
-          titleEnglish:  sql`coalesce(excluded.title_english, episodes.title_english)`,
-          synopsis:      sql`coalesce(excluded.synopsis, episodes.synopsis)`,
-          airDate:       sql`coalesce(excluded.air_date, episodes.air_date)`,
-          thumbnail:     sql`coalesce(excluded.thumbnail, episodes.thumbnail)`,
-          lengthMinutes: sql`coalesce(excluded.length_minutes, episodes.length_minutes)`,
+          // Kitsu episode data is enrichment, not field-level authority. AniCore
+          // does not track per-field provenance yet, so an existing non-null
+          // value may be a manual correction or stronger provider result. Fill
+          // only gaps rather than clobbering established metadata on every sync.
+          title:         sql`coalesce(episodes.title, excluded.title)`,
+          titleRomaji:   sql`coalesce(episodes.title_romaji, excluded.title_romaji)`,
+          titleEnglish:  sql`coalesce(episodes.title_english, excluded.title_english)`,
+          synopsis:      sql`coalesce(episodes.synopsis, excluded.synopsis)`,
+          airDate:       sql`coalesce(episodes.air_date, excluded.air_date)`,
+          thumbnail:     sql`coalesce(episodes.thumbnail, excluded.thumbnail)`,
+          lengthMinutes: sql`coalesce(episodes.length_minutes, excluded.length_minutes)`,
           updatedAt:     sql`now()`,
         },
       })
