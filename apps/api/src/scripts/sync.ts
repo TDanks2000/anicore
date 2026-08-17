@@ -47,6 +47,7 @@ import {
 	syncDubStatusForAnime,
 	syncSubStatusForAnime,
 } from "./sync-audio-status";
+import { parseIntegerFlag } from "../lib/sync-cli";
 import {
 	advanceSyncCheckpoint,
 	createSyncCheckpointState,
@@ -59,8 +60,6 @@ const rawArgs = process.argv.slice(2);
 installProxyFetch();
 
 const flag = (name: string) => rawArgs.includes(name);
-const flagValue = (prefix: string) =>
-	rawArgs.find((a) => a.startsWith(prefix))?.slice(prefix.length);
 
 const RESET_ALL = flag("--reset=all");
 const RESET_PROVIDERS = rawArgs
@@ -70,23 +69,19 @@ const REFRESH_IDS = flag("--refresh-ids");
 const VERIFY = flag("--verify");
 const DRY_RUN = flag("--dry-run");
 const MONITOR_ENABLED = flag("--monitor") || process.env.ANICORE_SYNC_MONITOR === "1";
-const FROM_ID = flagValue("--from=");
-const FROM_INDEX = flagValue("--from-index=");
-const LIMIT = flagValue("--limit=");
+const FROM_ID = readIntegerFlag("--from=", 1);
+const FROM_INDEX = readIntegerFlag("--from-index=", 0);
+const LIMIT = readIntegerFlag("--limit=", 1);
 const DEFAULT_PARALLEL = 4;
-const PARALLEL = parsePositiveIntegerFlag("--parallel=", DEFAULT_PARALLEL);
+const PARALLEL = readIntegerFlag("--parallel=", 1) ?? DEFAULT_PARALLEL;
 
-function parsePositiveIntegerFlag(prefix: string, fallback: number): number {
-	const value = flagValue(prefix);
-	if (value === undefined) return fallback;
-
-	const parsed = Number(value);
-	if (!Number.isInteger(parsed) || parsed < 1) {
-		log.error(`${prefix.slice(0, -1)} must be a positive integer`);
+function readIntegerFlag(prefix: string, minimum: number): number | undefined {
+	try {
+		return parseIntegerFlag(rawArgs, prefix, minimum);
+	} catch (error) {
+		log.error(error instanceof Error ? error.message : String(error));
 		process.exit(1);
 	}
-
-	return parsed;
 }
 
 // ── Registered plugins ────────────────────────────────────────────────────────
@@ -313,7 +308,7 @@ async function runProviderReset(
 			matched++;
 		} else if (result.status === "unmatched") {
 			unmatched++;
-			appendUnmatched(providerName, parseInt(row.anilistId));
+			appendUnmatched(providerName, Number(row.anilistId));
 		} else {
 			errors++;
 			log.error(`AniList ${row.anilistId}: ${result.message}`);
@@ -387,20 +382,20 @@ async function runDryRun(): Promise<void> {
 	log.info(`Loaded ${ids.length.toLocaleString()} AniList IDs`);
 
 	let startIndex = 0;
-	if (FROM_ID) {
-		const targetId = parseInt(FROM_ID);
+	if (FROM_ID !== undefined) {
+		const targetId = FROM_ID;
 		const idx = ids.indexOf(targetId);
 		if (idx === -1) {
 			throw new Error(`ID ${FROM_ID} not found in the ID list`);
 		}
 		startIndex = idx;
 		log.info(`Starting from ID ${FROM_ID} (index ${idx})`);
-	} else if (FROM_INDEX) {
-		startIndex = parseInt(FROM_INDEX);
+	} else if (FROM_INDEX !== undefined) {
+		startIndex = FROM_INDEX;
 		log.info(`Starting from index ${startIndex}`);
 	}
 
-	const limit = LIMIT ? parseInt(LIMIT) : 5;
+	const limit = LIMIT ?? 5;
 	const endIndex = Math.min(ids.length, startIndex + limit);
 	const count = endIndex - startIndex;
 
@@ -682,8 +677,8 @@ async function main(): Promise<void> {
 	let progress = await loadProgress();
 	let startIndex = progress.lastIndex;
 
-	if (FROM_ID) {
-		const targetId = parseInt(FROM_ID);
+	if (FROM_ID !== undefined) {
+		const targetId = FROM_ID;
 		const idx = ids.indexOf(targetId);
 		if (idx === -1) {
 			throw new Error(`ID ${FROM_ID} not found in the ID list`);
@@ -691,8 +686,8 @@ async function main(): Promise<void> {
 		startIndex = idx;
 		progress = { ...progress, lastIndex: idx, stats: { created: 0, updated: 0, failed: 0 } };
 		log.info(`Starting from ID ${FROM_ID} (index ${idx})`);
-	} else if (FROM_INDEX) {
-		startIndex = parseInt(FROM_INDEX);
+	} else if (FROM_INDEX !== undefined) {
+		startIndex = FROM_INDEX;
 		progress = { ...progress, lastIndex: startIndex, stats: { created: 0, updated: 0, failed: 0 } };
 		log.info(`Starting from index ${startIndex}`);
 	} else if (startIndex > 0) {
@@ -701,10 +696,10 @@ async function main(): Promise<void> {
 		);
 	}
 
-	const maxCount = LIMIT ? parseInt(LIMIT) : Infinity;
+	const maxCount = LIMIT ?? Infinity;
 	const endIndex = Math.min(
 		ids.length,
-		startIndex + (isFinite(maxCount) ? maxCount : ids.length),
+		startIndex + (Number.isFinite(maxCount) ? maxCount : ids.length),
 	);
 	const remaining = endIndex - startIndex;
 
