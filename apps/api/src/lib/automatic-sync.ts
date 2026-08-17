@@ -151,8 +151,7 @@ export class AutomaticSyncScheduler {
 			const intervalMs = config.autoSyncIntervalMinutes * MINUTE_MS;
 			const retryMs = Math.min(intervalMs, FAILURE_RETRY_MINUTES * MINUTE_MS);
 			const completedStatusAnchor =
-				status?.mode === "sync" &&
-				(status.state === "completed" || status.state === "stopped")
+				status?.mode === "sync" && status.state === "completed"
 					? statusAnchor
 					: null;
 			const successfulAnchor = Math.max(
