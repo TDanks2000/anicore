@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import type { KitsuSearchNode } from "./client";
 import {
+  hasKitsuStructuralConflict,
   isAuthoritativeAnilistMatch,
   scoreKitsuCandidate,
   selectKitsuMatch,
@@ -71,6 +72,15 @@ describe("Kitsu authoritative matching", () => {
     expect(scoreKitsuCandidate(node, hints)).toBe(1_000);
   });
 
+  test("keeps a direct AniList mapping authoritative even when provider metadata differs", () => {
+    const node = candidate("8");
+    node.startDate = "2010-01-01";
+    node.episodeCount = 1;
+
+    expect(hasKitsuStructuralConflict(node, hints)).toBe(true);
+    expect(scoreKitsuCandidate(node, hints)).toBe(1_000);
+  });
+
   test("rejects a candidate mapped to a different AniList anime", () => {
     const node = candidate("1123");
 
@@ -102,6 +112,33 @@ describe("Kitsu fuzzy matching", () => {
     };
 
     expect(scoreKitsuCandidate(node, hints)).toBe(-1);
+  });
+
+  test("rejects an exact-title candidate from a clearly different year", () => {
+    const node = candidate("8");
+    node.mappings = { nodes: [], pageInfo: { hasNextPage: false } };
+    node.startDate = "2010-01-01";
+
+    expect(hasKitsuStructuralConflict(node, hints)).toBe(true);
+    expect(scoreKitsuCandidate(node, hints)).toBe(-1);
+  });
+
+  test("rejects an exact-title candidate with a grossly incompatible episode count", () => {
+    const node = candidate("8");
+    node.mappings = { nodes: [], pageInfo: { hasNextPage: false } };
+    node.episodeCount = 1;
+
+    expect(hasKitsuStructuralConflict(node, hints)).toBe(true);
+    expect(scoreKitsuCandidate(node, hints)).toBe(-1);
+  });
+
+  test("tolerates missing structural metadata instead of treating it as conflict", () => {
+    const node = candidate("8");
+    node.mappings = { nodes: [], pageInfo: { hasNextPage: false } };
+    node.startDate = null;
+    node.episodeCount = null;
+
+    expect(hasKitsuStructuralConflict(node, hints)).toBe(false);
   });
 
   test("rejects ambiguous fuzzy candidates instead of choosing search order", () => {
