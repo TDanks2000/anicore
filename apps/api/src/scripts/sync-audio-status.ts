@@ -1,24 +1,30 @@
 import { and, eq, isNotNull, lte, sql } from "drizzle-orm";
 
-import { closeDb, db } from "@anicore/db";
+import {
+  closeDb,
+  db,
+  tryAcquireSyncLease,
+  type SyncLease,
+} from "@anicore/db";
 import { syncAnimeLanguageEvidenceFromEpisodeStatuses } from "@anicore/db/language-status";
 import { anime, animeMappings, episodeLanguageStatus, episodes } from "@anicore/db/schema";
 import { log } from "@anicore/providers/lib/logger";
 import { installProxyFetch } from "@anicore/providers/lib/proxy";
 import { syncDubStatus, sleep } from "@anicore/providers/animeschedule/sync";
 import { derivedAirdateLanguageAssertions } from "../lib/derived-airdate-language";
+import { parseIntegerFlag } from "../lib/sync-cli";
 
 const args      = process.argv.slice(2);
 const SUB_ONLY  = args.includes("--sub-only");
 const DUB_ONLY  = args.includes("--dub-only");
-const FROM_INDEX = parseInt(
-  args.find((a) => a.startsWith("--from="))?.slice(7) ?? "0",
-  10,
-);
 
 const RUN_SUB = !DUB_ONLY;
 const RUN_DUB = !SUB_ONLY;
 const DERIVED_AIRDATE_PROVIDER = "derived-airdate";
+
+function readFromIndex(): number {
+  return parseIntegerFlag(args, "--from=", 0) ?? 0;
+}
 
 async function recalculateDerivedAirdateEvidence(animeId: number): Promise<void> {
   // Recalculate both shapes so upgrading from the old heuristic also removes
@@ -218,7 +224,7 @@ export async function runSubPass(): Promise<void> {
 
 // ── Pass 2: Dub ───────────────────────────────────────────────────────────────
 
-export async function runDubPass(): Promise<void> {
+export async function runDubPass(fromIndex = readFromIndex()): Promise<void> {
   log.divider();
   log.info("Dub pass — fetching dub status from anime-schedule.net…");
 
@@ -235,7 +241,7 @@ export async function runDubPass(): Promise<void> {
     .where(eq(animeMappings.provider, "anilist"));
 
   const total = rows.length;
-  log.info(`${total.toLocaleString()} anime to process (starting at index ${FROM_INDEX})`);
+  log.info(`${total.toLocaleString()} anime to process (starting at index ${fromIndex})`);
 
   let fullyDubbed = 0;
   let noDub       = 0;
@@ -244,9 +250,9 @@ export async function runDubPass(): Promise<void> {
   let errors      = 0;
   let noEpisodes  = 0;
 
-  const bar = log.progress(total - FROM_INDEX, "Dub");
+  const bar = log.progress(Math.max(0, total - fromIndex), "Dub");
 
-  for (let i = FROM_INDEX; i < rows.length; i++) {
+  for (let i = fromIndex; i < rows.length; i++) {
     const row = rows[i]!;
 
     bar.setStage(row.titleEnglish ?? row.titleRomaji ?? String(row.anilistId));
@@ -291,14 +297,36 @@ export async function runDubPass(): Promise<void> {
 
 if (import.meta.main) {
   installProxyFetch();
+  let syncLease: SyncLease | null = null;
+  let syncSucceeded = false;
   try {
+    syncLease = await tryAcquireSyncLease();
+    if (!syncLease) {
+      throw new Error(
+        "Another AniCore sync process already holds the database lease",
+      );
+    }
+    log.info(JSON.stringify({ event: "sync.audio.lease.acquired" }));
+
     if (RUN_SUB) await runSubPass();
     if (RUN_DUB) await runDubPass();
+    syncSucceeded = true;
     log.success("Done.");
-    await closeDb();
   } catch (err) {
     log.error(`Fatal: ${err instanceof Error ? err.message : String(err)}`);
+    process.exitCode = 1;
+  } finally {
+    if (syncLease) {
+      try {
+        await syncLease.release(syncSucceeded);
+        log.info(JSON.stringify({ event: "sync.audio.lease.released" }));
+      } catch (error) {
+        log.error(
+          `Failed to release audio sync lease: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        process.exitCode = 1;
+      }
+    }
     await closeDb().catch(() => undefined);
-    process.exit(1);
   }
 }
