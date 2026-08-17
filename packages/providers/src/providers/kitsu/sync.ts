@@ -18,10 +18,19 @@ export type KitsuSyncResult =
   | { matched: true; kitsuId: string; kitsuSlug: string | null; data: ProviderAnimeData; episodeCount: number }
   | { matched: false };
 
+const EPISODE_CHUNK = 100;
+
+export function kitsuEpisodeProviderIdsForRepair(
+  mappedEpisodes: MappedEpisode[],
+): string[] {
+  return [...new Set(mappedEpisodes.map((episode) => episode.kitsuId))];
+}
+
 async function repairAuthoritativeKitsuMapping(
   animeId: number,
   kitsuData: ProviderAnimeData,
   isAuthoritative: boolean,
+  kitsuEpisodeProviderIds: string[],
 ): Promise<number | null> {
   return db.transaction(async (tx) => {
     const [existing] = await tx
@@ -59,18 +68,25 @@ async function repairAuthoritativeKitsuMapping(
       .returning({ id: animeMappings.id });
     if (!updated) return null;
 
-    const oldEpisodeIds = tx
-      .select({ id: episodes.id })
-      .from(episodes)
-      .where(eq(episodes.animeId, existing.animeId));
-    await tx
-      .delete(episodeMappings)
-      .where(
-        and(
-          eq(episodeMappings.provider, "kitsu"),
-          inArray(episodeMappings.episodeId, oldEpisodeIds),
-        ),
-      );
+    if (kitsuEpisodeProviderIds.length > 0) {
+      const oldEpisodeIds = tx
+        .select({ id: episodes.id })
+        .from(episodes)
+        .where(eq(episodes.animeId, existing.animeId));
+
+      for (let i = 0; i < kitsuEpisodeProviderIds.length; i += EPISODE_CHUNK) {
+        const providerIds = kitsuEpisodeProviderIds.slice(i, i + EPISODE_CHUNK);
+        await tx
+          .delete(episodeMappings)
+          .where(
+            and(
+              eq(episodeMappings.provider, "kitsu"),
+              inArray(episodeMappings.providerId, providerIds),
+              inArray(episodeMappings.episodeId, oldEpisodeIds),
+            ),
+          );
+      }
+    }
 
     return existing.animeId;
   });
@@ -80,6 +96,7 @@ async function insertKitsuMapping(
   animeId: number,
   kitsuData: ProviderAnimeData,
   isAuthoritative: boolean,
+  kitsuEpisodeProviderIds: string[],
 ): Promise<void> {
   const [mapping] = await db
     .insert(animeMappings)
@@ -116,6 +133,7 @@ async function insertKitsuMapping(
       animeId,
       kitsuData,
       isAuthoritative,
+      kitsuEpisodeProviderIds,
     );
 
     if (repairedFromAnimeId !== null) {
@@ -157,14 +175,24 @@ export async function syncKitsuFromAnilist(
   const kitsuNode = await findKitsuMatch(hints);
   if (!kitsuNode) return { matched: false };
 
+  // Fetch this exact Kitsu series' episodes before a possible mapping repair so
+  // stale cleanup can target only episode mappings owned by this Kitsu series.
+  const mappedEpisodes = await fetchKitsuEpisodeData(kitsuNode.id);
+  const kitsuEpisodeProviderIds = kitsuEpisodeProviderIdsForRepair(mappedEpisodes);
+
   const kitsuData = mapKitsuAnime(kitsuNode);
   await insertKitsuMapping(
     existingAnilist.animeId,
     kitsuData,
     isAuthoritativeAnilistMatch(kitsuNode, anilistId),
+    kitsuEpisodeProviderIds,
   );
 
-  const episodeCount = await syncKitsuEpisodes(existingAnilist.animeId, kitsuNode.id);
+  const episodeCount = await syncKitsuEpisodes(
+    existingAnilist.animeId,
+    kitsuNode.id,
+    mappedEpisodes,
+  );
 
   return {
     matched: true,
@@ -184,14 +212,13 @@ export async function fetchKitsuEpisodeData(
   return mapKitsuEpisodes(nodes);
 }
 
-const EPISODE_CHUNK = 100;
-
 // Upsert episodes + episode_mappings for a Kitsu anime. Returns count written.
 export async function syncKitsuEpisodes(
   animeId: number,
   kitsuAnimeId: string,
+  prefetchedEpisodes?: MappedEpisode[],
 ): Promise<number> {
-  const mapped = await fetchKitsuEpisodeData(kitsuAnimeId);
+  const mapped = prefetchedEpisodes ?? await fetchKitsuEpisodeData(kitsuAnimeId);
   if (!mapped.length) return 0;
 
   const idByNumber = new Map<number, number>();
