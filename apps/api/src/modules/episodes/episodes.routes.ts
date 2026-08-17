@@ -212,7 +212,6 @@ export const episodeRoutes = new Elysia({ prefix: "/episodes" })
 							locale: t.Optional(languageCodeValue),
 							status: t.Optional(audioStatusEnum),
 							sourceProvider: t.Optional(t.String()),
-							notes: t.Optional(t.String()),
 						}),
 					),
 				),
@@ -359,7 +358,6 @@ export const episodeRoutes = new Elysia({ prefix: "/episodes" })
 				locale: t.Optional(languageCodeValue),
 				status: t.Optional(audioStatusEnum),
 				sourceProvider: t.Optional(t.String()),
-				notes: t.Optional(t.String()),
 			}),
 		},
 	);
