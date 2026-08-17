@@ -1,4 +1,3 @@
-import { syncAuthoritativeCrossMappings } from "../authoritative-cross-mappings";
 import { upsertAnimeFromProvider } from "../index";
 import { anilistClient } from "./client";
 import { mapAnilistAnime } from "./mapper";
@@ -42,10 +41,5 @@ export async function syncAnilistAnime(
 ): Promise<{ animeId: number; created: boolean; data: ProviderAnimeData }> {
   const data = await fetchAnilistAnime(id);
   const { animeId, created } = await upsertAnimeFromProvider(data);
-
-  if (data.authoritativeMappings?.length) {
-    await syncAuthoritativeCrossMappings(animeId, data.authoritativeMappings);
-  }
-
   return { animeId, created, data };
 }
