@@ -18,7 +18,20 @@ export type KitsuSyncResult =
   | { matched: true; kitsuId: string; kitsuSlug: string | null; data: ProviderAnimeData; episodeCount: number }
   | { matched: false };
 
+export interface KitsuMappingProvenance {
+  confidence: number;
+  source: "api" | "fuzzy";
+}
+
 const EPISODE_CHUNK = 100;
+
+export function kitsuMappingProvenance(
+  isAuthoritative: boolean,
+): KitsuMappingProvenance {
+  return isAuthoritative
+    ? { confidence: 100, source: "api" }
+    : { confidence: 90, source: "fuzzy" };
+}
 
 export function kitsuEpisodeProviderIdsForRepair(
   mappedEpisodes: MappedEpisode[],
@@ -98,6 +111,7 @@ async function insertKitsuMapping(
   isAuthoritative: boolean,
   kitsuEpisodeProviderIds: string[],
 ): Promise<void> {
+  const provenance = kitsuMappingProvenance(isAuthoritative);
   const [mapping] = await db
     .insert(animeMappings)
     .values({
@@ -106,22 +120,22 @@ async function insertKitsuMapping(
       providerId: kitsuData.providerId,
       providerSlug: kitsuData.providerSlug ?? null,
       providerUrl: kitsuData.providerUrl ?? null,
-      confidence: isAuthoritative ? 100 : 90,
-      source: isAuthoritative ? "api" : "fuzzy",
+      confidence: provenance.confidence,
+      source: provenance.source,
       isPrimary: false,
     })
     .onConflictDoUpdate({
       target: [animeMappings.provider, animeMappings.providerId],
       set: {
-        providerSlug: sql`excluded.provider_slug`,
-        providerUrl: sql`excluded.provider_url`,
+        providerSlug: sql`coalesce(excluded.provider_slug, ${animeMappings.providerSlug})`,
+        providerUrl: sql`coalesce(excluded.provider_url, ${animeMappings.providerUrl})`,
         confidence: sql`greatest(${animeMappings.confidence}, excluded.confidence)`,
         source: sql`case
-          when ${animeMappings.source} in ('manual', 'api', 'system')
+          when ${animeMappings.source} in ('manual', 'api', 'import', 'system')
             then ${animeMappings.source}
           else excluded.source
         end`,
-        isPrimary: sql`excluded.is_primary`,
+        isPrimary: sql`${animeMappings.isPrimary} or excluded.is_primary`,
         updatedAt: sql`now()`,
       },
       setWhere: eq(animeMappings.animeId, animeId),
@@ -154,7 +168,6 @@ export async function syncKitsuFromAnilist(
   anilistId: string,
   hints: MatchHints,
 ): Promise<KitsuSyncResult> {
-  // Resolve which DB anime this AniList ID belongs to
   const [existingAnilist] = await db
     .select({ animeId: animeMappings.animeId })
     .from(animeMappings)
@@ -175,6 +188,9 @@ export async function syncKitsuFromAnilist(
   const kitsuNode = await findKitsuMatch(hints);
   if (!kitsuNode) return { matched: false };
 
+  const isAuthoritative = isAuthoritativeAnilistMatch(kitsuNode, anilistId);
+  const provenance = kitsuMappingProvenance(isAuthoritative);
+
   // Fetch this exact Kitsu series' episodes before a possible mapping repair so
   // stale cleanup can target only episode mappings owned by this Kitsu series.
   const mappedEpisodes = await fetchKitsuEpisodeData(kitsuNode.id);
@@ -184,7 +200,7 @@ export async function syncKitsuFromAnilist(
   await insertKitsuMapping(
     existingAnilist.animeId,
     kitsuData,
-    isAuthoritativeAnilistMatch(kitsuNode, anilistId),
+    isAuthoritative,
     kitsuEpisodeProviderIds,
   );
 
@@ -192,6 +208,7 @@ export async function syncKitsuFromAnilist(
     existingAnilist.animeId,
     kitsuNode.id,
     mappedEpisodes,
+    provenance,
   );
 
   return {
@@ -217,6 +234,7 @@ export async function syncKitsuEpisodes(
   animeId: number,
   kitsuAnimeId: string,
   prefetchedEpisodes?: MappedEpisode[],
+  provenance: KitsuMappingProvenance = { confidence: 100, source: "api" },
 ): Promise<number> {
   const mapped = prefetchedEpisodes ?? await fetchKitsuEpisodeData(kitsuAnimeId);
   if (!mapped.length) return 0;
@@ -273,8 +291,8 @@ export async function syncKitsuEpisodes(
         providerSlug:          null,
         providerUrl:           null,
         providerEpisodeNumber: String(ep.number),
-        confidence:            100,
-        source:                "api" as const,
+        confidence:            provenance.confidence,
+        source:                provenance.source,
       };
     })
     .filter((r): r is NonNullable<typeof r> => r !== null);
@@ -287,12 +305,20 @@ export async function syncKitsuEpisodes(
       .onConflictDoUpdate({
         target: [episodeMappings.provider, episodeMappings.providerId],
         set: {
-          providerSlug:           sql`excluded.provider_slug`,
-          providerUrl:            sql`excluded.provider_url`,
-          providerEpisodeNumber:  sql`excluded.provider_episode_number`,
-          confidence:             sql`excluded.confidence`,
-          source:                 sql`excluded.source`,
-          updatedAt:              sql`now()`,
+          providerSlug: sql`coalesce(excluded.provider_slug, ${episodeMappings.providerSlug})`,
+          providerUrl: sql`coalesce(excluded.provider_url, ${episodeMappings.providerUrl})`,
+          providerEpisodeNumber: sql`excluded.provider_episode_number`,
+          confidence: sql`case
+            when ${episodeMappings.source} in ('manual', 'import', 'system')
+              then greatest(${episodeMappings.confidence}, excluded.confidence)
+            else excluded.confidence
+          end`,
+          source: sql`case
+            when ${episodeMappings.source} in ('manual', 'import', 'system')
+              then ${episodeMappings.source}
+            else excluded.source
+          end`,
+          updatedAt: sql`now()`,
         },
         setWhere: sql`${episodeMappings.episodeId} = excluded.episode_id`,
       })
