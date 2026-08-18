@@ -57,6 +57,28 @@ describe("planEpisodeOwnershipTransfers", () => {
     });
   });
 
+  test("prefers the normal target when a special has the same number", () => {
+    const input = baseInput();
+    input.targetEpisodes.push({
+      episodeId: 999,
+      episodeNumber: 1,
+      kind: "special",
+      hasProviderMapping: false,
+    });
+    expect(planEpisodeOwnershipTransfers(input)).toEqual({
+      moves: [
+        {
+          episodeMappingId: 101,
+          providerEpisodeId: "provider-1",
+          providerEpisodeNumber: 1,
+          fromEpisodeId: 201,
+          toEpisodeId: 301,
+        },
+      ],
+      reason: null,
+    });
+  });
+
   test("rejects when the current mapping no longer belongs to the expected owner", () => {
     const input = baseInput();
     input.mappedEpisodes[0]!.animeId = 999;
