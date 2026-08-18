@@ -43,11 +43,61 @@ function earliestEpisodeYear(titles: EpisodeSourceTitle[]): number | null {
   return Number.isInteger(year) && year > 0 ? year : null;
 }
 
+export function hasUsableEpisodeNumberAlignment(
+  context: EpisodeSourceContext,
+  titles: EpisodeSourceTitle[],
+): boolean {
+  const providerNumbers = titles.map((episode) => episode.number);
+  if (
+    providerNumbers.some(
+      (number) => !Number.isInteger(number) || number <= 0,
+    )
+  ) {
+    return false;
+  }
+
+  // Two distinct provider episodes claiming the same canonical number cannot be
+  // represented safely by AniCore's one-row-per-episode enrichment model.
+  if (new Set(providerNumbers).size !== providerNumbers.length) {
+    return false;
+  }
+
+  const canonicalEpisodeCount =
+    context.episodeCount && context.episodeCount > 0
+      ? context.episodeCount
+      : null;
+  const expectedNumbers = canonicalEpisodeCount
+    ? new Set(
+        Array.from({ length: canonicalEpisodeCount }, (_, index) => index + 1),
+      )
+    : new Set(
+        context.episodes
+          .map((episode) => episode.number)
+          .filter((number) => Number.isInteger(number) && number > 0),
+      );
+
+  // With no canonical count and no local episode rows, count/year are the only
+  // alignment evidence available. Do not invent a numbering assumption here.
+  if (expectedNumbers.size === 0) return true;
+
+  const aligned = providerNumbers.filter((number) =>
+    expectedNumbers.has(number),
+  ).length;
+  const comparableCount = Math.min(expectedNumbers.size, providerNumbers.length);
+  const requiredAligned = Math.max(1, Math.ceil(comparableCount * 0.75));
+
+  return aligned >= requiredAligned;
+}
+
 export function scoreSourceEpisodeBatch(
   context: EpisodeSourceContext,
   titles: EpisodeSourceTitle[],
 ): number {
-  if (!titles.length || hasConflictingExplicitEpisodeNumbers(titles)) {
+  if (
+    !titles.length ||
+    hasConflictingExplicitEpisodeNumbers(titles) ||
+    !hasUsableEpisodeNumberAlignment(context, titles)
+  ) {
     return Number.NEGATIVE_INFINITY;
   }
 

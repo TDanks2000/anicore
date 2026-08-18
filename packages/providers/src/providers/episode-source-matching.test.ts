@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  hasUsableEpisodeNumberAlignment,
   scoreSourceEpisodeBatch,
   selectSourceCandidate,
   sourceTitleSimilarity,
@@ -15,10 +16,10 @@ const context = {
   })),
 };
 
-function batch(count: number, year = 2024) {
+function batch(count: number, year = 2024, startAt = 1) {
   return Array.from({ length: count }, (_, index) => ({
-    number: index + 1,
-    title: `Episode ${index + 1}`,
+    number: startAt + index,
+    title: `Episode ${startAt + index}`,
     airDate: `${year}-01-${String(index + 1).padStart(2, "0")}`,
   }));
 }
@@ -26,6 +27,33 @@ function batch(count: number, year = 2024) {
 describe("episode source title matching", () => {
   test("normalizes punctuation and diacritics", () => {
     expect(sourceTitleSimilarity("Pokémon: Horizons", "Pokemon Horizons")).toBe(1);
+  });
+});
+
+describe("episode source number alignment", () => {
+  test("accepts canonical numbering", () => {
+    expect(hasUsableEpisodeNumberAlignment(context, batch(12))).toBe(true);
+  });
+
+  test("rejects a provider season whose numbering is offset from the AniList cour", () => {
+    expect(hasUsableEpisodeNumberAlignment(context, batch(12, 2024, 13))).toBe(
+      false,
+    );
+  });
+
+  test("rejects duplicate provider episode numbers", () => {
+    const duplicate = batch(12);
+    duplicate[11] = { ...duplicate[11]!, number: 11 };
+    expect(hasUsableEpisodeNumberAlignment(context, duplicate)).toBe(false);
+  });
+
+  test("allows a larger provider batch when enough known local numbers align", () => {
+    const partialContext = {
+      seasonYear: 2024,
+      episodeCount: null,
+      episodes: context.episodes.slice(0, 4),
+    };
+    expect(hasUsableEpisodeNumberAlignment(partialContext, batch(12))).toBe(true);
   });
 });
 
@@ -42,6 +70,12 @@ describe("episode source batch scoring", () => {
 
   test("rejects a season with a wildly different episode count", () => {
     expect(scoreSourceEpisodeBatch(context, batch(24))).toBe(
+      Number.NEGATIVE_INFINITY,
+    );
+  });
+
+  test("rejects a count-compatible season whose episode numbers cannot map locally", () => {
+    expect(scoreSourceEpisodeBatch(context, batch(12, 2024, 13))).toBe(
       Number.NEGATIVE_INFINITY,
     );
   });
