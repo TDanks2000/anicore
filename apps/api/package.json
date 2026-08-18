@@ -4,6 +4,7 @@
   "scripts": {
     "build": "tsc --noEmit",
     "db:audit-mappings": "bun src/scripts/audit-mappings-command.ts",
+    "db:backfill-provider-mappings": "bun src/scripts/backfill-provider-mappings.ts",
     "db:repair-mappings": "bun src/scripts/repair-mappings.ts",
     "db:repair-tvdb-orphans": "bun src/scripts/repair-tvdb-orphans.ts",
     "db:check-shape": "bun src/scripts/check-db-shape.ts",

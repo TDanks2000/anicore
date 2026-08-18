@@ -37,6 +37,9 @@
     "db:audit-mappings": {
       "cache": false
     },
+    "db:backfill-provider-mappings": {
+      "cache": false
+    },
     "db:repair-mappings": {
       "cache": false
     },
