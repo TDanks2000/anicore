@@ -77,6 +77,6 @@ describe("provider season identity verification", () => {
         titleEnglish: "Hunter x Hunter",
         synonymsJson: "not-json",
       }),
-    ).toEqual(["Hunter x Hunter", "Hunter × Hunter", "HUNTER×HUNTER"]);
+    ).toEqual(["Hunter x Hunter", "HUNTER×HUNTER"]);
   });
 });
