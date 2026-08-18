@@ -7,6 +7,13 @@ import {
   type SyncLease,
 } from "@anicore/db";
 
+import {
+  buildOrphanParentRepairPlan,
+  type ExistingProviderIdentity,
+  type OrphanEpisodeMappingRow,
+  type OrphanParentRepairCandidate,
+  type OrphanParentRepairPlan,
+} from "./orphan-episode-parent-repair";
 import { parseRepairMappingsArgs } from "./repair-mappings-cli";
 
 type RepairMode = "dry-run" | "apply";
@@ -23,18 +30,49 @@ interface LegacyKitsuEpisodeSample {
   targetConfidence: number;
 }
 
+interface KitsuProvenanceOperationReport {
+  code: "kitsu-legacy-episode-provenance";
+  description: string;
+  plannedCount: number;
+  appliedCount: number;
+  remainingEligibleCount: number;
+  skippedAmbiguousAnimeCount: number;
+  samples: LegacyKitsuEpisodeSample[];
+}
+
+interface OrphanParentCandidateSample {
+  animeId: number;
+  provider: "thetvdb" | "tmdb";
+  providerId: string;
+  providerUrl: string | null;
+  source: "fuzzy";
+  confidence: number;
+  episodeMappingCount: number;
+  episodeMappingIds: number[];
+}
+
+interface OrphanParentOperationReport {
+  code: "reconstruct-orphan-episode-parent-mappings";
+  description: string;
+  totalOrphanGroups: number;
+  totalOrphanEpisodeMappings: number;
+  plannedParentCount: number;
+  plannedEpisodeMappingCount: number;
+  appliedParentCount: number;
+  resolvedEpisodeMappingCount: number;
+  remainingOrphanEpisodeMappingCount: number;
+  remainingEligibleParentCount: number;
+  skipped: OrphanParentRepairPlan["skipped"];
+  samples: OrphanParentCandidateSample[];
+}
+
 interface RepairReport {
   ok: true;
   mode: RepairMode;
   generatedAt: string;
-  operation: {
-    code: "kitsu-legacy-episode-provenance";
-    description: string;
-    plannedCount: number;
-    appliedCount: number;
-    remainingEligibleCount: number;
-    skippedAmbiguousAnimeCount: number;
-    samples: LegacyKitsuEpisodeSample[];
+  operations: {
+    kitsuLegacyEpisodeProvenance: KitsuProvenanceOperationReport;
+    orphanEpisodeParentMappings: OrphanParentOperationReport;
   };
 }
 
@@ -151,38 +189,227 @@ async function applyLegacyKitsuEpisodeProvenanceRepair(): Promise<number> {
   return rows.length;
 }
 
-async function runRepair(mode: RepairMode): Promise<RepairReport> {
-  const plannedCount = await countLegacyKitsuEpisodeProvenance();
-  const skippedAmbiguousAnimeCount = await countSkippedAmbiguousKitsuAnime();
-  const samples = await sampleLegacyKitsuEpisodeProvenance();
+async function loadOrphanEpisodeMappingRows(): Promise<
+  OrphanEpisodeMappingRow[]
+> {
+  return queryRows<OrphanEpisodeMappingRow>(sql`
+    select
+      em.id as "episodeMappingId",
+      e.anime_id as "animeId",
+      em.episode_id as "episodeId",
+      em.provider,
+      em.provider_id as "providerId",
+      em.provider_url as "providerUrl",
+      em.provider_episode_number as "providerEpisodeNumber",
+      e.season_number as "episodeSeasonNumber",
+      em.source,
+      em.confidence
+    from episode_mappings em
+    join episodes e on e.id = em.episode_id
+    where not exists (
+      select 1
+      from anime_mappings am
+      where am.anime_id = e.anime_id
+        and am.provider = em.provider
+    )
+    order by e.anime_id, em.provider, em.id
+  `);
+}
 
-  let appliedCount = 0;
-  if (mode === "apply" && plannedCount > 0) {
-    appliedCount = await applyLegacyKitsuEpisodeProvenanceRepair();
+async function loadExistingProviderIdentities(): Promise<
+  ExistingProviderIdentity[]
+> {
+  return queryRows<ExistingProviderIdentity>(sql`
+    select anime_id as "animeId", provider, provider_id as "providerId"
+    from anime_mappings
+    where provider in ('thetvdb', 'tmdb')
+    order by provider, provider_id, anime_id
+  `);
+}
+
+async function buildCurrentOrphanParentPlan(): Promise<{
+  rows: OrphanEpisodeMappingRow[];
+  plan: OrphanParentRepairPlan;
+}> {
+  const [rows, existingIdentities] = await Promise.all([
+    loadOrphanEpisodeMappingRows(),
+    loadExistingProviderIdentities(),
+  ]);
+  return {
+    rows,
+    plan: buildOrphanParentRepairPlan(rows, existingIdentities),
+  };
+}
+
+async function applyOrphanParentCandidates(
+  candidates: OrphanParentRepairCandidate[],
+): Promise<number> {
+  if (candidates.length === 0) return 0;
+
+  return db.transaction(async (tx) => {
+    let insertedCount = 0;
+
+    for (const candidate of candidates) {
+      const result = await tx.execute(sql`
+        insert into anime_mappings (
+          anime_id,
+          provider,
+          provider_id,
+          provider_slug,
+          provider_url,
+          confidence,
+          source,
+          is_primary
+        )
+        select
+          ${candidate.animeId},
+          ${candidate.provider},
+          ${candidate.providerId},
+          null,
+          ${candidate.providerUrl},
+          ${candidate.confidence},
+          'fuzzy',
+          false
+        where not exists (
+          select 1
+          from anime_mappings am
+          where am.anime_id = ${candidate.animeId}
+            and am.provider = ${candidate.provider}
+        )
+          and not exists (
+            select 1
+            from anime_mappings am
+            where am.provider = ${candidate.provider}
+              and am.provider_id = ${candidate.providerId}
+          )
+        returning id
+      `);
+
+      const inserted = [...result] as Array<{ id: number }>;
+      if (inserted.length !== 1) {
+        throw new Error(
+          `Orphan parent repair candidate ${candidate.provider}:${candidate.providerId} for anime ${candidate.animeId} changed after planning; transaction rolled back`,
+        );
+      }
+      insertedCount += 1;
+    }
+
+    return insertedCount;
+  });
+}
+
+function sampleOrphanParentCandidates(
+  candidates: OrphanParentRepairCandidate[],
+): OrphanParentCandidateSample[] {
+  return candidates.slice(0, 20).map((candidate) => ({
+    animeId: candidate.animeId,
+    provider: candidate.provider,
+    providerId: candidate.providerId,
+    providerUrl: candidate.providerUrl,
+    source: candidate.source,
+    confidence: candidate.confidence,
+    episodeMappingCount: candidate.episodeMappingCount,
+    episodeMappingIds: candidate.episodeMappingIds.slice(0, 10),
+  }));
+}
+
+async function runRepair(mode: RepairMode): Promise<RepairReport> {
+  const kitsuPlannedCount = await countLegacyKitsuEpisodeProvenance();
+  const skippedAmbiguousAnimeCount = await countSkippedAmbiguousKitsuAnime();
+  const kitsuSamples = await sampleLegacyKitsuEpisodeProvenance();
+
+  const orphanBefore = await buildCurrentOrphanParentPlan();
+  const plannedParentCount = orphanBefore.plan.candidates.length;
+  const plannedEpisodeMappingCount = orphanBefore.plan.candidates.reduce(
+    (total, candidate) => total + candidate.episodeMappingCount,
+    0,
+  );
+  const orphanSamples = sampleOrphanParentCandidates(
+    orphanBefore.plan.candidates,
+  );
+
+  let kitsuAppliedCount = 0;
+  let appliedParentCount = 0;
+  if (mode === "apply") {
+    if (kitsuPlannedCount > 0) {
+      kitsuAppliedCount = await applyLegacyKitsuEpisodeProvenanceRepair();
+    }
+    if (plannedParentCount > 0) {
+      appliedParentCount = await applyOrphanParentCandidates(
+        orphanBefore.plan.candidates,
+      );
+    }
   }
 
-  const remainingEligibleCount =
-    mode === "apply" ? await countLegacyKitsuEpisodeProvenance() : plannedCount;
+  const kitsuRemainingEligibleCount =
+    mode === "apply"
+      ? await countLegacyKitsuEpisodeProvenance()
+      : kitsuPlannedCount;
 
-  if (mode === "apply" && remainingEligibleCount !== 0) {
+  if (mode === "apply" && kitsuRemainingEligibleCount !== 0) {
     throw new Error(
-      `Kitsu provenance repair left ${remainingEligibleCount} eligible rows behind`,
+      `Kitsu provenance repair left ${kitsuRemainingEligibleCount} eligible rows behind`,
     );
+  }
+
+  const orphanAfter =
+    mode === "apply" ? await buildCurrentOrphanParentPlan() : orphanBefore;
+  const resolvedEpisodeMappingCount =
+    mode === "apply"
+      ? orphanBefore.rows.length - orphanAfter.rows.length
+      : 0;
+  const remainingEligibleParentCount = orphanAfter.plan.candidates.length;
+
+  if (mode === "apply") {
+    if (appliedParentCount !== plannedParentCount) {
+      throw new Error(
+        `Orphan parent repair planned ${plannedParentCount} parents but inserted ${appliedParentCount}`,
+      );
+    }
+    if (resolvedEpisodeMappingCount !== plannedEpisodeMappingCount) {
+      throw new Error(
+        `Orphan parent repair expected to resolve ${plannedEpisodeMappingCount} episode mappings but resolved ${resolvedEpisodeMappingCount}`,
+      );
+    }
+    if (remainingEligibleParentCount !== 0) {
+      throw new Error(
+        `Orphan parent repair left ${remainingEligibleParentCount} reconstructable parent mappings behind`,
+      );
+    }
   }
 
   return {
     ok: true,
     mode,
     generatedAt: new Date().toISOString(),
-    operation: {
-      code: "kitsu-legacy-episode-provenance",
-      description:
-        "Demote legacy Kitsu episode mappings from api/100 to the provenance and confidence of their single fuzzy Kitsu anime mapping. Manual/import/system episode mappings and anime with ambiguous Kitsu identities are never changed.",
-      plannedCount,
-      appliedCount,
-      remainingEligibleCount,
-      skippedAmbiguousAnimeCount,
-      samples,
+    operations: {
+      kitsuLegacyEpisodeProvenance: {
+        code: "kitsu-legacy-episode-provenance",
+        description:
+          "Demote legacy Kitsu episode mappings from api/100 to the provenance and confidence of their single fuzzy Kitsu anime mapping. Manual/import/system episode mappings and anime with ambiguous Kitsu identities are never changed.",
+        plannedCount: kitsuPlannedCount,
+        appliedCount: kitsuAppliedCount,
+        remainingEligibleCount: kitsuRemainingEligibleCount,
+        skippedAmbiguousAnimeCount,
+        samples: kitsuSamples,
+      },
+      orphanEpisodeParentMappings: {
+        code: "reconstruct-orphan-episode-parent-mappings",
+        description:
+          "Reconstruct missing TVDB/TMDB anime-level parent mappings only when every orphan episode mapping in the anime/provider group is weak automatic evidence and its stored provider URL independently identifies the same provider season. Reconstructed parents are fuzzy, capped at 85 confidence, non-primary, and are skipped on incomplete, conflicting, strong/manual, unsupported, or colliding evidence.",
+        totalOrphanGroups: orphanBefore.plan.totalOrphanGroups,
+        totalOrphanEpisodeMappings:
+          orphanBefore.plan.totalOrphanEpisodeMappings,
+        plannedParentCount,
+        plannedEpisodeMappingCount,
+        appliedParentCount,
+        resolvedEpisodeMappingCount,
+        remainingOrphanEpisodeMappingCount:
+          orphanAfter.plan.totalOrphanEpisodeMappings,
+        remainingEligibleParentCount,
+        skipped: orphanBefore.plan.skipped,
+        samples: orphanSamples,
+      },
     },
   };
 }
