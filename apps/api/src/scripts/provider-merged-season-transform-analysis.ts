@@ -50,7 +50,11 @@ export function analyzeObservedSegmentTransform(input: {
   metadataEpisodeCount: number | null;
 }): ObservedSegmentTransformAnalysis {
   const metadataCount = input.metadataEpisodeCount;
-  if (!Number.isInteger(metadataCount) || (metadataCount ?? 0) <= 0) {
+  if (
+    typeof metadataCount !== "number" ||
+    !Number.isInteger(metadataCount) ||
+    metadataCount <= 0
+  ) {
     return { transform: null, reason: "invalid-metadata-count" };
   }
 
@@ -60,6 +64,12 @@ export function analyzeObservedSegmentTransform(input: {
   const authoritativeNumbers = new Set(
     input.authoritativeEpisodes.map((episode) => episode.providerEpisodeNumber),
   );
+  if (
+    authoritativeById.size !== input.authoritativeEpisodes.length ||
+    authoritativeNumbers.size !== input.authoritativeEpisodes.length
+  ) {
+    return { transform: null, reason: "duplicate-provider-episode-number" };
+  }
 
   const observedPairs: Array<{
     localEpisodeNumber: number;
@@ -74,7 +84,7 @@ export function analyzeObservedSegmentTransform(input: {
     if (
       !Number.isInteger(mapping.localEpisodeNumber) ||
       mapping.localEpisodeNumber <= 0 ||
-      mapping.localEpisodeNumber > metadataCount!
+      mapping.localEpisodeNumber > metadataCount
     ) {
       return { transform: null, reason: "invalid-local-episode-number" };
     }
@@ -112,7 +122,7 @@ export function analyzeObservedSegmentTransform(input: {
   }
 
   const inferredProviderEpisodeStart = 1 + offset;
-  const inferredProviderEpisodeEnd = metadataCount! + offset;
+  const inferredProviderEpisodeEnd = metadataCount + offset;
   for (
     let providerEpisodeNumber = inferredProviderEpisodeStart;
     providerEpisodeNumber <= inferredProviderEpisodeEnd;
@@ -124,7 +134,7 @@ export function analyzeObservedSegmentTransform(input: {
   }
 
   const localStartObserved = localNumbers.includes(1);
-  const localEndObserved = localNumbers.includes(metadataCount!);
+  const localEndObserved = localNumbers.includes(metadataCount);
   const boundaryEvidence: SegmentBoundaryEvidence =
     localStartObserved && localEndObserved
       ? "both-boundaries-observed"
