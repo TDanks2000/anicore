@@ -49,6 +49,9 @@
     "db:plan-provider-collision-segments": {
       "cache": false
     },
+    "db:plan-provider-dual-segments": {
+      "cache": false
+    },
     "db:repair-mappings": {
       "cache": false
     },
