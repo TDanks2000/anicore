@@ -9,6 +9,10 @@ import {
 } from "@anicore/db/schema";
 import { titleSimilarity } from "../title-similarity";
 import {
+  assertAnimeScheduleRouteCompatible,
+  assertSingleAnimeScheduleIdentity,
+} from "./identity";
+import {
   fetchByRoute,
   hasDub,
   isFinished,
@@ -92,7 +96,26 @@ async function findEntry(opts: {
   return null;
 }
 
+async function loadAnimeScheduleIdentities(animeId: number) {
+  return db
+    .select({
+      providerId: animeMappings.providerId,
+      source: animeMappings.source,
+      confidence: animeMappings.confidence,
+    })
+    .from(animeMappings)
+    .where(
+      and(
+        eq(animeMappings.animeId, animeId),
+        eq(animeMappings.provider, "animeschedule"),
+      ),
+    );
+}
+
 async function storeRoute(animeId: number, route: string): Promise<void> {
+  const existingForAnime = await loadAnimeScheduleIdentities(animeId);
+  assertAnimeScheduleRouteCompatible(existingForAnime, route);
+
   const [mapping] = await db
     .insert(animeMappings)
     .values({
@@ -134,11 +157,12 @@ async function loadVerifiedCachedEntry(opts: {
   animeId: number;
   anilistId: string;
 }): Promise<AnimeScheduleEntry | null> {
-  const [existing] = await db
+  const mappings = await db
     .select({
       id: animeMappings.id,
       providerId: animeMappings.providerId,
       source: animeMappings.source,
+      confidence: animeMappings.confidence,
     })
     .from(animeMappings)
     .where(
@@ -146,10 +170,11 @@ async function loadVerifiedCachedEntry(opts: {
         eq(animeMappings.animeId, opts.animeId),
         eq(animeMappings.provider, "animeschedule"),
       ),
-    )
-    .limit(1);
+    );
 
-  if (!existing) return null;
+  const identity = assertSingleAnimeScheduleIdentity(mappings);
+  if (!identity) return null;
+  const existing = mappings[0]!;
 
   await sleep(RATE_MS);
   const entry = await fetchByRoute(existing.providerId);
