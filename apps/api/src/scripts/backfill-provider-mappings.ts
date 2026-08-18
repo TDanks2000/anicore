@@ -69,6 +69,11 @@ async function count(query: SQL): Promise<number> {
   return Number(row?.count ?? 0);
 }
 
+async function transactionCount(tx: DbTransaction, query: SQL): Promise<number> {
+  const [row] = await transactionRows<CountRow>(tx, query);
+  return Number(row?.count ?? 0);
+}
+
 async function assertSegmentMappingTablesExist(): Promise<void> {
   const [row] = await queryRows<{
     providerEntities: string | null;
@@ -87,67 +92,57 @@ async function assertSegmentMappingTablesExist(): Promise<void> {
     !row.animeProviderSegments
   ) {
     throw new Error(
-      "Segment-aware provider mapping tables do not exist yet; run `bun run db:push` before this backfill",
+      "Segment-aware provider mapping tables do not exist yet; run `bun run db:migrate` before this backfill",
     );
   }
 }
 
-async function countLegacyMappings(): Promise<number> {
-  return count(sql`
-    select count(*)::int as count
-    from anime_mappings
+const legacyMappingCountSql = sql`
+  select count(*)::int as count
+  from public.anime_mappings
+  where provider in ('thetvdb', 'tmdb')
+`;
+
+const distinctLegacyProviderEntityCountSql = sql`
+  select count(*)::int as count
+  from (
+    select distinct provider, provider_id
+    from public.anime_mappings
     where provider in ('thetvdb', 'tmdb')
-  `);
-}
+  ) legacy_entities
+`;
 
-async function countDistinctLegacyProviderEntities(): Promise<number> {
-  return count(sql`
-    select count(*)::int as count
-    from (
-      select distinct provider, provider_id
-      from anime_mappings
-      where provider in ('thetvdb', 'tmdb')
-    ) legacy_entities
-  `);
-}
+const existingProviderEntityCountSql = sql`
+  select count(*)::int as count
+  from public.provider_entities
+  where provider in ('thetvdb', 'tmdb')
+`;
 
-async function countExistingProviderEntities(): Promise<number> {
-  return count(sql`
-    select count(*)::int as count
-    from provider_entities
-    where provider in ('thetvdb', 'tmdb')
-  `);
-}
+const existingAnimeProviderMappingCountSql = sql`
+  select count(*)::int as count
+  from public.anime_provider_mappings apm
+  join public.provider_entities pe on pe.id = apm.provider_entity_id
+  where pe.provider in ('thetvdb', 'tmdb')
+`;
 
-async function countExistingAnimeProviderMappings(): Promise<number> {
-  return count(sql`
-    select count(*)::int as count
-    from anime_provider_mappings apm
-    join provider_entities pe on pe.id = apm.provider_entity_id
-    where pe.provider in ('thetvdb', 'tmdb')
-  `);
-}
-
-async function countLegacyMappingsWithoutV2Link(): Promise<number> {
-  return count(sql`
-    select count(*)::int as count
-    from anime_mappings am
-    where am.provider in ('thetvdb', 'tmdb')
-      and not exists (
-        select 1
-        from provider_entities pe
-        join anime_provider_mappings apm
-          on apm.provider_entity_id = pe.id
-        where pe.provider = am.provider
-          and pe.provider_id = am.provider_id
-          and apm.anime_id = am.anime_id
-      )
-  `);
-}
+const legacyMappingsWithoutV2LinkSql = sql`
+  select count(*)::int as count
+  from public.anime_mappings am
+  where am.provider in ('thetvdb', 'tmdb')
+    and not exists (
+      select 1
+      from public.provider_entities pe
+      join public.anime_provider_mappings apm
+        on apm.provider_entity_id = pe.id
+      where pe.provider = am.provider
+        and pe.provider_id = am.provider_id
+        and apm.anime_id = am.anime_id
+    )
+`;
 
 async function insertProviderEntities(tx: DbTransaction): Promise<number> {
   const rows = await transactionRows<{ id: number }>(tx, sql`
-    insert into provider_entities (
+    insert into public.provider_entities (
       provider,
       provider_id,
       provider_slug,
@@ -162,7 +157,7 @@ async function insertProviderEntities(tx: DbTransaction): Promise<number> {
       am.provider_url,
       am.created_at,
       am.updated_at
-    from anime_mappings am
+    from public.anime_mappings am
     where am.provider in ('thetvdb', 'tmdb')
     order by
       am.provider,
@@ -178,7 +173,7 @@ async function insertProviderEntities(tx: DbTransaction): Promise<number> {
 
 async function insertAnimeProviderMappings(tx: DbTransaction): Promise<number> {
   const rows = await transactionRows<{ id: number }>(tx, sql`
-    insert into anime_provider_mappings (
+    insert into public.anime_provider_mappings (
       anime_id,
       provider_entity_id,
       confidence,
@@ -195,8 +190,8 @@ async function insertAnimeProviderMappings(tx: DbTransaction): Promise<number> {
       am.is_primary,
       am.created_at,
       am.updated_at
-    from anime_mappings am
-    join provider_entities pe
+    from public.anime_mappings am
+    join public.provider_entities pe
       on pe.provider = am.provider
       and pe.provider_id = am.provider_id
     where am.provider in ('thetvdb', 'tmdb')
@@ -216,11 +211,11 @@ async function run(mode: Mode): Promise<BackfillReport> {
     existingAnimeProviderMappingCount,
     legacyWithoutLinkBefore,
   ] = await Promise.all([
-    countLegacyMappings(),
-    countDistinctLegacyProviderEntities(),
-    countExistingProviderEntities(),
-    countExistingAnimeProviderMappings(),
-    countLegacyMappingsWithoutV2Link(),
+    count(legacyMappingCountSql),
+    count(distinctLegacyProviderEntityCountSql),
+    count(existingProviderEntityCountSql),
+    count(existingAnimeProviderMappingCountSql),
+    count(legacyMappingsWithoutV2LinkSql),
   ]);
 
   const plannedProviderEntityInsertCount = Math.max(
@@ -231,24 +226,48 @@ async function run(mode: Mode): Promise<BackfillReport> {
 
   let appliedProviderEntityInsertCount = 0;
   let appliedAnimeProviderMappingInsertCount = 0;
+  let remainingLegacyMappingsWithoutV2Link = legacyWithoutLinkBefore;
 
   if (mode === "apply") {
-    await db.transaction(async (tx) => {
-      appliedProviderEntityInsertCount = await insertProviderEntities(tx);
-      appliedAnimeProviderMappingInsertCount =
-        await insertAnimeProviderMappings(tx);
+    const applied = await db.transaction(async (tx) => {
+      const providerEntityInsertCount = await insertProviderEntities(tx);
+      const animeProviderMappingInsertCount = await insertAnimeProviderMappings(tx);
+
+      const remaining = await transactionCount(
+        tx,
+        legacyMappingsWithoutV2LinkSql,
+      );
+
+      if (providerEntityInsertCount !== plannedProviderEntityInsertCount) {
+        throw new Error(
+          `Provider entity backfill planned ${plannedProviderEntityInsertCount} inserts but wrote ${providerEntityInsertCount}; transaction rolled back`,
+        );
+      }
+
+      if (
+        animeProviderMappingInsertCount !== plannedAnimeProviderMappingInsertCount
+      ) {
+        throw new Error(
+          `Anime/provider backfill planned ${plannedAnimeProviderMappingInsertCount} inserts but wrote ${animeProviderMappingInsertCount}; transaction rolled back`,
+        );
+      }
+
+      if (remaining !== 0) {
+        throw new Error(
+          `Provider mapping backfill still had ${remaining} legacy TVDB/TMDB mappings without a v2 association inside the transaction; transaction rolled back`,
+        );
+      }
+
+      return {
+        providerEntityInsertCount,
+        animeProviderMappingInsertCount,
+        remaining,
+      };
     });
-  }
 
-  const remainingLegacyMappingsWithoutV2Link =
-    mode === "apply"
-      ? await countLegacyMappingsWithoutV2Link()
-      : legacyWithoutLinkBefore;
-
-  if (mode === "apply" && remainingLegacyMappingsWithoutV2Link !== 0) {
-    throw new Error(
-      `Provider mapping backfill left ${remainingLegacyMappingsWithoutV2Link} legacy TVDB/TMDB mappings without a v2 association`,
-    );
+    appliedProviderEntityInsertCount = applied.providerEntityInsertCount;
+    appliedAnimeProviderMappingInsertCount = applied.animeProviderMappingInsertCount;
+    remainingLegacyMappingsWithoutV2Link = applied.remaining;
   }
 
   return {
@@ -258,7 +277,7 @@ async function run(mode: Mode): Promise<BackfillReport> {
     operation: {
       code: "backfill-provider-entity-model",
       description:
-        "Copy existing one-to-one TVDB/TMDB anime mappings into provider_entities and anime_provider_mappings. Legacy anime_mappings remain unchanged; no episode segments are guessed during this compatibility backfill.",
+        "Copy existing one-to-one TVDB/TMDB anime mappings into provider_entities and anime_provider_mappings. Legacy anime_mappings remain unchanged; no episode segments are guessed during this compatibility backfill. Apply mode verifies exact insert counts and zero missing v2 links inside the same transaction before commit.",
       legacyMappingCount,
       distinctProviderEntityCount,
       existingProviderEntityCount,
