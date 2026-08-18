@@ -55,6 +55,9 @@
     "db:plan-provider-dual-segments": {
       "cache": false
     },
+    "db:plan-provider-season-ownership-repairs": {
+      "cache": false
+    },
     "db:repair-mappings": {
       "cache": false
     },
