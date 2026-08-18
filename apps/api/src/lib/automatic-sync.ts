@@ -60,6 +60,7 @@ export class AutomaticSyncScheduler {
 	private readonly automationAllowed: () => boolean;
 	private timer: ReturnType<typeof setInterval> | null = null;
 	private checking = false;
+	private lastAttemptAt: string | null = null;
 	private state: SyncMonitorAutomationStatus = { ...initialState };
 
 	constructor(dependencies: AutomaticSyncDependencies = {}) {
@@ -104,6 +105,7 @@ export class AutomaticSyncScheduler {
 		this.checking = true;
 		const now = this.now();
 		const checkedAt = now.toISOString();
+		let retryMsForFailure: number | null = null;
 
 		try {
 			const config = this.readConfig();
@@ -147,9 +149,18 @@ export class AutomaticSyncScheduler {
 							status.completedAt ?? status.updatedAt ?? status.startedAt,
 						)
 					: null;
-			const localAnchor = validTimestamp(this.state.lastStartedAt ?? undefined);
+			const stateStartedAnchor = validTimestamp(
+				this.state.lastStartedAt ?? undefined,
+			);
+			const attemptAnchor = validTimestamp(this.lastAttemptAt ?? undefined);
+			const localAnchorValue = Math.max(
+				stateStartedAnchor ?? 0,
+				attemptAnchor ?? 0,
+			);
+			const localAnchor = localAnchorValue > 0 ? localAnchorValue : null;
 			const intervalMs = config.autoSyncIntervalMinutes * MINUTE_MS;
 			const retryMs = Math.min(intervalMs, FAILURE_RETRY_MINUTES * MINUTE_MS);
+			retryMsForFailure = retryMs;
 			const completedStatusAnchor =
 				status?.mode === "sync" && status.state === "completed"
 					? statusAnchor
@@ -185,6 +196,10 @@ export class AutomaticSyncScheduler {
 				return;
 			}
 
+			// Record the attempt before spawning. If process creation throws, this
+			// remains an unsuccessful local anchor so the 30-second scheduler poll
+			// cannot immediately dispatch again.
+			this.lastAttemptAt = checkedAt;
 			const pid = this.startSync();
 			const message = `Automatic sync started with PID ${pid}`;
 			this.state = {
@@ -197,11 +212,15 @@ export class AutomaticSyncScheduler {
 			this.emit("info", "sync.automatic.dispatched", message);
 		} catch (error) {
 			const message = `Automatic sync check failed: ${error instanceof Error ? error.message : String(error)}`;
+			const failedDispatch = this.lastAttemptAt === checkedAt;
 			this.state = {
 				...this.state,
 				state: "error",
 				lastCheckedAt: checkedAt,
-				nextRunAt: null,
+				nextRunAt:
+					failedDispatch && retryMsForFailure !== null
+						? new Date(now.getTime() + retryMsForFailure).toISOString()
+						: null,
 				lastMessage: message,
 			};
 			this.emit("error", "sync.automatic.failed", message);
