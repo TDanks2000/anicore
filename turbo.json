@@ -40,6 +40,9 @@
     "db:repair-mappings": {
       "cache": false
     },
+    "db:repair-tvdb-orphans": {
+      "cache": false
+    },
     "db:generate": {
       "cache": false
     },
