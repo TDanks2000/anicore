@@ -8,6 +8,7 @@
     "./types": "./src/providers/types.ts",
     "./episode-titles": "./src/providers/episode-titles.ts",
     "./normalize": "./src/providers/normalize.ts",
+    "./title-similarity": "./src/providers/title-similarity.ts",
     "./anilist/client": "./src/providers/anilist/client.ts",
     "./anilist/mapper": "./src/providers/anilist/mapper.ts",
     "./anilist/sync": "./src/providers/anilist/sync.ts",
