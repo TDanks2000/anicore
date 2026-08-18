@@ -6,6 +6,7 @@ import { anime, animeMappings, episodeLanguageStatus, episodes } from "@anicore/
 import { log } from "@anicore/providers/lib/logger";
 import { installProxyFetch } from "@anicore/providers/lib/proxy";
 import { syncDubStatus, sleep } from "@anicore/providers/animeschedule/sync";
+import { derivedAirdateLanguageAssertions } from "../lib/derived-airdate-language";
 
 const args      = process.argv.slice(2);
 const SUB_ONLY  = args.includes("--sub-only");
@@ -17,8 +18,33 @@ const FROM_INDEX = parseInt(
 
 const RUN_SUB = !DUB_ONLY;
 const RUN_DUB = !SUB_ONLY;
+const DERIVED_AIRDATE_PROVIDER = "derived-airdate";
+
+async function recalculateDerivedAirdateEvidence(animeId: number): Promise<void> {
+  // Recalculate both shapes so upgrading from the old heuristic also removes
+  // its legacy English-subtitle evidence.
+  await syncAnimeLanguageEvidenceFromEpisodeStatuses({
+    animeId,
+    languageCode: "ja",
+    mediaType: "audio",
+    provider: DERIVED_AIRDATE_PROVIDER,
+  });
+  await syncAnimeLanguageEvidenceFromEpisodeStatuses({
+    animeId,
+    languageCode: "en",
+    mediaType: "subtitle",
+    provider: DERIVED_AIRDATE_PROVIDER,
+  });
+}
 
 export async function syncSubStatusForAnime(animeId: number): Promise<number> {
+  const [animeRow] = await db
+    .select({ countryOfOrigin: anime.countryOfOrigin })
+    .from(anime)
+    .where(eq(anime.id, animeId))
+    .limit(1);
+  if (!animeRow) throw new Error(`Anime ${animeId} not found`);
+
   const today = new Date().toISOString().split("T")[0]!;
   const rows = await db
     .select({ number: episodes.number })
@@ -30,51 +56,41 @@ export async function syncSubStatusForAnime(animeId: number): Promise<number> {
         lte(episodes.airDate, today),
       ),
     );
+  const assertions = derivedAirdateLanguageAssertions(animeRow.countryOfOrigin);
+  const checkedAt = new Date();
 
-  if (!rows.length) return 0;
+  // Derived evidence is cheap to rebuild and has no field-level provenance to
+  // merge. Replace this provider's snapshot transactionally so corrected air
+  // dates or country metadata withdraw stale rows instead of accumulating them.
+  await db.transaction(async (tx) => {
+    await tx
+      .delete(episodeLanguageStatus)
+      .where(
+        and(
+          eq(episodeLanguageStatus.animeId, animeId),
+          eq(episodeLanguageStatus.provider, DERIVED_AIRDATE_PROVIDER),
+        ),
+      );
 
-  await db
-    .insert(episodeLanguageStatus)
-    .values(
-      rows.flatMap((ep) => [
-        {
+    if (!rows.length || !assertions.length) return;
+    await tx.insert(episodeLanguageStatus).values(
+      rows.flatMap((episode) =>
+        assertions.map((assertion) => ({
           animeId,
-          episodeNumber: ep.number,
-          languageCode: "ja",
-          mediaType: "audio" as const,
+          episodeNumber: episode.number,
+          languageCode: assertion.languageCode,
+          mediaType: assertion.mediaType,
           status: "available" as const,
-          provider: "derived-airdate",
+          provider: DERIVED_AIRDATE_PROVIDER,
           confidence: 75,
-          checkedAt: new Date(),
-        },
-        {
-          animeId,
-          episodeNumber: ep.number,
-          languageCode: "en",
-          mediaType: "subtitle" as const,
-          status: "available" as const,
-          provider: "derived-airdate",
-          confidence: 75,
-          checkedAt: new Date(),
-        },
-      ]),
-    )
-    .onConflictDoNothing();
-
-  await syncAnimeLanguageEvidenceFromEpisodeStatuses({
-    animeId,
-    languageCode: "ja",
-    mediaType: "audio",
-    provider: "derived-airdate",
-  });
-  await syncAnimeLanguageEvidenceFromEpisodeStatuses({
-    animeId,
-    languageCode: "en",
-    mediaType: "subtitle",
-    provider: "derived-airdate",
+          checkedAt,
+        })),
+      ),
+    );
   });
 
-  return rows.length;
+  await recalculateDerivedAirdateEvidence(animeId);
+  return assertions.length ? rows.length : 0;
 }
 
 export async function syncDubStatusForAnime(animeId: number): Promise<void> {
@@ -109,11 +125,13 @@ export async function syncDubStatusForAnime(animeId: number): Promise<void> {
   });
 }
 
-// ── Pass 1: Sub ───────────────────────────────────────────────────────────────
+// ── Pass 1: Derived original audio ────────────────────────────────────────────
 
 export async function runSubPass(): Promise<void> {
   log.divider();
-  log.info("Sub pass — marking sub=available for all episodes with a past air_date…");
+  log.info(
+    "Derived air-date pass — rebuilding conservative original-audio evidence…",
+  );
 
   const today    = new Date().toISOString().split("T")[0]!;
   const BATCH    = 5_000;
@@ -121,23 +139,43 @@ export async function runSubPass(): Promise<void> {
   let offset     = 0;
   let processed  = 0;
 
-  // Count total so the bar can show a meaningful total
+  const existingDerivedAnime = await db
+    .selectDistinct({ animeId: episodeLanguageStatus.animeId })
+    .from(episodeLanguageStatus)
+    .where(eq(episodeLanguageStatus.provider, DERIVED_AIRDATE_PROVIDER));
+  const affectedAnimeIds = new Set(existingDerivedAnime.map((row) => row.animeId));
+
+  // This provider is entirely derived from current canonical metadata, so a full
+  // maintenance pass can safely rebuild it from scratch. This also removes the
+  // legacy English-subtitle rows that air dates never actually proved.
+  await db
+    .delete(episodeLanguageStatus)
+    .where(eq(episodeLanguageStatus.provider, DERIVED_AIRDATE_PROVIDER));
+
+  const airedJapaneseWhere = and(
+    isNotNull(episodes.airDate),
+    lte(episodes.airDate, today),
+    sql`upper(trim(${anime.countryOfOrigin})) = 'JP'`,
+  );
+
   const [countRow] = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(episodes)
-    .where(and(isNotNull(episodes.airDate), lte(episodes.airDate, today)));
+    .innerJoin(anime, eq(episodes.animeId, anime.id))
+    .where(airedJapaneseWhere);
   const total = countRow?.n ?? 0;
 
-  log.info(`${total.toLocaleString()} aired episodes to process`);
+  log.info(`${total.toLocaleString()} aired Japanese-origin episodes to process`);
 
-  const bar = log.progress(total, "Sub");
+  const bar = log.progress(total, "Original audio");
   const checkedAt = new Date();
 
   while (true) {
     const rows = await db
       .select({ animeId: episodes.animeId, number: episodes.number })
       .from(episodes)
-      .where(and(isNotNull(episodes.airDate), lte(episodes.airDate, today)))
+      .innerJoin(anime, eq(episodes.animeId, anime.id))
+      .where(airedJapaneseWhere)
       .limit(BATCH)
       .offset(offset);
 
@@ -145,50 +183,20 @@ export async function runSubPass(): Promise<void> {
 
     for (let i = 0; i < rows.length; i += CHUNK) {
       const chunk = rows.slice(i, i + CHUNK);
-      await db
-        .insert(episodeLanguageStatus)
-        .values(
-          chunk.flatMap((ep) => [
-            {
-              animeId:        ep.animeId,
-              episodeNumber:  ep.number,
-              languageCode:   "ja",
-              mediaType:      "audio" as const,
-              status:         "available" as const,
-              provider:       "derived-airdate",
-              confidence:     75,
-              checkedAt,
-            },
-            {
-              animeId:        ep.animeId,
-              episodeNumber:  ep.number,
-              languageCode:   "en",
-              mediaType:      "subtitle" as const,
-              status:         "available" as const,
-              provider:       "derived-airdate",
-              confidence:     75,
-              checkedAt,
-            },
-          ]),
-        )
-        .onConflictDoNothing();
-
-      const animeIds = new Set(chunk.map((episode) => episode.animeId));
-      for (const animeId of animeIds) {
-        await syncAnimeLanguageEvidenceFromEpisodeStatuses({
-          animeId,
+      await db.insert(episodeLanguageStatus).values(
+        chunk.map((episode) => ({
+          animeId: episode.animeId,
+          episodeNumber: episode.number,
           languageCode: "ja",
-          mediaType: "audio",
-          provider: "derived-airdate",
-        });
-        await syncAnimeLanguageEvidenceFromEpisodeStatuses({
-          animeId,
-          languageCode: "en",
-          mediaType: "subtitle",
-          provider: "derived-airdate",
-        });
-      }
+          mediaType: "audio" as const,
+          status: "available" as const,
+          provider: DERIVED_AIRDATE_PROVIDER,
+          confidence: 75,
+          checkedAt,
+        })),
+      );
 
+      for (const episode of chunk) affectedAnimeIds.add(episode.animeId);
       processed += chunk.length;
       bar.tick(chunk.length).setStats({ processed });
     }
@@ -198,7 +206,14 @@ export async function runSubPass(): Promise<void> {
   }
 
   bar.finish();
-  log.success(`Sub pass complete — ${processed.toLocaleString()} episodes processed.`);
+
+  for (const animeId of affectedAnimeIds) {
+    await recalculateDerivedAirdateEvidence(animeId);
+  }
+
+  log.success(
+    `Derived air-date pass complete — ${processed.toLocaleString()} episodes processed.`,
+  );
 }
 
 // ── Pass 2: Dub ───────────────────────────────────────────────────────────────
@@ -265,7 +280,7 @@ export async function runDubPass(): Promise<void> {
   log.success("Dub pass complete.");
   log.info(`  Fully dubbed     : ${fullyDubbed.toLocaleString()}`);
   log.info(`  No dub           : ${noDub.toLocaleString()}`);
-  log.info(`  Ongoing dub      : ${ongoingDub.toLocaleString()} (skipped — needs API token)`);
+  log.info(`  Ongoing dub      : ${ongoingDub.toLocaleString()} (no per-episode assertion)`);
   log.info(`  Unmatched        : ${unmatched.toLocaleString()}`);
   log.info(`  No episodes yet  : ${noEpisodes.toLocaleString()}`);
   log.info(`  Errors           : ${errors.toLocaleString()}`);
