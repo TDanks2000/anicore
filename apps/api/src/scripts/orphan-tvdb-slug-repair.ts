@@ -5,7 +5,9 @@ import {
 } from "./orphan-episode-parent-repair";
 
 export interface TvdbSlugEpisodeEvidence {
-  slug: string;
+  seriesRef:
+    | { kind: "slug"; slug: string }
+    | { kind: "id"; seriesId: number };
   seasonNumber: number;
   providerEpisodeId: number;
   providerEpisodeNumber: number;
@@ -15,6 +17,7 @@ export interface TvdbSlugResolutionGroup {
   animeId: number;
   slug: string;
   seasonNumber: number;
+  expectedSeriesIds: number[];
   confidence: number;
   episodeMappingIds: number[];
   episodes: Array<{
@@ -96,16 +99,21 @@ export function deriveTvdbSlugEpisodeEvidence(
   const urlEpisodeId = parsePositiveInteger(path[3] ?? null);
   if (!urlEpisodeId || urlEpisodeId !== providerEpisodeId) return null;
 
-  let slug: string;
+  let seriesSegment: string;
   try {
-    slug = decodeURIComponent(path[1] ?? "").trim();
+    seriesSegment = decodeURIComponent(path[1] ?? "").trim();
   } catch {
     return null;
   }
-  if (!slug || /^[1-9][0-9]*$/.test(slug)) return null;
+  if (!seriesSegment) return null;
+
+  const numericSeriesId = parsePositiveInteger(seriesSegment);
+  const seriesRef = numericSeriesId
+    ? ({ kind: "id", seriesId: numericSeriesId } as const)
+    : ({ kind: "slug", slug: seriesSegment } as const);
 
   return {
-    slug,
+    seriesRef,
     seasonNumber,
     providerEpisodeId,
     providerEpisodeNumber,
@@ -143,19 +151,43 @@ export function buildTvdbSlugResolutionGroups(
     }
 
     const validEvidence = evidence as TvdbSlugEpisodeEvidence[];
-    const slugs = new Set(validEvidence.map((item) => normalizeSlug(item.slug)));
+    const slugEvidence = validEvidence.filter(
+      (item): item is TvdbSlugEpisodeEvidence & {
+        seriesRef: { kind: "slug"; slug: string };
+      } => item.seriesRef.kind === "slug",
+    );
+    const numericEvidence = validEvidence.filter(
+      (item): item is TvdbSlugEpisodeEvidence & {
+        seriesRef: { kind: "id"; seriesId: number };
+      } => item.seriesRef.kind === "id",
+    );
+
+    const slugs = new Map<string, string>();
+    for (const item of slugEvidence) {
+      slugs.set(normalizeSlug(item.seriesRef.slug), item.seriesRef.slug);
+    }
     const seasons = new Set(validEvidence.map((item) => item.seasonNumber));
-    if (slugs.size !== 1 || seasons.size !== 1) {
+    const expectedSeriesIds = [
+      ...new Set(numericEvidence.map((item) => item.seriesRef.seriesId)),
+    ].sort((a, b) => a - b);
+
+    // Numeric-only groups are handled by the original local repair planner. This
+    // operation exists specifically to resolve legacy textual TVDB slugs. Mixed
+    // slug/numeric groups are allowed, but the remote series ID must later agree
+    // with every numeric ID already preserved in the group.
+    if (slugs.size !== 1 || seasons.size !== 1 || expectedSeriesIds.length > 1) {
       skippedInvalidEvidenceGroups += 1;
       skippedInvalidEvidenceEpisodeMappings += rows.length;
       continue;
     }
 
+    const slug = [...slugs.values()][0]!;
     const first = validEvidence[0]!;
     result.push({
       animeId: rows[0]!.animeId,
-      slug: first.slug,
+      slug,
       seasonNumber: first.seasonNumber,
+      expectedSeriesIds,
       confidence: Math.min(85, ...rows.map((row) => row.confidence)),
       episodeMappingIds: rows
         .map((row) => row.episodeMappingId)
@@ -194,6 +226,12 @@ export function verifyResolvedTvdbSlugGroup(
 ): TvdbSlugRepairCandidate | null {
   if (!Number.isInteger(series.id) || series.id <= 0) return null;
   if (series.slug && normalizeSlug(series.slug) !== normalizeSlug(group.slug)) {
+    return null;
+  }
+  if (
+    group.expectedSeriesIds.length > 0 &&
+    !group.expectedSeriesIds.every((id) => id === series.id)
+  ) {
     return null;
   }
 
