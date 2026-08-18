@@ -3,6 +3,10 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@anicore/db";
 import { animeMappings, episodes, episodeMappings } from "@anicore/db/schema";
 import { fetchKitsuEpisodes } from "./client";
+import {
+  conflictingKitsuIdentities,
+  formatKitsuIdentityConflict,
+} from "./identity";
 import { mapKitsuAnime, mapKitsuEpisodes, type MappedEpisode } from "./mapper";
 import type { ProviderAnimeData } from "../types";
 import { log } from "../../lib/logger";
@@ -128,6 +132,34 @@ async function insertKitsuMapping(
   isAuthoritative: boolean,
   kitsuEpisodeProviderIds: string[],
 ): Promise<void> {
+  // A sync plugin is expected to resolve one Kitsu identity for an AniCore anime.
+  // If matching changes from A to B, adding B beside A would make future reads
+  // ambiguous and hide a potentially serious remap. Fail closed regardless of
+  // provenance; an explicit repair can then decide what metadata must move.
+  const existingForAnime = await db
+    .select({
+      providerId: animeMappings.providerId,
+      source: animeMappings.source,
+      confidence: animeMappings.confidence,
+    })
+    .from(animeMappings)
+    .where(
+      and(
+        eq(animeMappings.animeId, animeId),
+        eq(animeMappings.provider, "kitsu"),
+      ),
+    );
+
+  const identityConflicts = conflictingKitsuIdentities(
+    existingForAnime,
+    kitsuData.providerId,
+  );
+  if (identityConflicts.length > 0) {
+    throw new Error(
+      formatKitsuIdentityConflict(kitsuData.providerId, identityConflicts),
+    );
+  }
+
   const provenance = kitsuMappingProvenance(isAuthoritative);
   const [mapping] = await db
     .insert(animeMappings)
@@ -278,10 +310,6 @@ export async function syncKitsuEpisodes(
       .onConflictDoUpdate({
         target: [episodes.animeId, episodes.number, episodes.kind],
         set: {
-          // Kitsu episode data is enrichment, not field-level authority. AniCore
-          // does not track per-field provenance yet, so an existing non-null
-          // value may be a manual correction or stronger provider result. Fill
-          // only gaps rather than clobbering established metadata on every sync.
           title:         sql`coalesce(episodes.title, excluded.title)`,
           titleRomaji:   sql`coalesce(episodes.title_romaji, excluded.title_romaji)`,
           titleEnglish:  sql`coalesce(episodes.title_english, excluded.title_english)`,
