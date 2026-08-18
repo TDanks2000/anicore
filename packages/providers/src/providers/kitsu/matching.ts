@@ -1,10 +1,15 @@
-import { titleSimilarity } from "../title-similarity";
+import {
+  normalizeComparableTitle,
+  titleSimilarity,
+} from "../title-similarity";
 import { searchKitsuByTitle, type KitsuSearchNode } from "./client";
 
 export interface MatchHints {
   anilistId?: string;
   titleRomaji: string;
   titleEnglish?: string | null;
+  titleNative?: string | null;
+  synonyms?: string[];
   season?: string | null;
   seasonYear?: number | null;
   episodeCount?: number | null;
@@ -20,6 +25,7 @@ const MIN_FUZZY_TITLE_SIMILARITY = 0.5;
 const AMBIGUITY_MARGIN = 10;
 const AUTHORITATIVE_MATCH_SCORE = 1_000;
 const CONFLICTING_MAPPING_SCORE = -1;
+const MAX_FALLBACK_SEARCH_TITLES = 4;
 
 function anilistMappingsFor(node: KitsuSearchNode): string[] {
   return (
@@ -36,6 +42,32 @@ export function isAuthoritativeAnilistMatch(
   return Boolean(anilistId && anilistMappingsFor(node).includes(anilistId));
 }
 
+export function kitsuSearchTitles(
+  hints: MatchHints,
+): { primary: string[]; fallback: string[] } {
+  const seen = new Set<string>();
+  const unique = (values: Array<string | null | undefined>): string[] => {
+    const result: string[] = [];
+    for (const value of values) {
+      const title = value?.trim();
+      if (!title) continue;
+      const key = normalizeComparableTitle(title);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      result.push(title);
+    }
+    return result;
+  };
+
+  const primary = unique([hints.titleRomaji, hints.titleEnglish]);
+  const fallback = unique([
+    hints.titleNative,
+    ...(hints.synonyms ?? []),
+  ]).slice(0, MAX_FALLBACK_SEARCH_TITLES);
+
+  return { primary, fallback };
+}
+
 function bestTitleSimilarity(node: KitsuSearchNode, hints: MatchHints): number {
   const kitsuTitles = [
     node.titles?.romanized,
@@ -44,9 +76,12 @@ function bestTitleSimilarity(node: KitsuSearchNode, hints: MatchHints): number {
     ...(node.titles?.alternatives ?? []),
     ...Object.values(node.titles?.localized ?? {}),
   ].filter((title): title is string => Boolean(title));
-  const anilistTitles = [hints.titleRomaji, hints.titleEnglish].filter(
-    (title): title is string => Boolean(title),
-  );
+  const anilistTitles = [
+    hints.titleRomaji,
+    hints.titleEnglish,
+    hints.titleNative,
+    ...(hints.synonyms ?? []),
+  ].filter((title): title is string => Boolean(title));
 
   let best = 0;
   for (const kitsuTitle of kitsuTitles) {
@@ -186,20 +221,36 @@ async function searchAndScore(
   }));
 }
 
-export async function findKitsuMatch(
-  hints: MatchHints,
-): Promise<KitsuSearchNode | null> {
-  const candidates = await searchAndScore(hints.titleRomaji, hints);
-  if (hints.titleEnglish && hints.titleEnglish !== hints.titleRomaji) {
-    candidates.push(...(await searchAndScore(hints.titleEnglish, hints)));
-  }
-
-  const bestById = new Map<string, ScoredKitsuCandidate>();
+function addCandidates(
+  bestById: Map<string, ScoredKitsuCandidate>,
+  candidates: ScoredKitsuCandidate[],
+): void {
   for (const candidate of candidates) {
     const existing = bestById.get(candidate.node.id);
     if (!existing || candidate.score > existing.score) {
       bestById.set(candidate.node.id, candidate);
     }
+  }
+}
+
+export async function findKitsuMatch(
+  hints: MatchHints,
+): Promise<KitsuSearchNode | null> {
+  const searchTitles = kitsuSearchTitles(hints);
+  const bestById = new Map<string, ScoredKitsuCandidate>();
+
+  for (const title of searchTitles.primary) {
+    addCandidates(bestById, await searchAndScore(title, hints));
+  }
+
+  const primaryMatch = selectKitsuMatch([...bestById.values()]);
+  if (primaryMatch) return primaryMatch;
+
+  // Native titles and AniList synonyms are fallback discovery keys only. Bound
+  // the extra searches so difficult titles gain coverage without multiplying
+  // requests for the common case where Romaji/English already finds a match.
+  for (const title of searchTitles.fallback) {
+    addCandidates(bestById, await searchAndScore(title, hints));
   }
 
   return selectKitsuMatch([...bestById.values()]);
