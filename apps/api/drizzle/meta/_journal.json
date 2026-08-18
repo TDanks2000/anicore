@@ -15,6 +15,13 @@
       "when": 1783542400385,
       "tag": "0001_anicore_language_status",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1787067062235,
+      "tag": "0002_swift_rocket_raccoon",
+      "breakpoints": true
     }
   ]
 }
