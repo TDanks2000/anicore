@@ -58,9 +58,13 @@ export function planEpisodeOwnershipTransfers(input: {
   const mappingByProviderId = new Map(
     input.mappedEpisodes.map((mapping) => [mapping.providerEpisodeId, mapping]),
   );
-  const targetByNumber = new Map(
-    input.targetEpisodes.map((episode) => [episode.episodeNumber, episode]),
-  );
+  const targetByNumber = new Map<number, TransferTargetEpisode>();
+  for (const episode of input.targetEpisodes) {
+    const existing = targetByNumber.get(episode.episodeNumber);
+    if (!existing || (existing.kind !== "normal" && episode.kind === "normal")) {
+      targetByNumber.set(episode.episodeNumber, episode);
+    }
+  }
 
   const moves: EpisodeOwnershipTransferMove[] = [];
   for (const providerEpisodeNumber of moveNumbers) {
