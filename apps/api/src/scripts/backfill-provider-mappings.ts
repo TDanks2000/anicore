@@ -8,6 +8,7 @@ import {
 } from "@anicore/db";
 
 type Mode = "dry-run" | "apply";
+type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 interface CountRow {
   count: number;
@@ -52,6 +53,14 @@ async function queryRows<T extends Record<string, unknown>>(
   query: SQL,
 ): Promise<T[]> {
   const result = await db.execute(query);
+  return [...result] as T[];
+}
+
+async function transactionRows<T extends Record<string, unknown>>(
+  tx: DbTransaction,
+  query: SQL,
+): Promise<T[]> {
+  const result = await tx.execute(query);
   return [...result] as T[];
 }
 
@@ -136,8 +145,8 @@ async function countLegacyMappingsWithoutV2Link(): Promise<number> {
   `);
 }
 
-async function insertProviderEntities(): Promise<number> {
-  const rows = await queryRows<{ id: number }>(sql`
+async function insertProviderEntities(tx: DbTransaction): Promise<number> {
+  const rows = await transactionRows<{ id: number }>(tx, sql`
     insert into provider_entities (
       provider,
       provider_id,
@@ -167,8 +176,8 @@ async function insertProviderEntities(): Promise<number> {
   return rows.length;
 }
 
-async function insertAnimeProviderMappings(): Promise<number> {
-  const rows = await queryRows<{ id: number }>(sql`
+async function insertAnimeProviderMappings(tx: DbTransaction): Promise<number> {
+  const rows = await transactionRows<{ id: number }>(tx, sql`
     insert into anime_provider_mappings (
       anime_id,
       provider_entity_id,
@@ -224,9 +233,10 @@ async function run(mode: Mode): Promise<BackfillReport> {
   let appliedAnimeProviderMappingInsertCount = 0;
 
   if (mode === "apply") {
-    await db.transaction(async () => {
-      appliedProviderEntityInsertCount = await insertProviderEntities();
-      appliedAnimeProviderMappingInsertCount = await insertAnimeProviderMappings();
+    await db.transaction(async (tx) => {
+      appliedProviderEntityInsertCount = await insertProviderEntities(tx);
+      appliedAnimeProviderMappingInsertCount =
+        await insertAnimeProviderMappings(tx);
     });
   }
 
