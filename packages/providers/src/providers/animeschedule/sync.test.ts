@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
 import type { AnimeScheduleEntry } from "./client";
-import { isAnimeScheduleEntryForAnilist } from "./sync";
+import {
+  animeScheduleDubEvidenceAction,
+  isAnimeScheduleEntryForAnilist,
+} from "./sync";
 
 function entry(aniList: string | undefined): AnimeScheduleEntry {
   return {
@@ -52,5 +55,24 @@ describe("AnimeSchedule mapping verification", () => {
   test("rejects entries without an AniList link", () => {
     expect(isAnimeScheduleEntryForAnilist(entry(undefined), "151807")).toBe(false);
     expect(isAnimeScheduleEntryForAnilist(null, "151807")).toBe(false);
+  });
+});
+
+describe("AnimeSchedule dub evidence lifecycle", () => {
+  test("marks every canonical episode available only for a finished dub", () => {
+    const value = entry("https://anilist.co/anime/151807/Example/");
+    expect(animeScheduleDubEvidenceAction(value)).toBe("available");
+  });
+
+  test("replaces stale positive evidence with missing when no dub premiere exists", () => {
+    const value = entry("https://anilist.co/anime/151807/Example/");
+    value.dubPremier = "0001-01-01T00:00:00Z";
+    expect(animeScheduleDubEvidenceAction(value)).toBe("missing");
+  });
+
+  test("withdraws all-available evidence while a known dub is still ongoing", () => {
+    const value = entry("https://anilist.co/anime/151807/Example/");
+    value.status = "Ongoing";
+    expect(animeScheduleDubEvidenceAction(value)).toBe("clear");
   });
 });
