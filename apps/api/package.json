@@ -5,6 +5,7 @@
     "build": "tsc --noEmit",
     "db:audit-mappings": "bun src/scripts/audit-mappings-command.ts",
     "db:backfill-provider-mappings": "bun src/scripts/backfill-provider-mappings.ts",
+    "db:diagnose-provider-collision-coverage": "bun src/scripts/diagnose-provider-collision-coverage.ts",
     "db:plan-provider-collision-segments": "bun src/scripts/plan-provider-collision-segments.ts",
     "db:repair-mappings": "bun src/scripts/repair-mappings.ts",
     "db:repair-tvdb-orphans": "bun src/scripts/repair-tvdb-orphans.ts",
