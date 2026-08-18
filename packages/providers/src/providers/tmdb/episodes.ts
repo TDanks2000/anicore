@@ -1,6 +1,7 @@
 import { TMDB, type Season, type SeasonDetails } from "@api-wrappers/tmdb-wrapper";
 
 import { loadExistingAnimeSourceMapping, type EnrichmentContext, type TitleSourceMatch } from "../episode-titles";
+import { retireInvalidAutomaticSourceMapping } from "../episode-source-mapping-lifecycle";
 import {
 	MIN_SOURCE_TITLE_SIMILARITY,
 	scoreSourceEpisodeBatch,
@@ -8,7 +9,6 @@ import {
 	sourceTitleSimilarity,
 } from "../episode-source-matching";
 
-// Strip season qualifiers so e.g. "My Hero Academia 3rd Season" also searches as "My Hero Academia".
 function deriveBaseTitle(title: string): string | null {
 	const stripped = title
 		.replace(/\s+(?:season|part|series|cour)\s*\d+\s*$/i, "")
@@ -102,7 +102,15 @@ async function resolveStoredMatch(
 	if (!mapping) return null;
 
 	const parsed = parseStoredMapping(mapping.providerId);
-	if (!parsed) return null;
+	if (!parsed) {
+		await retireInvalidAutomaticSourceMapping({
+			animeId: context.animeId,
+			provider: "tmdb",
+			mapping,
+			reason: "malformed stored show/season ID",
+		});
+		return null;
+	}
 
 	const season = await client.tvSeasons.details(
 		{ tvShowID: parsed.showId, seasonNumber: parsed.seasonNumber },
@@ -115,7 +123,11 @@ async function resolveStoredMatch(
 		season,
 	);
 
-	if (!titledEpisodes.length) return null;
+	if (!titledEpisodes.length) {
+		throw new Error(
+			`Stored tmdb mapping ${mapping.providerId} returned no titled episodes; refusing automatic rematch without evidence that the mapping is wrong`,
+		);
+	}
 	const batchScore = scoreSourceEpisodeBatch(
 		{
 			seasonYear: context.anilistData.seasonYear,
@@ -128,7 +140,15 @@ async function resolveStoredMatch(
 			airDate: episode.airDate,
 		})),
 	);
-	if (!Number.isFinite(batchScore)) return null;
+	if (!Number.isFinite(batchScore)) {
+		await retireInvalidAutomaticSourceMapping({
+			animeId: context.animeId,
+			provider: "tmdb",
+			mapping,
+			reason: "stored season no longer passes episode count/year validation",
+		});
+		return null;
+	}
 
 	return {
 		provider: "tmdb",
@@ -195,9 +215,6 @@ export async function fetchTmdbEpisodeTitles(
 	for (const candidate of rankedShows) {
 		const show = await client.tvShows.details(candidate.id, undefined, "en-US");
 
-		// Rank every real season using TMDB's lightweight season metadata, then
-		// fetch details only for the most plausible subset. This removes the old
-		// "first eight seasons" blind spot without exploding provider requests.
 		const rankedSeasons = show.seasons
 			.filter((season: Season) => season.season_number > 0)
 			.map((season: Season) => ({

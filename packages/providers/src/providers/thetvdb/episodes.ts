@@ -1,4 +1,5 @@
 import { loadExistingAnimeSourceMapping, type EnrichmentContext, type TitleSourceMatch } from "../episode-titles";
+import { retireInvalidAutomaticSourceMapping } from "../episode-source-mapping-lifecycle";
 import {
 	MIN_SOURCE_TITLE_SIMILARITY,
 	scoreSourceEpisodeBatch,
@@ -12,10 +13,6 @@ import {
 	type TvdbEpisodeBase,
 } from "./client";
 
-// Strip season qualifiers so e.g. "My Hero Academia 3rd Season" also searches as "My Hero Academia".
-// TVDB lists multi-season anime as a single series, so the original series year (2016) won't
-// match the AniList season year (2018). The base title finds the parent series; episode count
-// and air date scoring then picks the correct season.
 function deriveBaseTitle(title: string): string | null {
 	const stripped = title
 		.replace(/\s+(?:season|part|series|cour)\s*\d+\s*$/i, "")
@@ -79,7 +76,15 @@ async function resolveStoredMatch(
 	if (!mapping) return null;
 
 	const parsed = parseStoredMapping(mapping.providerId);
-	if (!parsed) return null;
+	if (!parsed) {
+		await retireInvalidAutomaticSourceMapping({
+			animeId: context.animeId,
+			provider: "thetvdb",
+			mapping,
+			reason: "malformed stored series/season ID",
+		});
+		return null;
+	}
 
 	const episodes = await getTvdbSeasonEpisodes(
 		parsed.seriesId,
@@ -92,7 +97,11 @@ async function resolveStoredMatch(
 		mapping.providerSlug,
 	);
 
-	if (!titledEpisodes.length) return null;
+	if (!titledEpisodes.length) {
+		throw new Error(
+			`Stored thetvdb mapping ${mapping.providerId} returned no titled episodes; refusing automatic rematch without evidence that the mapping is wrong`,
+		);
+	}
 	const batchScore = scoreSourceEpisodeBatch(
 		{
 			seasonYear: context.anilistData.seasonYear,
@@ -105,7 +114,15 @@ async function resolveStoredMatch(
 			airDate: episode.airDate,
 		})),
 	);
-	if (!Number.isFinite(batchScore)) return null;
+	if (!Number.isFinite(batchScore)) {
+		await retireInvalidAutomaticSourceMapping({
+			animeId: context.animeId,
+			provider: "thetvdb",
+			mapping,
+			reason: "stored season no longer passes episode count/year validation",
+		});
+		return null;
+	}
 
 	return {
 		provider: "thetvdb",
@@ -172,8 +189,6 @@ export async function fetchTvdbEpisodeTitles(
 	const seasonCandidates: Array<{ value: TitleSourceMatch; score: number }> = [];
 
 	for (const candidate of rankedSeries) {
-		// The language-specific endpoint returns all seasons, so fetch it once and
-		// group locally rather than re-downloading the full series for every season.
 		const allEpisodes = await getTvdbOfficialEpisodes(candidate.id, "eng");
 		const bySeason = new Map<number, TvdbEpisodeBase[]>();
 		for (const episode of allEpisodes) {
