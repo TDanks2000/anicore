@@ -40,6 +40,9 @@
     "db:backfill-provider-mappings": {
       "cache": false
     },
+    "db:diagnose-provider-collision-coverage": {
+      "cache": false
+    },
     "db:plan-provider-collision-segments": {
       "cache": false
     },
