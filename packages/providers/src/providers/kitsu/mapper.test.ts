@@ -96,4 +96,36 @@ describe("Kitsu mapper", () => {
       },
     ]);
   });
+
+  test("rejects zero and ambiguous duplicate canonical episode numbers", () => {
+    const episode = (id: string, number: number): KitsuEpisodeNode => ({
+      id,
+      number,
+      releasedAt: null,
+      length: 24,
+      createdAt: null,
+      titles: {
+        romanized: id,
+        translated: null,
+        original: null,
+        localized: {},
+        alternatives: [],
+      },
+      description: null,
+      thumbnail: null,
+    });
+
+    expect(
+      mapKitsuEpisodes([
+        episode("special-zero", 0),
+        episode("ep-1", 1),
+        episode("ep-2-a", 2),
+        episode("ep-2-b", 2),
+        episode("ep-3", 3),
+      ]).map((mapped) => [mapped.number, mapped.kitsuId]),
+    ).toEqual([
+      [1, "ep-1"],
+      [3, "ep-3"],
+    ]);
+  });
 });
