@@ -37,7 +37,7 @@ afterEach(() => {
 });
 
 describe("AniList ID cache", () => {
-  test("appends missing ids once and keeps the local file sorted", async () => {
+  test("appends missing ids without replacing the live file and sorts on read", async () => {
     const dir = useTempCwd();
 
     expect(appendAnilistId(42)).toBe(true);
@@ -45,9 +45,18 @@ describe("AniList ID cache", () => {
     expect(appendAnilistId(42)).toBe(false);
 
     expect(readFileSync(join(dir, "data/cache/anilist_ids.txt"), "utf-8")).toBe(
-      "7\n42\n",
+      "42\n7\n",
     );
     expect(await loadIds()).toEqual([7, 42]);
+  });
+
+  test("deduplicates and sorts lines written by concurrent appenders", async () => {
+    const dir = useTempCwd();
+    const cacheDir = join(dir, "data/cache");
+    mkdirSync(cacheDir, { recursive: true });
+    writeFileSync(join(cacheDir, "anilist_ids.txt"), "42\n7\n42\n1\n");
+
+    expect(await loadIds()).toEqual([1, 7, 42]);
   });
 
   test("rejects invalid ids", () => {
@@ -58,7 +67,7 @@ describe("AniList ID cache", () => {
   });
 
 	test("preserves ids appended while a refresh request is in flight", async () => {
-		useTempCwd();
+		const dir = useTempCwd();
 		appendAnilistId(7);
 
 		let releaseFetch: (() => void) | undefined;
@@ -79,6 +88,14 @@ describe("AniList ID cache", () => {
 		releaseFetch?.();
 
 		expect(await refreshing).toEqual([1, 7, 42]);
+		expect(
+			new Set(
+				readFileSync(join(dir, "data/cache/anilist_ids.txt"), "utf-8")
+					.trim()
+					.split("\n")
+					.map(Number),
+			),
+		).toEqual(new Set([1, 7, 42]));
 	});
 });
 
