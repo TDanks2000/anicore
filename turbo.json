@@ -43,6 +43,9 @@
     "db:diagnose-provider-collision-coverage": {
       "cache": false
     },
+    "db:diagnose-provider-collision-identities": {
+      "cache": false
+    },
     "db:diagnose-provider-season-ownership": {
       "cache": false
     },

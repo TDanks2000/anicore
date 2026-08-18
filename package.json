@@ -45,6 +45,7 @@
     "db:audit-mappings": "turbo run db:audit-mappings --filter=@anicore/api --ui=stream --",
     "db:backfill-provider-mappings": "turbo run db:backfill-provider-mappings --filter=@anicore/api --ui=stream --",
     "db:diagnose-provider-collision-coverage": "turbo run db:diagnose-provider-collision-coverage --filter=@anicore/api --ui=stream --",
+    "db:diagnose-provider-collision-identities": "turbo run db:diagnose-provider-collision-identities --filter=@anicore/api --ui=stream --",
     "db:diagnose-provider-season-ownership": "turbo run db:diagnose-provider-season-ownership --filter=@anicore/api --ui=stream --",
     "db:plan-provider-collision-segments": "turbo run db:plan-provider-collision-segments --filter=@anicore/api --ui=stream --",
     "db:plan-provider-dual-segments": "turbo run db:plan-provider-dual-segments --filter=@anicore/api --ui=stream --",
