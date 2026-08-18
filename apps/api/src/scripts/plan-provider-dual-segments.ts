@@ -102,6 +102,13 @@ interface RejectedSample {
   reason: RejectReason;
 }
 
+interface GroupOutcome {
+  group: ResolvedCollisionGroup;
+  adjacent: boolean;
+  candidate: PreliminaryCandidate | null;
+  reason: RejectReason | null;
+}
+
 async function queryRows<T extends Record<string, unknown>>(query: SQL): Promise<T[]> {
   const result = await db.execute(query);
   return [...result] as T[];
@@ -361,7 +368,8 @@ async function run(): Promise<Record<string, unknown>> {
   }
   const entitiesWithSegments = new Set(existingSegments.map((row) => row.providerEntityId));
 
-  const tmdb = new TMDB({ apiKey: process.env.TMDB_API_KEY!.trim() });
+  const tmdbKey = process.env.TMDB_API_KEY?.trim() ?? "";
+  const tmdb = tmdbKey ? new TMDB({ apiKey: tmdbKey }) : null;
   const getAuthoritativeSeason = (
     provider: Provider,
     providerId: string,
@@ -371,32 +379,36 @@ async function run(): Promise<Record<string, unknown>> {
     if (cached) return cached;
     const parsed = parseProviderIdentity(providerId);
     if (!parsed) throw new Error(`Malformed ${provider} provider ID: ${providerId}`);
-    const promise =
-      provider === "thetvdb"
-        ? getTvdbSeasonEpisodes(parsed.entityId, parsed.seasonNumber, "eng").then(
-            tvdbAuthoritativeEpisodes,
-          )
-        : tmdb.tvSeasons
-            .details(
-              { tvShowID: parsed.entityId, seasonNumber: parsed.seasonNumber },
-              undefined,
-              { language: "en-US" },
+
+    let promise: Promise<AuthoritativeEpisode[]>;
+    if (provider === "thetvdb") {
+      promise = getTvdbSeasonEpisodes(parsed.entityId, parsed.seasonNumber, "eng").then(
+        tvdbAuthoritativeEpisodes,
+      );
+    } else {
+      if (!tmdb) throw new Error("TMDB_API_KEY is required for TMDB dual segment planning");
+      promise = tmdb.tvSeasons
+        .details(
+          { tvShowID: parsed.entityId, seasonNumber: parsed.seasonNumber },
+          undefined,
+          { language: "en-US" },
+        )
+        .then((season) =>
+          (season.episodes ?? [])
+            .filter(
+              (episode) =>
+                Number.isInteger(episode.id) &&
+                episode.id > 0 &&
+                Number.isInteger(episode.episode_number) &&
+                episode.episode_number > 0,
             )
-            .then((season) =>
-              (season.episodes ?? [])
-                .filter(
-                  (episode) =>
-                    Number.isInteger(episode.id) &&
-                    episode.id > 0 &&
-                    Number.isInteger(episode.episode_number) &&
-                    episode.episode_number > 0,
-                )
-                .map((episode) => ({
-                  providerEpisodeId: String(episode.id),
-                  providerEpisodeNumber: episode.episode_number,
-                }))
-                .sort((a, b) => a.providerEpisodeNumber - b.providerEpisodeNumber),
-            );
+            .map((episode) => ({
+              providerEpisodeId: String(episode.id),
+              providerEpisodeNumber: episode.episode_number,
+            }))
+            .sort((a, b) => a.providerEpisodeNumber - b.providerEpisodeNumber),
+        );
+    }
     authoritativeCache.set(key, promise);
     return promise;
   };
@@ -405,112 +417,137 @@ async function run(): Promise<Record<string, unknown>> {
   const preliminary: PreliminaryCandidate[] = [];
   let adjacentOwnershipGroups = 0;
 
-  const outcomes = await mapWithConcurrency(resolvedGroups, 5, async (group) => {
-    const entityKey = identityKey(group.provider, group.providerId);
-    const mappings = mappingsByEntity.get(entityKey);
-    if (!mappings || mappings.length === 0) {
-      return { group, candidate: null, reason: "missing-provider-entity" as const };
-    }
-    const orphanExisting = mappings.find((mapping) => mapping.animeId === group.animeId);
-    if (orphanExisting) {
-      return {
-        group,
-        candidate: null,
-        reason: "orphan-association-already-exists" as const,
-      };
-    }
-    const owners = mappings.filter((mapping) => mapping.animeId !== group.animeId);
-    if (owners.length !== 1) {
-      return { group, candidate: null, reason: "owner-count-not-one" as const };
-    }
-    const owner = owners[0]!;
-    if (entitiesWithSegments.has(owner.providerEntityId)) {
-      return { group, candidate: null, reason: "existing-segments-present" as const };
-    }
+  const outcomes = await mapWithConcurrency<ResolvedCollisionGroup, GroupOutcome>(
+    resolvedGroups,
+    5,
+    async (group) => {
+      const entityKey = identityKey(group.provider, group.providerId);
+      const mappings = mappingsByEntity.get(entityKey);
+      if (!mappings || mappings.length === 0) {
+        return {
+          group,
+          adjacent: false,
+          candidate: null,
+          reason: "missing-provider-entity",
+        };
+      }
+      const orphanExisting = mappings.find((mapping) => mapping.animeId === group.animeId);
+      if (orphanExisting) {
+        return {
+          group,
+          adjacent: false,
+          candidate: null,
+          reason: "orphan-association-already-exists",
+        };
+      }
+      const owners = mappings.filter((mapping) => mapping.animeId !== group.animeId);
+      if (owners.length !== 1) {
+        return {
+          group,
+          adjacent: false,
+          candidate: null,
+          reason: "owner-count-not-one",
+        };
+      }
+      const owner = owners[0]!;
+      if (entitiesWithSegments.has(owner.providerEntityId)) {
+        return {
+          group,
+          adjacent: false,
+          candidate: null,
+          reason: "existing-segments-present",
+        };
+      }
 
-    const authoritative = await getAuthoritativeSeason(group.provider, group.providerId);
-    const ownership: ProviderSeasonEpisodeOwnership[] = authoritative.map((episode) => ({
-      ...episode,
-      animeId:
-        episodeMap.get(
-          episodeIdentityKey(group.provider, episode.providerEpisodeId),
-        )?.animeId ?? null,
-    }));
-    const diagnostic = classifyProviderSeasonOwnership(
-      ownership,
-      group.animeId,
-      [owner.animeId],
-    );
-    if (
-      diagnostic.classification !== "owner-then-orphan-adjacent" &&
-      diagnostic.classification !== "orphan-then-owner-adjacent"
-    ) {
-      return { group, candidate: null, reason: "not-adjacent-ownership" as const };
-    }
-
-    const ownerRows: ProviderEpisodeAlignmentRow[] = [];
-    const orphanAlignmentRows: ProviderEpisodeAlignmentRow[] = [];
-    for (const episode of authoritative) {
-      const row = episodeMap.get(
-        episodeIdentityKey(group.provider, episode.providerEpisodeId),
+      const authoritative = await getAuthoritativeSeason(group.provider, group.providerId);
+      const ownership: ProviderSeasonEpisodeOwnership[] = authoritative.map((episode) => ({
+        ...episode,
+        animeId:
+          episodeMap.get(
+            episodeIdentityKey(group.provider, episode.providerEpisodeId),
+          )?.animeId ?? null,
+      }));
+      const diagnostic = classifyProviderSeasonOwnership(
+        ownership,
+        group.animeId,
+        [owner.animeId],
       );
-      if (!row) continue;
-      const aligned: ProviderEpisodeAlignmentRow = {
-        animeId: row.animeId,
-        providerEpisodeId: episode.providerEpisodeId,
-        providerEpisodeNumber: episode.providerEpisodeNumber,
-        localEpisodeNumber: row.localEpisodeNumber,
-        localKind: row.localKind,
-      };
-      if (row.animeId === owner.animeId) ownerRows.push(aligned);
-      if (row.animeId === group.animeId) orphanAlignmentRows.push(aligned);
-    }
+      if (
+        diagnostic.classification !== "owner-then-orphan-adjacent" &&
+        diagnostic.classification !== "orphan-then-owner-adjacent"
+      ) {
+        return {
+          group,
+          adjacent: false,
+          candidate: null,
+          reason: "not-adjacent-ownership",
+        };
+      }
 
-    const dual = buildDualProviderSegmentPlan(
-      diagnostic.classification,
-      owner.animeId,
-      ownerRows,
-      group.animeId,
-      orphanAlignmentRows,
-    );
-    if (!dual.ownerSegment || !dual.orphanSegment || dual.reason) {
+      const ownerRows: ProviderEpisodeAlignmentRow[] = [];
+      const orphanAlignmentRows: ProviderEpisodeAlignmentRow[] = [];
+      for (const episode of authoritative) {
+        const row = episodeMap.get(
+          episodeIdentityKey(group.provider, episode.providerEpisodeId),
+        );
+        if (!row) continue;
+        const aligned: ProviderEpisodeAlignmentRow = {
+          animeId: row.animeId,
+          providerEpisodeId: episode.providerEpisodeId,
+          providerEpisodeNumber: episode.providerEpisodeNumber,
+          localEpisodeNumber: row.localEpisodeNumber,
+          localKind: row.localKind,
+        };
+        if (row.animeId === owner.animeId) ownerRows.push(aligned);
+        if (row.animeId === group.animeId) orphanAlignmentRows.push(aligned);
+      }
+
+      const dual = buildDualProviderSegmentPlan(
+        diagnostic.classification,
+        owner.animeId,
+        ownerRows,
+        group.animeId,
+        orphanAlignmentRows,
+      );
+      if (!dual.ownerSegment || !dual.orphanSegment || dual.reason) {
+        return {
+          group,
+          adjacent: true,
+          candidate: null,
+          reason: dual.reason ?? "segment-order-mismatch",
+        };
+      }
+
       return {
         group,
-        candidate: null,
-        reason: (dual.reason ?? "segment-order-mismatch") as RejectReason,
         adjacent: true,
+        reason: null,
+        candidate: {
+          animeId: group.animeId,
+          provider: group.provider,
+          providerId: group.providerId,
+          providerEntityId: owner.providerEntityId,
+          ownerAnimeId: owner.animeId,
+          ownerAnimeProviderMappingId: owner.animeProviderMappingId,
+          classification: diagnostic.classification,
+          confidence: Math.min(85, group.confidence),
+          ownerSegment: dual.ownerSegment,
+          orphanSegment: dual.orphanSegment,
+        },
       };
-    }
-
-    return {
-      group,
-      adjacent: true,
-      reason: null,
-      candidate: {
-        animeId: group.animeId,
-        provider: group.provider,
-        providerId: group.providerId,
-        providerEntityId: owner.providerEntityId,
-        ownerAnimeId: owner.animeId,
-        ownerAnimeProviderMappingId: owner.animeProviderMappingId,
-        classification: diagnostic.classification as AdjacentClassification,
-        confidence: Math.min(85, group.confidence),
-        ownerSegment: dual.ownerSegment,
-        orphanSegment: dual.orphanSegment,
-      } satisfies PreliminaryCandidate,
-    };
-  });
+    },
+  );
 
   for (const outcome of outcomes) {
     if (outcome.adjacent) adjacentOwnershipGroups += 1;
     if (outcome.candidate) {
       preliminary.push(outcome.candidate);
-    } else {
+    } else if (outcome.reason) {
       rejected.push({
         animeId: outcome.group.animeId,
         provider: outcome.group.provider,
         providerId: outcome.group.providerId,
-        reason: outcome.reason as RejectReason,
+        reason: outcome.reason,
       });
     }
   }
