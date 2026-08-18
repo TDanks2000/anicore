@@ -46,6 +46,9 @@
     "db:diagnose-provider-collision-identities": {
       "cache": false
     },
+    "db:diagnose-provider-local-count-mismatches": {
+      "cache": false
+    },
     "db:diagnose-provider-season-ownership": {
       "cache": false
     },
