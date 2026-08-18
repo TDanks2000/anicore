@@ -3,12 +3,18 @@ import { randomUUID } from "node:crypto";
 import postgres from "postgres";
 
 import { getDatabaseConfig } from "./db-config";
-import * as schema from "./schema";
+import * as providerMappingSchema from "./provider-mapping-schema";
+import * as coreSchema from "./schema";
 
 const databaseConfig = getDatabaseConfig();
 const client = postgres(databaseConfig.url, { ssl: databaseConfig.ssl });
 const SYNC_LEASE_HEARTBEAT_MS = 60_000;
 const SYNC_LEASE_STALE_MINUTES = 5;
+
+const schema = {
+	...coreSchema,
+	...providerMappingSchema,
+};
 
 export const db = drizzle(client, { schema });
 
