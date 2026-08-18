@@ -7,6 +7,7 @@ import {
   writeFileSync,
   unlinkSync,
   readdirSync,
+  renameSync,
 } from "node:fs";
 
 import { log } from "./logger";
@@ -126,19 +127,86 @@ const DEFAULT_PROGRESS: Progress = {
   stats: { created: 0, updated: 0, failed: 0 },
 };
 
-export async function loadProgress(): Promise<Progress> {
-  if (!existsSync(PROGRESS_FILE)) return { ...DEFAULT_PROGRESS };
-  try {
-    const text = await Bun.file(PROGRESS_FILE).text();
-    return { ...DEFAULT_PROGRESS, ...JSON.parse(text) };
-  } catch {
-    return { ...DEFAULT_PROGRESS };
+function defaultProgress(): Progress {
+  return {
+    version: DEFAULT_PROGRESS.version,
+    lastIndex: DEFAULT_PROGRESS.lastIndex,
+    stats: { ...DEFAULT_PROGRESS.stats },
+  };
+}
+
+function isNonNegativeInteger(value: unknown): value is number {
+  return Number.isInteger(value) && (value as number) >= 0;
+}
+
+export function parseProgress(value: unknown): Progress | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+
+  const candidate = value as Record<string, unknown>;
+  if (candidate.version !== DEFAULT_PROGRESS.version) return null;
+  if (!isNonNegativeInteger(candidate.lastIndex)) return null;
+
+  const rawStats = candidate.stats;
+  if (!rawStats || typeof rawStats !== "object" || Array.isArray(rawStats)) {
+    return null;
   }
+  const stats = rawStats as Record<string, unknown>;
+  if (
+    !isNonNegativeInteger(stats.created) ||
+    !isNonNegativeInteger(stats.updated) ||
+    !isNonNegativeInteger(stats.failed)
+  ) {
+    return null;
+  }
+
+  return {
+    version: DEFAULT_PROGRESS.version,
+    lastIndex: candidate.lastIndex,
+    stats: {
+      created: stats.created,
+      updated: stats.updated,
+      failed: stats.failed,
+    },
+  };
+}
+
+export async function loadProgress(): Promise<Progress> {
+  if (!existsSync(PROGRESS_FILE)) return defaultProgress();
+
+  let parsedJson: unknown;
+  try {
+    parsedJson = JSON.parse(await Bun.file(PROGRESS_FILE).text());
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `Sync checkpoint ${PROGRESS_FILE} is unreadable: ${message}. Refusing to restart from index 0; repair the checkpoint or run an explicit reset.`,
+    );
+  }
+
+  const progress = parseProgress(parsedJson);
+  if (!progress) {
+    throw new Error(
+      `Sync checkpoint ${PROGRESS_FILE} has an invalid shape or unsupported version. Refusing to restart from index 0; repair the checkpoint or run an explicit reset.`,
+    );
+  }
+  return progress;
 }
 
 export async function saveProgress(progress: Progress): Promise<void> {
+  const validated = parseProgress(progress);
+  if (!validated) {
+    throw new Error("Refusing to write an invalid sync checkpoint");
+  }
+
   ensureCacheDir();
-  await Bun.write(PROGRESS_FILE, JSON.stringify(progress, null, 2));
+  const temporaryPath = `${PROGRESS_FILE}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
+  try {
+    writeFileSync(temporaryPath, JSON.stringify(validated, null, 2));
+    renameSync(temporaryPath, PROGRESS_FILE);
+  } catch (error) {
+    if (existsSync(temporaryPath)) unlinkSync(temporaryPath);
+    throw error;
+  }
 }
 
 export async function resetProgress(): Promise<void> {
