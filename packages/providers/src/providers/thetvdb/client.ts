@@ -26,11 +26,14 @@ interface TvdbSeasonRecord {
 	number?: number;
 }
 
-interface TvdbSeriesExtended {
+export interface TvdbSeriesBaseRecord {
 	id: number;
 	name: string;
 	slug?: string;
 	firstAired?: string;
+}
+
+interface TvdbSeriesExtended extends TvdbSeriesBaseRecord {
 	seasons?: TvdbSeasonRecord[];
 }
 
@@ -140,6 +143,14 @@ export async function searchTvdbSeries(
 		limit: 5,
 	});
 	return data ?? [];
+}
+
+export async function getTvdbSeriesBySlug(
+	slug: string,
+): Promise<TvdbSeriesBaseRecord | null> {
+	return tvdbGet<TvdbSeriesBaseRecord>(
+		`/series/slug/${encodeURIComponent(slug)}`,
+	);
 }
 
 export async function getTvdbSeriesExtended(
