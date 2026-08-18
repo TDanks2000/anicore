@@ -145,13 +145,19 @@ export class SyncEngine {
 		const results = await Promise.allSettled(
 			active.map((p) => p.sync(String(id), anilistData)),
 		);
+		const failures: string[] = [];
 
 		for (let j = 0; j < active.length; j++) {
 			const plugin = active[j]!;
 			const settled = results[j]!;
 
 			if (settled.status === "rejected") {
-				log.error(`[${plugin.name.toUpperCase()}] ID ${id}: ${settled.reason}`);
+				const message =
+					settled.reason instanceof Error
+						? settled.reason.message
+						: String(settled.reason);
+				log.error(`[${plugin.name.toUpperCase()}] ID ${id}: ${message}`);
+				failures.push(`${plugin.name}: ${message}`);
 				continue;
 			}
 
@@ -159,10 +165,16 @@ export class SyncEngine {
 			if (result.status === "unmatched") {
 				this.markUnmatched(plugin.name, id);
 			} else if (result.status === "error") {
-				log.error(
-					`[${plugin.name.toUpperCase()}] ID ${id}: ${result.message}`,
-				);
+				const message = result.message ?? "provider returned an unspecified error";
+				log.error(`[${plugin.name.toUpperCase()}] ID ${id}: ${message}`);
+				failures.push(`${plugin.name}: ${message}`);
 			}
+		}
+
+		if (failures.length > 0) {
+			throw new Error(
+				`Provider sync failed for AniList ${id}: ${failures.join("; ")}`,
+			);
 		}
 	}
 

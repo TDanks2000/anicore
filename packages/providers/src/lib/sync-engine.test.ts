@@ -1,6 +1,53 @@
 import { describe, expect, test } from "bun:test";
 
+import type { ProgressBar } from "./logger";
 import { SyncEngine } from "./sync-engine";
+import type { ProviderAnimeData, ProviderPlugin } from "../providers/types";
+
+const anilistData: ProviderAnimeData = {
+	provider: "anilist",
+	providerId: "999999999",
+	titleRomaji: "Sync Engine Test",
+};
+
+function fakeProgressBar(): ProgressBar {
+	const bar = {
+		setStage: () => bar,
+	};
+	return bar as unknown as ProgressBar;
+}
+
+describe("SyncEngine.syncPlugins", () => {
+	test("runs every provider then rejects the item when providers fail", async () => {
+		const calls: string[] = [];
+		const plugins: ProviderPlugin[] = [
+			{
+				name: "kitsu",
+				sync: async () => {
+					calls.push("kitsu");
+					return { status: "error", message: "identity conflict" };
+				},
+			},
+			{
+				name: "animeschedule",
+				sync: async () => {
+					calls.push("animeschedule");
+					throw new Error("provider unavailable");
+				},
+			},
+		];
+		const engine = new SyncEngine(plugins);
+		for (const set of engine.unmatchedSets.values()) set.clear();
+
+		await expect(
+			engine.syncPlugins(999999999, anilistData, fakeProgressBar()),
+		).rejects.toThrow(
+			"Provider sync failed for AniList 999999999: kitsu: identity conflict; animeschedule: provider unavailable",
+		);
+
+		expect(calls).toEqual(["kitsu", "animeschedule"]);
+	});
+});
 
 describe("SyncEngine.iterateParallel", () => {
 	test("fetches a batch in parallel before processing it sequentially", async () => {
