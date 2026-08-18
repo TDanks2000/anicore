@@ -51,6 +51,7 @@
     "db:plan-provider-dual-segments": "turbo run db:plan-provider-dual-segments --filter=@anicore/api --ui=stream --",
     "db:plan-provider-season-ownership-repairs": "turbo run db:plan-provider-season-ownership-repairs --filter=@anicore/api --ui=stream --",
     "db:repair-mappings": "turbo run db:repair-mappings --filter=@anicore/api --ui=stream --",
+    "db:repair-provider-season-ownership": "turbo run db:repair-provider-season-ownership --filter=@anicore/api --ui=stream --",
     "db:repair-tvdb-orphans": "turbo run db:repair-tvdb-orphans --filter=@anicore/api --ui=stream --",
     "db:generate": "turbo run db:generate --filter=@anicore/api --ui=stream",
     "db:migrate": "turbo run db:migrate --filter=@anicore/api --ui=stream",
