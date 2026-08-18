@@ -18,6 +18,7 @@ data/dry-run-*.json
 apps/api/data/cache/
 apps/api/data/sync-monitor/
 apps/api/data/dry-run-*.json
+mapping-audit.json
 
 # SQLite (if ever used locally)
 *.sqlite
