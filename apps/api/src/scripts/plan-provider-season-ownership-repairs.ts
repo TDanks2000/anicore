@@ -5,6 +5,7 @@ import { closeDb, db } from "@anicore/db";
 import {
   getTvdbSeasonEpisodes,
   getTvdbSeriesBySlug,
+  getTvdbSeriesExtended,
   type TvdbEpisodeBase,
   type TvdbSeriesBaseRecord,
 } from "@anicore/providers/thetvdb/client";
@@ -20,6 +21,11 @@ import {
   type ResolvedCollisionGroup,
 } from "./provider-collision-segment-plan";
 import {
+  verifyProviderSeasonIdentity,
+  type ProviderSeasonIdentityRejectReason,
+  type ProviderSeasonIdentityResult,
+} from "./provider-season-identity-verification";
+import {
   planWholeSeasonOwnershipRepair,
   type WholeSeasonAuthoritativeEpisode,
   type WholeSeasonMappedEpisode,
@@ -27,6 +33,14 @@ import {
 } from "./whole-season-ownership-repair-plan";
 
 type Provider = "thetvdb" | "tmdb";
+
+type PlanningRejectReason =
+  | WholeSeasonRepairRejectReason
+  | ProviderSeasonIdentityRejectReason
+  | "missing-provider-entity"
+  | "owner-count-not-one"
+  | "target-association-already-exists"
+  | "missing-target-metadata";
 
 interface ProviderEntityMappingRow {
   providerEntityId: number;
@@ -55,6 +69,10 @@ interface LocalNormalEpisodeRow {
 interface AnimeMetaRow {
   animeId: number;
   titleRomaji: string;
+  titleEnglish: string | null;
+  titleNative: string | null;
+  titleUserPreferred: string | null;
+  synonymsJson: string;
   format: string | null;
   episodeCount: number | null;
 }
@@ -77,17 +95,26 @@ interface CandidateSample {
   targetOwnedEpisodeCount: number;
   ownerOwnedEpisodeCount: number;
   providerEpisodeNumbersToMove: number[];
+  providerTitles: string[];
+  bestProviderTitle: string | null;
+  bestTargetTitle: string | null;
+  bestTitleSimilarity: number;
 }
 
 interface RejectedSample {
   animeId: number;
   provider: Provider;
   providerId: string;
-  reason:
-    | WholeSeasonRepairRejectReason
-    | "missing-provider-entity"
-    | "owner-count-not-one"
-    | "target-association-already-exists";
+  reason: PlanningRejectReason;
+}
+
+interface PlanningOutcome {
+  group: ResolvedCollisionGroup;
+  owner: ProviderEntityMappingRow | null;
+  plan: ReturnType<typeof planWholeSeasonOwnershipRepair> | null;
+  structurallySafe: boolean;
+  reason: PlanningRejectReason | null;
+  identity: ProviderSeasonIdentityResult | null;
 }
 
 async function queryRows<T extends Record<string, unknown>>(query: SQL): Promise<T[]> {
@@ -198,6 +225,10 @@ async function loadAnimeMeta(): Promise<AnimeMetaRow[]> {
     select
       id as "animeId",
       title_romaji as "titleRomaji",
+      title_english as "titleEnglish",
+      title_native as "titleNative",
+      title_user_preferred as "titleUserPreferred",
+      synonyms_json as "synonymsJson",
       format,
       episode_count as "episodeCount"
     from public.anime
@@ -415,9 +446,34 @@ async function run(): Promise<Record<string, unknown>> {
     return promise;
   };
 
+  const providerTitlesCache = new Map<string, Promise<string[]>>();
+  const getProviderTitles = (provider: Provider, providerId: string): Promise<string[]> => {
+    const key = identityKey(provider, providerId);
+    const cached = providerTitlesCache.get(key);
+    if (cached) return cached;
+    const parsed = parseProviderIdentity(providerId);
+    if (!parsed) throw new Error(`Malformed ${provider} provider ID: ${providerId}`);
+
+    const promise =
+      provider === "thetvdb"
+        ? getTvdbSeriesExtended(parsed.entityId).then((series) =>
+            series?.name ? [series.name] : [],
+          )
+        : getTmdb()
+            .tvShows.details(parsed.entityId, undefined, "en-US")
+            .then((show) =>
+              [show.name, show.original_name].filter(
+                (title): title is string => typeof title === "string" && title.trim().length > 0,
+              ),
+            );
+    providerTitlesCache.set(key, promise);
+    return promise;
+  };
+
   const rejectionCounts = new Map<string, number>();
   const rejectedSamples: RejectedSample[] = [];
   const candidateSamples: CandidateSample[] = [];
+  let structurallySafeWholeSeasonTransferGroups = 0;
   let safeWholeSeasonTransferGroups = 0;
   let plannedEpisodeMappingReassignments = 0;
   let plannedLegacyParentTransfers = 0;
@@ -427,53 +483,113 @@ async function run(): Promise<Record<string, unknown>> {
     ["tmdb", { groups: 0, episodeMoves: 0 }],
   ]);
 
-  const outcomes = await mapWithConcurrency(resolvedGroups, 5, async (group) => {
-    const key = identityKey(group.provider, group.providerId);
-    const mappings = mappingsByEntity.get(key);
-    if (!mappings || mappings.length === 0) {
-      return { group, owner: null, plan: null, reason: "missing-provider-entity" as const };
-    }
-    if (mappings.some((mapping) => mapping.animeId === group.animeId)) {
+  const outcomes = await mapWithConcurrency<ResolvedCollisionGroup, PlanningOutcome>(
+    resolvedGroups,
+    5,
+    async (group) => {
+      const key = identityKey(group.provider, group.providerId);
+      const mappings = mappingsByEntity.get(key);
+      if (!mappings || mappings.length === 0) {
+        return {
+          group,
+          owner: null,
+          plan: null,
+          structurallySafe: false,
+          reason: "missing-provider-entity",
+          identity: null,
+        };
+      }
+      if (mappings.some((mapping) => mapping.animeId === group.animeId)) {
+        return {
+          group,
+          owner: null,
+          plan: null,
+          structurallySafe: false,
+          reason: "target-association-already-exists",
+          identity: null,
+        };
+      }
+      const owners = mappings.filter((mapping) => mapping.animeId !== group.animeId);
+      if (owners.length !== 1) {
+        return {
+          group,
+          owner: null,
+          plan: null,
+          structurallySafe: false,
+          reason: "owner-count-not-one",
+          identity: null,
+        };
+      }
+
+      const owner = owners[0]!;
+      const authoritative = await getAuthoritativeSeason(group.provider, group.providerId);
+      const mappedEpisodes: WholeSeasonMappedEpisode[] = [];
+      for (const episode of authoritative) {
+        const mapping = episodeMap.get(
+          episodeIdentityKey(group.provider, episode.providerEpisodeId),
+        );
+        if (!mapping) continue;
+        mappedEpisodes.push({
+          providerEpisodeId: episode.providerEpisodeId,
+          animeId: mapping.animeId,
+          localEpisodeNumber: mapping.localEpisodeNumber,
+          localKind: mapping.localKind,
+        });
+      }
+
+      const plan = planWholeSeasonOwnershipRepair({
+        targetAnimeId: group.animeId,
+        currentOwnerAnimeId: owner.animeId,
+        authoritativeEpisodes: authoritative,
+        mappedEpisodes,
+        targetNormalEpisodeNumbers: localNormalsByAnime.get(group.animeId) ?? [],
+        ownerNormalEpisodeCount: (localNormalsByAnime.get(owner.animeId) ?? []).length,
+      });
+      if (!plan.candidate) {
+        return {
+          group,
+          owner,
+          plan,
+          structurallySafe: false,
+          reason: plan.reason,
+          identity: null,
+        };
+      }
+
+      const targetMeta = metaByAnime.get(group.animeId);
+      if (!targetMeta) {
+        return {
+          group,
+          owner,
+          plan,
+          structurallySafe: true,
+          reason: "missing-target-metadata",
+          identity: null,
+        };
+      }
+
+      const providerTitles = await getProviderTitles(group.provider, group.providerId);
+      const identity = verifyProviderSeasonIdentity({
+        anime: targetMeta,
+        authoritativeEpisodeCount: plan.candidate.authoritativeEpisodeCount,
+        providerTitles,
+      });
       return {
         group,
-        owner: null,
-        plan: null,
-        reason: "target-association-already-exists" as const,
+        owner,
+        plan,
+        structurallySafe: true,
+        reason: identity.reason,
+        identity,
       };
-    }
-    const owners = mappings.filter((mapping) => mapping.animeId !== group.animeId);
-    if (owners.length !== 1) {
-      return { group, owner: null, plan: null, reason: "owner-count-not-one" as const };
-    }
-    const owner = owners[0]!;
-    const authoritative = await getAuthoritativeSeason(group.provider, group.providerId);
-    const mappedEpisodes: WholeSeasonMappedEpisode[] = [];
-    for (const episode of authoritative) {
-      const mapping = episodeMap.get(
-        episodeIdentityKey(group.provider, episode.providerEpisodeId),
-      );
-      if (!mapping) continue;
-      mappedEpisodes.push({
-        providerEpisodeId: episode.providerEpisodeId,
-        animeId: mapping.animeId,
-        localEpisodeNumber: mapping.localEpisodeNumber,
-        localKind: mapping.localKind,
-      });
-    }
-    const plan = planWholeSeasonOwnershipRepair({
-      targetAnimeId: group.animeId,
-      currentOwnerAnimeId: owner.animeId,
-      authoritativeEpisodes: authoritative,
-      mappedEpisodes,
-      targetNormalEpisodeNumbers: localNormalsByAnime.get(group.animeId) ?? [],
-      ownerNormalEpisodeCount: (localNormalsByAnime.get(owner.animeId) ?? []).length,
-    });
-    return { group, owner, plan, reason: plan.reason };
-  });
+    },
+  );
 
   for (const outcome of outcomes) {
-    const { group, owner, plan, reason } = outcome;
-    if (!plan?.candidate || !owner) {
+    const { group, owner, plan, structurallySafe, reason, identity } = outcome;
+    if (structurallySafe) structurallySafeWholeSeasonTransferGroups += 1;
+
+    if (!plan?.candidate || !owner || reason) {
       const rejectReason = reason ?? "owner-count-not-one";
       increment(rejectionCounts, rejectReason);
       if (rejectedSamples.length < 50) {
@@ -497,16 +613,16 @@ async function run(): Promise<Record<string, unknown>> {
     providerSummary.episodeMoves += candidate.ownerOwnedEpisodeCount;
 
     if (candidateSamples.length < 60) {
-      const targetMeta = metaByAnime.get(group.animeId);
+      const targetMeta = metaByAnime.get(group.animeId)!;
       const ownerMeta = metaByAnime.get(owner.animeId);
       candidateSamples.push({
         provider: group.provider,
         providerId: group.providerId,
         providerEntityId: owner.providerEntityId,
         targetAnimeId: group.animeId,
-        targetTitle: targetMeta?.titleRomaji ?? null,
-        targetFormat: targetMeta?.format ?? null,
-        targetMetadataEpisodeCount: targetMeta?.episodeCount ?? null,
+        targetTitle: targetMeta.titleRomaji,
+        targetFormat: targetMeta.format,
+        targetMetadataEpisodeCount: targetMeta.episodeCount,
         currentOwnerAnimeId: owner.animeId,
         currentOwnerTitle: ownerMeta?.titleRomaji ?? null,
         currentOwnerFormat: ownerMeta?.format ?? null,
@@ -517,6 +633,10 @@ async function run(): Promise<Record<string, unknown>> {
         targetOwnedEpisodeCount: candidate.targetOwnedEpisodeCount,
         ownerOwnedEpisodeCount: candidate.ownerOwnedEpisodeCount,
         providerEpisodeNumbersToMove: candidate.providerEpisodeNumbersToMove,
+        providerTitles: identity?.providerTitles ?? [],
+        bestProviderTitle: identity?.bestProviderTitle ?? null,
+        bestTargetTitle: identity?.bestTargetTitle ?? null,
+        bestTitleSimilarity: identity?.bestTitleSimilarity ?? 0,
       });
     }
   }
@@ -541,8 +661,9 @@ async function run(): Promise<Record<string, unknown>> {
     operation: {
       code: "plan-provider-season-ownership-repairs",
       description:
-        "Plan only strict whole-season ownership repairs where one orphan AniCore anime has a complete 1..N local season matching the authoritative TVDB/TMDB season, already owns a strict majority of those exact provider episodes number-for-number, and the current parent owner accounts for exactly the missing provider episodes. Real split cours are rejected when the target local episode count differs from the provider season. This command never writes data.",
+        "Plan only strict whole-season ownership repairs where one orphan AniCore anime has a complete 1..N local season matching the authoritative TVDB/TMDB season, already owns a strict majority of exact provider episodes number-for-number, and the current parent owner accounts for exactly the missing provider episodes. Structural candidates are additionally required to have an exact AniList metadata episode count and a strong canonical provider-title match against AniList titles/synonyms before they are reported as safe. This command never writes data.",
       resolvedCollisionGroups: resolvedGroups.length,
+      structurallySafeWholeSeasonTransferGroups,
       safeWholeSeasonTransferGroups,
       plannedEpisodeMappingReassignments,
       plannedLegacyParentTransfers,
