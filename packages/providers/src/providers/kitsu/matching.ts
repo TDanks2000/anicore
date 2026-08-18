@@ -57,6 +57,47 @@ function bestTitleSimilarity(node: KitsuSearchNode, hints: MatchHints): number {
   return best;
 }
 
+export function hasKitsuStructuralConflict(
+  node: KitsuSearchNode,
+  hints: MatchHints,
+): boolean {
+  const nodeYear = node.startDate
+    ? Number(node.startDate.trim().split("-")[0])
+    : null;
+
+  if (
+    hints.seasonYear &&
+    nodeYear &&
+    Number.isInteger(nodeYear) &&
+    Math.abs(nodeYear - hints.seasonYear) > 1
+  ) {
+    return true;
+  }
+
+  if (
+    hints.episodeCount &&
+    hints.episodeCount > 0 &&
+    node.episodeCount &&
+    node.episodeCount > 0
+  ) {
+    const ratio = node.episodeCount / hints.episodeCount;
+    if (
+      hints.episodeCount >= 8 &&
+      (ratio < 0.75 || ratio > 1.35)
+    ) {
+      return true;
+    }
+    if (
+      hints.episodeCount >= 3 &&
+      (ratio < 0.5 || ratio > 1.75)
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export function scoreKitsuCandidate(
   node: KitsuSearchNode,
   hints: MatchHints,
@@ -82,6 +123,13 @@ export function scoreKitsuCandidate(
 
   const titleScore = bestTitleSimilarity(node, hints);
   if (titleScore < MIN_FUZZY_TITLE_SIMILARITY) {
+    return CONFLICTING_MAPPING_SCORE;
+  }
+
+  // Fuzzy title agreement cannot rescue a candidate that plainly contradicts
+  // AniList's known year or episode-count shape. Missing metadata is tolerated;
+  // conflicting metadata is not.
+  if (hasKitsuStructuralConflict(node, hints)) {
     return CONFLICTING_MAPPING_SCORE;
   }
 
