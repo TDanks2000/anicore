@@ -43,6 +43,7 @@
     "typecheck": "turbo run typecheck --ui=stream",
     "test": "turbo run test --ui=stream",
     "db:audit-mappings": "turbo run db:audit-mappings --filter=@anicore/api --ui=stream --",
+    "db:repair-mappings": "turbo run db:repair-mappings --filter=@anicore/api --ui=stream --",
     "db:generate": "turbo run db:generate --filter=@anicore/api --ui=stream",
     "db:migrate": "turbo run db:migrate --filter=@anicore/api --ui=stream",
     "db:push": "turbo run db:push --filter=@anicore/api --ui=stream",
