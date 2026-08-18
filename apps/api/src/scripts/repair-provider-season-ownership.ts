@@ -30,7 +30,10 @@ import {
   verifyProviderSeasonAirdate,
   type ProviderSeasonAirdateRejectReason,
 } from "./provider-season-airdate-verification";
-import { verifyProviderSeasonIdentity, type ProviderSeasonIdentityRejectReason } from "./provider-season-identity-verification";
+import {
+  verifyProviderSeasonIdentity,
+  type ProviderSeasonIdentityRejectReason,
+} from "./provider-season-identity-verification";
 import {
   planEpisodeOwnershipTransfers,
   type EpisodeOwnershipTransferMove,
@@ -47,6 +50,7 @@ import {
 type Mode = "dry-run" | "apply";
 type Provider = "thetvdb" | "tmdb";
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+type ExecuteSql = (query: SQL) => Promise<unknown>;
 
 type RejectReason =
   | WholeSeasonRepairRejectReason
@@ -134,6 +138,12 @@ interface RepairCandidate {
   bestTitleSimilarity: number;
 }
 
+interface PlanningOutcome {
+  group: ResolvedCollisionGroup;
+  candidate: RepairCandidate | null;
+  reason: RejectReason | null;
+}
+
 interface RejectedSample {
   animeId: number;
   provider: Provider;
@@ -181,16 +191,6 @@ async function transactionRows<T extends Record<string, unknown>>(
 ): Promise<T[]> {
   const result = await tx.execute(query);
   return [...result] as T[];
-}
-
-async function count(query: SQL): Promise<number> {
-  const [row] = await queryRows<CountRow>(query);
-  return Number(row?.count ?? 0);
-}
-
-async function transactionCount(tx: DbTransaction, query: SQL): Promise<number> {
-  const [row] = await transactionRows<CountRow>(tx, query);
-  return Number(row?.count ?? 0);
 }
 
 async function assertProviderMappingTablesExist(): Promise<void> {
@@ -450,6 +450,13 @@ function uniqueIds(values: number[], label: string): void {
   }
 }
 
+function rejectedOutcome(
+  group: ResolvedCollisionGroup,
+  reason: RejectReason,
+): PlanningOutcome {
+  return { group, candidate: null, reason };
+}
+
 async function buildRepairPlan(): Promise<{
   resolvedCollisionGroups: number;
   candidates: RepairCandidate[];
@@ -597,159 +604,173 @@ async function buildRepairPlan(): Promise<{
     return promise;
   };
 
+  const outcomes = await mapWithConcurrency<ResolvedCollisionGroup, PlanningOutcome>(
+    resolvedGroups,
+    5,
+    async (group) => {
+      const identity = identityKey(group.provider, group.providerId);
+      const entityOwners = mappingsByEntity.get(identity) ?? [];
+      if (entityOwners.length === 0) {
+        return rejectedOutcome(group, "missing-provider-entity");
+      }
+      if (
+        (mappingsByAnimeProvider.get(animeProviderKey(group.animeId, group.provider)) ?? [])
+          .length > 0
+      ) {
+        return rejectedOutcome(group, "target-provider-association-already-exists");
+      }
+      if (entityOwners.length !== 1) {
+        return rejectedOutcome(group, "owner-count-not-one");
+      }
+
+      const owner = entityOwners[0]!;
+      if (owner.segmentCount !== 0) {
+        return rejectedOutcome(group, "existing-provider-segments");
+      }
+
+      const legacy = legacyByIdentity.get(identity);
+      if (!legacy) return rejectedOutcome(group, "missing-legacy-parent");
+      if (legacy.animeId !== owner.animeId) {
+        return rejectedOutcome(group, "legacy-parent-owner-mismatch");
+      }
+
+      const evidence = await getSeasonEvidence(group.provider, group.providerId);
+      const authoritativeIds = new Set(
+        evidence.episodes.map((episode) => episode.providerEpisodeId),
+      );
+
+      const targetProviderRows =
+        episodeRowsByAnimeProvider.get(animeProviderKey(group.animeId, group.provider)) ?? [];
+      if (targetProviderRows.some((row) => !authoritativeIds.has(row.providerEpisodeId))) {
+        return rejectedOutcome(group, "target-provider-scope-mismatch");
+      }
+      const ownerProviderRows =
+        episodeRowsByAnimeProvider.get(animeProviderKey(owner.animeId, group.provider)) ?? [];
+      if (ownerProviderRows.some((row) => !authoritativeIds.has(row.providerEpisodeId))) {
+        return rejectedOutcome(group, "owner-provider-scope-mismatch");
+      }
+
+      const mappedEpisodes: WholeSeasonMappedEpisode[] = [];
+      for (const episode of evidence.episodes) {
+        const mapping = episodeByProviderIdentity.get(
+          episodeIdentityKey(group.provider, episode.providerEpisodeId),
+        );
+        if (!mapping) continue;
+        mappedEpisodes.push({
+          providerEpisodeId: episode.providerEpisodeId,
+          animeId: mapping.animeId,
+          localEpisodeNumber: mapping.localEpisodeNumber,
+          localKind: mapping.localKind,
+        });
+      }
+
+      const targetLocalEpisodes = localEpisodesByAnime.get(group.animeId) ?? [];
+      const ownerLocalEpisodes = localEpisodesByAnime.get(owner.animeId) ?? [];
+      const structural = planWholeSeasonOwnershipRepair({
+        targetAnimeId: group.animeId,
+        currentOwnerAnimeId: owner.animeId,
+        authoritativeEpisodes: evidence.episodes,
+        mappedEpisodes,
+        targetNormalEpisodeNumbers: targetLocalEpisodes
+          .filter((episode) => episode.kind === "normal")
+          .map((episode) => episode.episodeNumber),
+        ownerNormalEpisodeCount: ownerLocalEpisodes.filter((episode) => episode.kind === "normal")
+          .length,
+      });
+      if (!structural.candidate) return rejectedOutcome(group, structural.reason!);
+
+      const targetMeta = metaByAnime.get(group.animeId);
+      if (!targetMeta) return rejectedOutcome(group, "missing-target-metadata");
+
+      const providerTitles = await getProviderTitles(group.provider, group.providerId);
+      const identityVerification = verifyProviderSeasonIdentity({
+        anime: targetMeta,
+        authoritativeEpisodeCount: structural.candidate.authoritativeEpisodeCount,
+        providerTitles,
+      });
+      if (!identityVerification.ok) {
+        return rejectedOutcome(group, identityVerification.reason!);
+      }
+
+      const airdate = verifyProviderSeasonAirdate({
+        targetStartDate: targetMeta.startDate,
+        providerFirstAirDate: evidence.firstAirDate,
+      });
+      if (!airdate.ok) return rejectedOutcome(group, airdate.reason!);
+
+      const mappedTransferRows = evidence.episodes
+        .map((episode) =>
+          episodeByProviderIdentity.get(
+            episodeIdentityKey(group.provider, episode.providerEpisodeId),
+          ),
+        )
+        .filter((row): row is EpisodeMappingRow => Boolean(row))
+        .map((row) => ({
+          episodeMappingId: row.episodeMappingId,
+          providerEpisodeId: row.providerEpisodeId,
+          animeId: row.animeId,
+          episodeId: row.episodeId,
+        }));
+
+      const transfer = planEpisodeOwnershipTransfers({
+        currentOwnerAnimeId: owner.animeId,
+        targetAnimeId: group.animeId,
+        providerEpisodeNumbersToMove: structural.candidate.providerEpisodeNumbersToMove,
+        authoritativeEpisodes: evidence.episodes,
+        mappedEpisodes: mappedTransferRows,
+        targetEpisodes: targetLocalEpisodes.map((episode) => ({
+          episodeId: episode.episodeId,
+          episodeNumber: episode.episodeNumber,
+          kind: episode.kind,
+          hasProviderMapping: episodeProviderSlots.has(
+            `${episode.episodeId}\u0000${group.provider}`,
+          ),
+        })),
+      });
+      if (!transfer.moves) return rejectedOutcome(group, transfer.reason!);
+
+      const ownerMeta = metaByAnime.get(owner.animeId);
+      return {
+        group,
+        reason: null,
+        candidate: {
+          provider: group.provider,
+          providerId: group.providerId,
+          providerEntityId: owner.providerEntityId,
+          animeProviderMappingId: owner.animeProviderMappingId,
+          legacyMappingId: legacy.legacyMappingId,
+          targetAnimeId: group.animeId,
+          currentOwnerAnimeId: owner.animeId,
+          targetTitle: targetMeta.titleRomaji,
+          currentOwnerTitle: ownerMeta?.titleRomaji ?? null,
+          authoritativeEpisodeCount: structural.candidate.authoritativeEpisodeCount,
+          orphanRowsResolved: group.rows.length,
+          episodeMoves: transfer.moves,
+          providerFirstAirDate: airdate.providerFirstAirDate!,
+          startDateDeltaDays: airdate.startDateDeltaDays!,
+          bestTitleSimilarity: identityVerification.bestTitleSimilarity,
+        },
+      };
+    },
+  );
+
   const candidates: RepairCandidate[] = [];
   const rejectionCounts = new Map<string, number>();
   const rejectedSamples: RejectedSample[] = [];
-
-  const reject = (group: ResolvedCollisionGroup, reason: RejectReason): void => {
-    increment(rejectionCounts, reason);
-    if (rejectedSamples.length < 100) {
-      rejectedSamples.push({
-        animeId: group.animeId,
-        provider: group.provider,
-        providerId: group.providerId,
-        reason,
-      });
-    }
-  };
-
-  const outcomes = await mapWithConcurrency(resolvedGroups, 5, async (group) => {
-    const identity = identityKey(group.provider, group.providerId);
-    const entityOwners = mappingsByEntity.get(identity) ?? [];
-    if (entityOwners.length === 0) return { group, reason: "missing-provider-entity" as const };
-    if ((mappingsByAnimeProvider.get(animeProviderKey(group.animeId, group.provider)) ?? []).length > 0) {
-      return { group, reason: "target-provider-association-already-exists" as const };
-    }
-    if (entityOwners.length !== 1) return { group, reason: "owner-count-not-one" as const };
-
-    const owner = entityOwners[0]!;
-    if (owner.segmentCount !== 0) return { group, reason: "existing-provider-segments" as const };
-
-    const legacy = legacyByIdentity.get(identity);
-    if (!legacy) return { group, reason: "missing-legacy-parent" as const };
-    if (legacy.animeId !== owner.animeId) {
-      return { group, reason: "legacy-parent-owner-mismatch" as const };
-    }
-
-    const evidence = await getSeasonEvidence(group.provider, group.providerId);
-    const authoritativeIds = new Set(evidence.episodes.map((episode) => episode.providerEpisodeId));
-
-    const targetProviderRows = episodeRowsByAnimeProvider.get(
-      animeProviderKey(group.animeId, group.provider),
-    ) ?? [];
-    if (targetProviderRows.some((row) => !authoritativeIds.has(row.providerEpisodeId))) {
-      return { group, reason: "target-provider-scope-mismatch" as const };
-    }
-    const ownerProviderRows = episodeRowsByAnimeProvider.get(
-      animeProviderKey(owner.animeId, group.provider),
-    ) ?? [];
-    if (ownerProviderRows.some((row) => !authoritativeIds.has(row.providerEpisodeId))) {
-      return { group, reason: "owner-provider-scope-mismatch" as const };
-    }
-
-    const mappedEpisodes: WholeSeasonMappedEpisode[] = [];
-    for (const episode of evidence.episodes) {
-      const mapping = episodeByProviderIdentity.get(
-        episodeIdentityKey(group.provider, episode.providerEpisodeId),
-      );
-      if (!mapping) continue;
-      mappedEpisodes.push({
-        providerEpisodeId: episode.providerEpisodeId,
-        animeId: mapping.animeId,
-        localEpisodeNumber: mapping.localEpisodeNumber,
-        localKind: mapping.localKind,
-      });
-    }
-
-    const targetLocalEpisodes = localEpisodesByAnime.get(group.animeId) ?? [];
-    const ownerLocalEpisodes = localEpisodesByAnime.get(owner.animeId) ?? [];
-    const structural = planWholeSeasonOwnershipRepair({
-      targetAnimeId: group.animeId,
-      currentOwnerAnimeId: owner.animeId,
-      authoritativeEpisodes: evidence.episodes,
-      mappedEpisodes,
-      targetNormalEpisodeNumbers: targetLocalEpisodes
-        .filter((episode) => episode.kind === "normal")
-        .map((episode) => episode.episodeNumber),
-      ownerNormalEpisodeCount: ownerLocalEpisodes.filter((episode) => episode.kind === "normal").length,
-    });
-    if (!structural.candidate) return { group, reason: structural.reason! };
-
-    const targetMeta = metaByAnime.get(group.animeId);
-    if (!targetMeta) return { group, reason: "missing-target-metadata" as const };
-
-    const providerTitles = await getProviderTitles(group.provider, group.providerId);
-    const identityVerification = verifyProviderSeasonIdentity({
-      anime: targetMeta,
-      authoritativeEpisodeCount: structural.candidate.authoritativeEpisodeCount,
-      providerTitles,
-    });
-    if (!identityVerification.ok) return { group, reason: identityVerification.reason! };
-
-    const airdate = verifyProviderSeasonAirdate({
-      targetStartDate: targetMeta.startDate,
-      providerFirstAirDate: evidence.firstAirDate,
-    });
-    if (!airdate.ok) return { group, reason: airdate.reason! };
-
-    const mappedTransferRows = evidence.episodes
-      .map((episode) =>
-        episodeByProviderIdentity.get(
-          episodeIdentityKey(group.provider, episode.providerEpisodeId),
-        ),
-      )
-      .filter((row): row is EpisodeMappingRow => Boolean(row))
-      .map((row) => ({
-        episodeMappingId: row.episodeMappingId,
-        providerEpisodeId: row.providerEpisodeId,
-        animeId: row.animeId,
-        episodeId: row.episodeId,
-      }));
-
-    const transfer = planEpisodeOwnershipTransfers({
-      currentOwnerAnimeId: owner.animeId,
-      targetAnimeId: group.animeId,
-      providerEpisodeNumbersToMove: structural.candidate.providerEpisodeNumbersToMove,
-      authoritativeEpisodes: evidence.episodes,
-      mappedEpisodes: mappedTransferRows,
-      targetEpisodes: targetLocalEpisodes.map((episode) => ({
-        episodeId: episode.episodeId,
-        episodeNumber: episode.episodeNumber,
-        kind: episode.kind,
-        hasProviderMapping: episodeProviderSlots.has(
-          `${episode.episodeId}\u0000${group.provider}`,
-        ),
-      })),
-    });
-    if (!transfer.moves) return { group, reason: transfer.reason! };
-
-    const ownerMeta = metaByAnime.get(owner.animeId);
-    return {
-      group,
-      reason: null,
-      candidate: {
-        provider: group.provider,
-        providerId: group.providerId,
-        providerEntityId: owner.providerEntityId,
-        animeProviderMappingId: owner.animeProviderMappingId,
-        legacyMappingId: legacy.legacyMappingId,
-        targetAnimeId: group.animeId,
-        currentOwnerAnimeId: owner.animeId,
-        targetTitle: targetMeta.titleRomaji,
-        currentOwnerTitle: ownerMeta?.titleRomaji ?? null,
-        authoritativeEpisodeCount: structural.candidate.authoritativeEpisodeCount,
-        orphanRowsResolved: group.rows.length,
-        episodeMoves: transfer.moves,
-        providerFirstAirDate: airdate.providerFirstAirDate!,
-        startDateDeltaDays: airdate.startDateDeltaDays!,
-        bestTitleSimilarity: identityVerification.bestTitleSimilarity,
-      } satisfies RepairCandidate,
-    };
-  });
-
   for (const outcome of outcomes) {
-    if (outcome.reason) reject(outcome.group, outcome.reason);
-    else if (outcome.candidate) candidates.push(outcome.candidate);
+    if (outcome.reason) {
+      increment(rejectionCounts, outcome.reason);
+      if (rejectedSamples.length < 100) {
+        rejectedSamples.push({
+          animeId: outcome.group.animeId,
+          provider: outcome.group.provider,
+          providerId: outcome.group.providerId,
+          reason: outcome.reason,
+        });
+      }
+    } else if (outcome.candidate) {
+      candidates.push(outcome.candidate);
+    }
   }
 
   candidates.sort(
@@ -810,12 +831,13 @@ function v2TransferValues(candidates: RepairCandidate[]): SQL[] {
     ${candidate.animeProviderMappingId}::int,
     ${candidate.providerEntityId}::int,
     ${candidate.currentOwnerAnimeId}::int,
-    ${candidate.targetAnimeId}::int
+    ${candidate.targetAnimeId}::int,
+    ${candidate.provider}::text
   )`);
 }
 
 async function verifyExpectedState(
-  executor: typeof db | DbTransaction,
+  executeSql: ExecuteSql,
   candidates: RepairCandidate[],
 ): Promise<{
   wrongEpisodeMoves: number;
@@ -833,19 +855,22 @@ async function verifyExpectedState(
   }
 
   const runCount = async (query: SQL): Promise<number> => {
-    const result = await executor.execute(query);
-    const [row] = [...result] as CountRow[];
-    return Number(row?.count ?? 0);
+    const result = await executeSql(query);
+    const rows = [...(result as Iterable<Record<string, unknown>>)] as CountRow[];
+    return Number(rows[0]?.count ?? 0);
   };
 
   const episodeValues = candidates.flatMap((candidate) =>
-    candidate.episodeMoves.map((move) => sql`(${move.episodeMappingId}::int, ${move.toEpisodeId}::int)`),
+    candidate.episodeMoves.map(
+      (move) => sql`(${move.episodeMappingId}::int, ${move.toEpisodeId}::int)`,
+    ),
   );
-  const legacyValues = candidates.map((candidate) =>
-    sql`(${candidate.legacyMappingId}::int, ${candidate.targetAnimeId}::int)`,
+  const legacyValues = candidates.map(
+    (candidate) => sql`(${candidate.legacyMappingId}::int, ${candidate.targetAnimeId}::int)`,
   );
-  const v2Values = candidates.map((candidate) =>
-    sql`(${candidate.animeProviderMappingId}::int, ${candidate.targetAnimeId}::int)`,
+  const v2Values = candidates.map(
+    (candidate) =>
+      sql`(${candidate.animeProviderMappingId}::int, ${candidate.targetAnimeId}::int)`,
   );
   const mappingIds = candidates.map((candidate) => candidate.animeProviderMappingId);
 
@@ -895,7 +920,9 @@ async function verifyExpectedState(
   const transferredAssociationsWithSegments = await runCount(sql`
     select count(*)::int as count
     from public.anime_provider_segments aps
-    where aps.anime_provider_mapping_id in (${sql.join(mappingIds.map((id) => sql`${id}`), sql`, `)})
+    where aps.anime_provider_mapping_id in (
+      ${sql.join(mappingIds.map((id) => sql`${id}`), sql`, `)}
+    )
   `);
 
   return {
@@ -972,7 +999,7 @@ async function applyCandidates(candidates: RepairCandidate[]): Promise<{
 
     const v2Values = v2TransferValues(candidates);
     const v2Rows = await transactionRows<{ id: number }>(tx, sql`
-      with transfers(id, provider_entity_id, from_anime_id, to_anime_id) as (
+      with transfers(id, provider_entity_id, from_anime_id, to_anime_id, provider) as (
         values ${sql.join(v2Values, sql`, `)}
       )
       update public.anime_provider_mappings apm
@@ -993,8 +1020,10 @@ async function applyCandidates(candidates: RepairCandidate[]): Promise<{
         and not exists (
           select 1
           from public.anime_provider_mappings target
+          join public.provider_entities target_pe
+            on target_pe.id = target.provider_entity_id
           where target.anime_id = transfers.to_anime_id
-            and target.provider_entity_id = transfers.provider_entity_id
+            and target_pe.provider = transfers.provider
         )
       returning apm.id
     `);
@@ -1015,7 +1044,7 @@ async function applyCandidates(candidates: RepairCandidate[]): Promise<{
       );
     }
 
-    const verified = await verifyExpectedState(tx, candidates);
+    const verified = await verifyExpectedState((query) => tx.execute(query), candidates);
     if (
       verified.wrongEpisodeMoves !== 0 ||
       verified.wrongLegacyParents !== 0 ||
@@ -1062,7 +1091,7 @@ async function run(mode: Mode): Promise<Record<string, unknown>> {
   };
   if (mode === "apply") {
     applied = await applyCandidates(plan.candidates);
-    const postCommit = await verifyExpectedState(db, plan.candidates);
+    const postCommit = await verifyExpectedState((query) => db.execute(query), plan.candidates);
     if (
       postCommit.wrongEpisodeMoves !== 0 ||
       postCommit.wrongLegacyParents !== 0 ||
@@ -1142,6 +1171,7 @@ if (import.meta.main) {
           mode,
           error: error instanceof Error ? error.message : String(error),
         },
+        null,
         2,
       ),
     );
