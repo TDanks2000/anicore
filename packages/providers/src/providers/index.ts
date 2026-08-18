@@ -13,6 +13,7 @@ import {
 } from "@anicore/db/schema";
 import { toJsonArray } from "../lib/json";
 import { slugify } from "../lib/slug";
+import { syncAuthoritativeCrossMappings } from "./authoritative-cross-mappings";
 import {
   dedupeProviderStudios,
   dedupeProviderTags,
@@ -294,6 +295,15 @@ async function upsertRelatedData(
   }
 }
 
+async function syncCrossMappingsIfPresent(
+  animeId: number,
+  data: ProviderAnimeData,
+): Promise<void> {
+  if (data.authoritativeMappings?.length) {
+    await syncAuthoritativeCrossMappings(animeId, data.authoritativeMappings);
+  }
+}
+
 export async function upsertAnimeFromProvider(
   data: ProviderAnimeData,
 ): Promise<{ animeId: number; created: boolean }> {
@@ -323,6 +333,7 @@ export async function upsertAnimeFromProvider(
       await upsertRelatedData(animeId, data, tx);
     });
 
+    await syncCrossMappingsIfPresent(animeId, data);
     return { animeId, created: false };
   }
 
@@ -360,5 +371,6 @@ export async function upsertAnimeFromProvider(
     return created.id;
   });
 
+  await syncCrossMappingsIfPresent(animeId, data);
   return { animeId, created: true };
 }

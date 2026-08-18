@@ -52,8 +52,6 @@ function dedupeStudios(
 }
 
 export function mapAnilistAnime(media: AnilistMedia): ProviderAnimeData {
-  // studios.edges in getAnimeById doesn't include isMain — default to false.
-  // The isMain flag can be populated via a future dedicated studios sync.
   const studios = (media.studios?.edges ?? [])
     .filter(
       (e): e is NonNullable<typeof e> => e !== null && e.node !== null,
@@ -65,8 +63,6 @@ export function mapAnilistAnime(media: AnilistMedia): ProviderAnimeData {
       anilistStudioId: e.node!.id,
     }));
 
-  // tags in getAnimeById omits isGeneralSpoiler / isMediaSpoiler / isAdult.
-  // These default to false and can be enriched later if the query is expanded.
   const tags = (media.tags ?? [])
     .filter((t): t is NonNullable<typeof t> => t !== null)
     .map((t) => ({
@@ -78,7 +74,6 @@ export function mapAnilistAnime(media: AnilistMedia): ProviderAnimeData {
       isAdult: false,
     }));
 
-  // externalLinks in getAnimeById omits language / color / icon.
   const externalLinks = (media.externalLinks ?? [])
     .filter(
       (l): l is NonNullable<typeof l> => l !== null && !!l.url,
@@ -91,6 +86,16 @@ export function mapAnilistAnime(media: AnilistMedia): ProviderAnimeData {
       color: null,
       icon: null,
     }));
+
+  const authoritativeMappings = media.idMal
+    ? [
+        {
+          provider: "mal" as const,
+          providerId: String(media.idMal),
+          providerUrl: `https://myanimelist.net/anime/${media.idMal}`,
+        },
+      ]
+    : [];
 
   return {
     provider: "anilist",
@@ -144,6 +149,7 @@ export function mapAnilistAnime(media: AnilistMedia): ProviderAnimeData {
     studios: dedupeStudios(studios),
     tags,
     externalLinks,
+    authoritativeMappings,
     // relations require a separate getRelations() call; handled in sync.ts.
   };
 }

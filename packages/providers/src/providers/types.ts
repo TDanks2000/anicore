@@ -63,6 +63,17 @@ export interface ProviderRelation {
 	relationType: string;
 }
 
+/**
+ * A provider ID explicitly supplied by the authoritative source record rather
+ * than discovered through title/metadata matching.
+ */
+export interface ProviderAuthoritativeMapping {
+	provider: ProviderName;
+	providerId: string;
+	providerSlug?: string | null;
+	providerUrl?: string | null;
+}
+
 export interface ProviderEpisodeData {
 	number: number;
 	title?: string | null;
@@ -128,4 +139,5 @@ export interface ProviderAnimeData {
 	tags?: ProviderTag[];
 	externalLinks?: ProviderExternalLink[];
 	relations?: ProviderRelation[];
+	authoritativeMappings?: ProviderAuthoritativeMapping[];
 }
