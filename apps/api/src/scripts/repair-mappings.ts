@@ -8,6 +8,10 @@ import {
 } from "@anicore/db";
 
 import {
+  buildOrphanParentRepairDiagnostics,
+  type OrphanParentRepairDiagnostics,
+} from "./orphan-episode-parent-diagnostics";
+import {
   buildOrphanParentRepairPlan,
   type ExistingProviderIdentity,
   type OrphanEpisodeMappingRow,
@@ -63,6 +67,7 @@ interface OrphanParentOperationReport {
   remainingOrphanEpisodeMappingCount: number;
   remainingEligibleParentCount: number;
   skipped: OrphanParentRepairPlan["skipped"];
+  diagnostics: OrphanParentRepairDiagnostics;
   samples: OrphanParentCandidateSample[];
 }
 
@@ -230,6 +235,7 @@ async function loadExistingProviderIdentities(): Promise<
 async function buildCurrentOrphanParentPlan(): Promise<{
   rows: OrphanEpisodeMappingRow[];
   plan: OrphanParentRepairPlan;
+  diagnostics: OrphanParentRepairDiagnostics;
 }> {
   const [rows, existingIdentities] = await Promise.all([
     loadOrphanEpisodeMappingRows(),
@@ -238,6 +244,7 @@ async function buildCurrentOrphanParentPlan(): Promise<{
   return {
     rows,
     plan: buildOrphanParentRepairPlan(rows, existingIdentities),
+    diagnostics: buildOrphanParentRepairDiagnostics(rows, existingIdentities),
   };
 }
 
@@ -408,6 +415,7 @@ async function runRepair(mode: RepairMode): Promise<RepairReport> {
           orphanAfter.plan.totalOrphanEpisodeMappings,
         remainingEligibleParentCount,
         skipped: orphanBefore.plan.skipped,
+        diagnostics: orphanBefore.diagnostics,
         samples: orphanSamples,
       },
     },
