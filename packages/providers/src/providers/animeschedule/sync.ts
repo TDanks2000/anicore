@@ -42,7 +42,7 @@ export const sleep = (ms: number) => Bun.sleep(ms);
 export function isAnimeScheduleEntryForAnilist(
   entry: AnimeScheduleEntry | null,
   anilistId: string,
-): entry is AnimeScheduleEntry {
+): boolean {
   return Boolean(
     entry?.websites && parseAnilistId(entry.websites.aniList) === anilistId,
   );
@@ -67,7 +67,7 @@ async function findEntry(opts: {
     await sleep(RATE_MS);
     const entry = await fetchByRoute(opts.slug);
     checkedRoutes.add(opts.slug);
-    if (isAnimeScheduleEntryForAnilist(entry, opts.anilistId)) {
+    if (entry && isAnimeScheduleEntryForAnilist(entry, opts.anilistId)) {
       return entry;
     }
   }
@@ -96,7 +96,7 @@ async function findEntry(opts: {
 
       await sleep(RATE_MS);
       const full = await fetchByRoute(result.route);
-      if (isAnimeScheduleEntryForAnilist(full, opts.anilistId)) {
+      if (full && isAnimeScheduleEntryForAnilist(full, opts.anilistId)) {
         return full;
       }
     }
@@ -187,7 +187,7 @@ async function loadVerifiedCachedEntry(opts: {
 
   await sleep(RATE_MS);
   const entry = await fetchByRoute(existing.providerId);
-  if (isAnimeScheduleEntryForAnilist(entry, opts.anilistId)) {
+  if (entry && isAnimeScheduleEntryForAnilist(entry, opts.anilistId)) {
     return entry;
   }
 
