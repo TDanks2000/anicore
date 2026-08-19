@@ -102,9 +102,9 @@ interface AuthoritativeEpisode {
   airDate: string | null;
 }
 
-async function queryRows<T extends Record<string, unknown>>(query: SQL): Promise<T[]> {
+async function queryRows<T>(query: SQL): Promise<T[]> {
   const result = await db.execute(query);
-  return [...result] as T[];
+  return [...result] as unknown as T[];
 }
 
 function fail(message: string): never {
