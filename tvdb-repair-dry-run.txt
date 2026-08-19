@@ -1,0 +1,48 @@
+$ turbo run db:repair-tvdb-orphans --filter=@anicore/api --ui=stream --
+• turbo 2.10.4
+
+   • Packages in scope: @anicore/api
+   • Running db:repair-tvdb-orphans in 1 packages
+   • Remote caching disabled
+
+@anicore/api:db:repair-tvdb-orphans: cache bypass, force executing 5f600e9811ab12af
+@anicore/api:db:repair-tvdb-orphans: $ bun src/scripts/repair-tvdb-orphans.ts
+@anicore/api:db:repair-tvdb-orphans: {
+@anicore/api:db:repair-tvdb-orphans:   "ok": true,
+@anicore/api:db:repair-tvdb-orphans:   "mode": "dry-run",
+@anicore/api:db:repair-tvdb-orphans:   "generatedAt": "2026-08-18T14:29:03.201Z",
+@anicore/api:db:repair-tvdb-orphans:   "operation": {
+@anicore/api:db:repair-tvdb-orphans:     "code": "resolve-tvdb-slug-orphan-parents",
+@anicore/api:db:repair-tvdb-orphans:     "description": "Resolve legacy TVDB episode URLs containing textual series slugs through TVDB's authoritative slug endpoint, then require every stored episode ID and episode number to match the resolved TVDB season before reconstructing a fuzzy/non-primary anime-level mapping. TMDB collision groups are intentionally out of scope.",
+@anicore/api:db:repair-tvdb-orphans:     "totalTvdbOrphanGroups": 378,
+@anicore/api:db:repair-tvdb-orphans:     "totalTvdbOrphanEpisodeMappings": 7291,
+@anicore/api:db:repair-tvdb-orphans:     "eligibleSlugGroups": 378,
+@anicore/api:db:repair-tvdb-orphans:     "eligibleSlugEpisodeMappings": 7291,
+@anicore/api:db:repair-tvdb-orphans:     "skippedInvalidEvidenceGroups": 0,
+@anicore/api:db:repair-tvdb-orphans:     "skippedInvalidEvidenceEpisodeMappings": 0,
+@anicore/api:db:repair-tvdb-orphans:     "remoteVerifiedGroups": 377,
+@anicore/api:db:repair-tvdb-orphans:     "remoteRejectedGroups": 1,
+@anicore/api:db:repair-tvdb-orphans:     "skippedCollisionGroups": 377,
+@anicore/api:db:repair-tvdb-orphans:     "skippedCollisionEpisodeMappings": 7280,
+@anicore/api:db:repair-tvdb-orphans:     "plannedParentCount": 0,
+@anicore/api:db:repair-tvdb-orphans:     "plannedEpisodeMappingCount": 0,
+@anicore/api:db:repair-tvdb-orphans:     "appliedParentCount": 0,
+@anicore/api:db:repair-tvdb-orphans:     "resolvedEpisodeMappingCount": 0,
+@anicore/api:db:repair-tvdb-orphans:     "remainingTvdbOrphanEpisodeMappings": 7291,
+@anicore/api:db:repair-tvdb-orphans:     "rejectedSamples": [
+@anicore/api:db:repair-tvdb-orphans:       {
+@anicore/api:db:repair-tvdb-orphans:         "animeId": 9278,
+@anicore/api:db:repair-tvdb-orphans:         "slug": "100-sleeping-princes-&-the-kingdom-of-dreams",
+@anicore/api:db:repair-tvdb-orphans:         "seasonNumber": 1,
+@anicore/api:db:repair-tvdb-orphans:         "episodeMappingCount": 11,
+@anicore/api:db:repair-tvdb-orphans:         "reason": "slug-not-found"
+@anicore/api:db:repair-tvdb-orphans:       }
+@anicore/api:db:repair-tvdb-orphans:     ],
+@anicore/api:db:repair-tvdb-orphans:     "candidateSamples": []
+@anicore/api:db:repair-tvdb-orphans:   }
+@anicore/api:db:repair-tvdb-orphans: }
+
+ Tasks:    1 successful, 1 total
+Cached:    0 cached, 1 total
+  Time:    51.962s 
+

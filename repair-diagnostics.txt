@@ -1,0 +1,651 @@
+$ turbo run db:repair-mappings --filter=@anicore/api --ui=stream --
+• turbo 2.10.4
+
+   • Packages in scope: @anicore/api
+   • Running db:repair-mappings in 1 packages
+   • Remote caching disabled
+
+@anicore/api:db:repair-mappings: cache bypass, force executing 2506a24f0f19d1f3
+@anicore/api:db:repair-mappings: $ bun src/scripts/repair-mappings.ts
+@anicore/api:db:repair-mappings: {
+@anicore/api:db:repair-mappings:   "ok": true,
+@anicore/api:db:repair-mappings:   "mode": "dry-run",
+@anicore/api:db:repair-mappings:   "generatedAt": "2026-08-18T12:47:28.410Z",
+@anicore/api:db:repair-mappings:   "operations": {
+@anicore/api:db:repair-mappings:     "kitsuLegacyEpisodeProvenance": {
+@anicore/api:db:repair-mappings:       "code": "kitsu-legacy-episode-provenance",
+@anicore/api:db:repair-mappings:       "description": "Demote legacy Kitsu episode mappings from api/100 to the provenance and confidence of their single fuzzy Kitsu anime mapping. Manual/import/system episode mappings and anime with ambiguous Kitsu identities are never changed.",
+@anicore/api:db:repair-mappings:       "plannedCount": 0,
+@anicore/api:db:repair-mappings:       "appliedCount": 0,
+@anicore/api:db:repair-mappings:       "remainingEligibleCount": 0,
+@anicore/api:db:repair-mappings:       "skippedAmbiguousAnimeCount": 32,
+@anicore/api:db:repair-mappings:       "samples": []
+@anicore/api:db:repair-mappings:     },
+@anicore/api:db:repair-mappings:     "orphanEpisodeParentMappings": {
+@anicore/api:db:repair-mappings:       "code": "reconstruct-orphan-episode-parent-mappings",
+@anicore/api:db:repair-mappings:       "description": "Reconstruct missing TVDB/TMDB anime-level parent mappings only when every orphan episode mapping in the anime/provider group is weak automatic evidence and its stored provider URL independently identifies the same provider season. Reconstructed parents are fuzzy, capped at 85 confidence, non-primary, and are skipped on incomplete, conflicting, strong/manual, unsupported, or colliding evidence.",
+@anicore/api:db:repair-mappings:       "totalOrphanGroups": 422,
+@anicore/api:db:repair-mappings:       "totalOrphanEpisodeMappings": 8382,
+@anicore/api:db:repair-mappings:       "plannedParentCount": 0,
+@anicore/api:db:repair-mappings:       "plannedEpisodeMappingCount": 0,
+@anicore/api:db:repair-mappings:       "appliedParentCount": 0,
+@anicore/api:db:repair-mappings:       "resolvedEpisodeMappingCount": 0,
+@anicore/api:db:repair-mappings:       "remainingOrphanEpisodeMappingCount": 8382,
+@anicore/api:db:repair-mappings:       "remainingEligibleParentCount": 0,
+@anicore/api:db:repair-mappings:       "skipped": {
+@anicore/api:db:repair-mappings:         "unsupportedProvider": {
+@anicore/api:db:repair-mappings:           "groups": 0,
+@anicore/api:db:repair-mappings:           "episodeMappings": 0
+@anicore/api:db:repair-mappings:         },
+@anicore/api:db:repair-mappings:         "strongerOrManualEvidence": {
+@anicore/api:db:repair-mappings:           "groups": 0,
+@anicore/api:db:repair-mappings:           "episodeMappings": 0
+@anicore/api:db:repair-mappings:         },
+@anicore/api:db:repair-mappings:         "incompleteParentEvidence": {
+@anicore/api:db:repair-mappings:           "groups": 378,
+@anicore/api:db:repair-mappings:           "episodeMappings": 7291
+@anicore/api:db:repair-mappings:         },
+@anicore/api:db:repair-mappings:         "conflictingParentEvidence": {
+@anicore/api:db:repair-mappings:           "groups": 0,
+@anicore/api:db:repair-mappings:           "episodeMappings": 0
+@anicore/api:db:repair-mappings:         },
+@anicore/api:db:repair-mappings:         "providerIdentityCollision": {
+@anicore/api:db:repair-mappings:           "groups": 44,
+@anicore/api:db:repair-mappings:           "episodeMappings": 1091
+@anicore/api:db:repair-mappings:         }
+@anicore/api:db:repair-mappings:       },
+@anicore/api:db:repair-mappings:       "diagnostics": {
+@anicore/api:db:repair-mappings:         "totalGroups": 422,
+@anicore/api:db:repair-mappings:         "totalEpisodeMappings": 8382,
+@anicore/api:db:repair-mappings:         "coverage": {
+@anicore/api:db:repair-mappings:           "withSeasonNumber": 8382,
+@anicore/api:db:repair-mappings:           "withoutSeasonNumber": 0,
+@anicore/api:db:repair-mappings:           "withProviderUrl": 8382,
+@anicore/api:db:repair-mappings:           "withoutProviderUrl": 0,
+@anicore/api:db:repair-mappings:           "withProviderEpisodeNumber": 8382,
+@anicore/api:db:repair-mappings:           "withoutProviderEpisodeNumber": 0
+@anicore/api:db:repair-mappings:         },
+@anicore/api:db:repair-mappings:         "byProvider": [
+@anicore/api:db:repair-mappings:           {
+@anicore/api:db:repair-mappings:             "provider": "thetvdb",
+@anicore/api:db:repair-mappings:             "groups": 378,
+@anicore/api:db:repair-mappings:             "episodeMappings": 7291
+@anicore/api:db:repair-mappings:           },
+@anicore/api:db:repair-mappings:           {
+@anicore/api:db:repair-mappings:             "provider": "tmdb",
+@anicore/api:db:repair-mappings:             "groups": 44,
+@anicore/api:db:repair-mappings:             "episodeMappings": 1091
+@anicore/api:db:repair-mappings:           }
+@anicore/api:db:repair-mappings:         ],
+@anicore/api:db:repair-mappings:         "bySourceConfidence": [
+@anicore/api:db:repair-mappings:           {
+@anicore/api:db:repair-mappings:             "source": "api",
+@anicore/api:db:repair-mappings:             "confidence": 85,
+@anicore/api:db:repair-mappings:             "episodeMappings": 8382
+@anicore/api:db:repair-mappings:           }
+@anicore/api:db:repair-mappings:         ],
+@anicore/api:db:repair-mappings:         "incompleteEvidenceReasons": {
+@anicore/api:db:repair-mappings:           "invalid-provider-identity": {
+@anicore/api:db:repair-mappings:             "groups": 378,
+@anicore/api:db:repair-mappings:             "episodeMappings": 7291,
+@anicore/api:db:repair-mappings:             "rows": 7262
+@anicore/api:db:repair-mappings:           }
+@anicore/api:db:repair-mappings:         },
+@anicore/api:db:repair-mappings:         "categories": {
+@anicore/api:db:repair-mappings:           "reconstructable": {
+@anicore/api:db:repair-mappings:             "groups": 0,
+@anicore/api:db:repair-mappings:             "episodeMappings": 0,
+@anicore/api:db:repair-mappings:             "samples": []
+@anicore/api:db:repair-mappings:           },
+@anicore/api:db:repair-mappings:           "unsupported-provider": {
+@anicore/api:db:repair-mappings:             "groups": 0,
+@anicore/api:db:repair-mappings:             "episodeMappings": 0,
+@anicore/api:db:repair-mappings:             "samples": []
+@anicore/api:db:repair-mappings:           },
+@anicore/api:db:repair-mappings:           "stronger-or-manual-evidence": {
+@anicore/api:db:repair-mappings:             "groups": 0,
+@anicore/api:db:repair-mappings:             "episodeMappings": 0,
+@anicore/api:db:repair-mappings:             "samples": []
+@anicore/api:db:repair-mappings:           },
+@anicore/api:db:repair-mappings:           "incomplete-parent-evidence": {
+@anicore/api:db:repair-mappings:             "groups": 378,
+@anicore/api:db:repair-mappings:             "episodeMappings": 7291,
+@anicore/api:db:repair-mappings:             "samples": [
+@anicore/api:db:repair-mappings:               {
+@anicore/api:db:repair-mappings:                 "animeId": 3,
+@anicore/api:db:repair-mappings:                 "provider": "thetvdb",
+@anicore/api:db:repair-mappings:                 "episodeMappingCount": 41,
+@anicore/api:db:repair-mappings:                 "episodeMappingIds": [
+@anicore/api:db:repair-mappings:                   174,
+@anicore/api:db:repair-mappings:                   175,
+@anicore/api:db:repair-mappings:                   176,
+@anicore/api:db:repair-mappings:                   177,
+@anicore/api:db:repair-mappings:                   178,
+@anicore/api:db:repair-mappings:                   179,
+@anicore/api:db:repair-mappings:                   180,
+@anicore/api:db:repair-mappings:                   181,
+@anicore/api:db:repair-mappings:                   182,
+@anicore/api:db:repair-mappings:                   183
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "sourceConfidenceSignatures": [
+@anicore/api:db:repair-mappings:                   "api/85"
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "seasonNumbers": [
+@anicore/api:db:repair-mappings:                   1
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "providerUrlCount": 41,
+@anicore/api:db:repair-mappings:                 "providerEpisodeNumberCount": 41,
+@anicore/api:db:repair-mappings:                 "derivedParentIds": [],
+@anicore/api:db:repair-mappings:                 "evidenceFailureReasons": [
+@anicore/api:db:repair-mappings:                   "invalid-provider-identity"
+@anicore/api:db:repair-mappings:                 ]
+@anicore/api:db:repair-mappings:               },
+@anicore/api:db:repair-mappings:               {
+@anicore/api:db:repair-mappings:                 "animeId": 13,
+@anicore/api:db:repair-mappings:                 "provider": "thetvdb",
+@anicore/api:db:repair-mappings:                 "episodeMappingCount": 11,
+@anicore/api:db:repair-mappings:                 "episodeMappingIds": [
+@anicore/api:db:repair-mappings:                   293,
+@anicore/api:db:repair-mappings:                   294,
+@anicore/api:db:repair-mappings:                   295,
+@anicore/api:db:repair-mappings:                   296,
+@anicore/api:db:repair-mappings:                   297,
+@anicore/api:db:repair-mappings:                   298,
+@anicore/api:db:repair-mappings:                   299,
+@anicore/api:db:repair-mappings:                   300,
+@anicore/api:db:repair-mappings:                   301,
+@anicore/api:db:repair-mappings:                   302
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "sourceConfidenceSignatures": [
+@anicore/api:db:repair-mappings:                   "api/85"
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "seasonNumbers": [
+@anicore/api:db:repair-mappings:                   1
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "providerUrlCount": 11,
+@anicore/api:db:repair-mappings:                 "providerEpisodeNumberCount": 11,
+@anicore/api:db:repair-mappings:                 "derivedParentIds": [],
+@anicore/api:db:repair-mappings:                 "evidenceFailureReasons": [
+@anicore/api:db:repair-mappings:                   "invalid-provider-identity"
+@anicore/api:db:repair-mappings:                 ]
+@anicore/api:db:repair-mappings:               },
+@anicore/api:db:repair-mappings:               {
+@anicore/api:db:repair-mappings:                 "animeId": 21,
+@anicore/api:db:repair-mappings:                 "provider": "thetvdb",
+@anicore/api:db:repair-mappings:                 "episodeMappingCount": 11,
+@anicore/api:db:repair-mappings:                 "episodeMappingIds": [
+@anicore/api:db:repair-mappings:                   416,
+@anicore/api:db:repair-mappings:                   417,
+@anicore/api:db:repair-mappings:                   418,
+@anicore/api:db:repair-mappings:                   419,
+@anicore/api:db:repair-mappings:                   420,
+@anicore/api:db:repair-mappings:                   421,
+@anicore/api:db:repair-mappings:                   422,
+@anicore/api:db:repair-mappings:                   423,
+@anicore/api:db:repair-mappings:                   424,
+@anicore/api:db:repair-mappings:                   425
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "sourceConfidenceSignatures": [
+@anicore/api:db:repair-mappings:                   "api/85"
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "seasonNumbers": [
+@anicore/api:db:repair-mappings:                   1
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "providerUrlCount": 11,
+@anicore/api:db:repair-mappings:                 "providerEpisodeNumberCount": 11,
+@anicore/api:db:repair-mappings:                 "derivedParentIds": [],
+@anicore/api:db:repair-mappings:                 "evidenceFailureReasons": [
+@anicore/api:db:repair-mappings:                   "invalid-provider-identity"
+@anicore/api:db:repair-mappings:                 ]
+@anicore/api:db:repair-mappings:               },
+@anicore/api:db:repair-mappings:               {
+@anicore/api:db:repair-mappings:                 "animeId": 34,
+@anicore/api:db:repair-mappings:                 "provider": "thetvdb",
+@anicore/api:db:repair-mappings:                 "episodeMappingCount": 12,
+@anicore/api:db:repair-mappings:                 "episodeMappingIds": [
+@anicore/api:db:repair-mappings:                   695,
+@anicore/api:db:repair-mappings:                   696,
+@anicore/api:db:repair-mappings:                   697,
+@anicore/api:db:repair-mappings:                   698,
+@anicore/api:db:repair-mappings:                   699,
+@anicore/api:db:repair-mappings:                   700,
+@anicore/api:db:repair-mappings:                   701,
+@anicore/api:db:repair-mappings:                   702,
+@anicore/api:db:repair-mappings:                   703,
+@anicore/api:db:repair-mappings:                   704
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "sourceConfidenceSignatures": [
+@anicore/api:db:repair-mappings:                   "api/85"
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "seasonNumbers": [
+@anicore/api:db:repair-mappings:                   1
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "providerUrlCount": 12,
+@anicore/api:db:repair-mappings:                 "providerEpisodeNumberCount": 12,
+@anicore/api:db:repair-mappings:                 "derivedParentIds": [],
+@anicore/api:db:repair-mappings:                 "evidenceFailureReasons": [
+@anicore/api:db:repair-mappings:                   "invalid-provider-identity"
+@anicore/api:db:repair-mappings:                 ]
+@anicore/api:db:repair-mappings:               },
+@anicore/api:db:repair-mappings:               {
+@anicore/api:db:repair-mappings:                 "animeId": 95,
+@anicore/api:db:repair-mappings:                 "provider": "thetvdb",
+@anicore/api:db:repair-mappings:                 "episodeMappingCount": 11,
+@anicore/api:db:repair-mappings:                 "episodeMappingIds": [
+@anicore/api:db:repair-mappings:                   1754,
+@anicore/api:db:repair-mappings:                   1755,
+@anicore/api:db:repair-mappings:                   1756,
+@anicore/api:db:repair-mappings:                   1757,
+@anicore/api:db:repair-mappings:                   1758,
+@anicore/api:db:repair-mappings:                   1759,
+@anicore/api:db:repair-mappings:                   1760,
+@anicore/api:db:repair-mappings:                   1761,
+@anicore/api:db:repair-mappings:                   1762,
+@anicore/api:db:repair-mappings:                   1763
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "sourceConfidenceSignatures": [
+@anicore/api:db:repair-mappings:                   "api/85"
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "seasonNumbers": [
+@anicore/api:db:repair-mappings:                   1
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "providerUrlCount": 11,
+@anicore/api:db:repair-mappings:                 "providerEpisodeNumberCount": 11,
+@anicore/api:db:repair-mappings:                 "derivedParentIds": [],
+@anicore/api:db:repair-mappings:                 "evidenceFailureReasons": [
+@anicore/api:db:repair-mappings:                   "invalid-provider-identity"
+@anicore/api:db:repair-mappings:                 ]
+@anicore/api:db:repair-mappings:               },
+@anicore/api:db:repair-mappings:               {
+@anicore/api:db:repair-mappings:                 "animeId": 156,
+@anicore/api:db:repair-mappings:                 "provider": "thetvdb",
+@anicore/api:db:repair-mappings:                 "episodeMappingCount": 10,
+@anicore/api:db:repair-mappings:                 "episodeMappingIds": [
+@anicore/api:db:repair-mappings:                   2621,
+@anicore/api:db:repair-mappings:                   2622,
+@anicore/api:db:repair-mappings:                   2623,
+@anicore/api:db:repair-mappings:                   2624,
+@anicore/api:db:repair-mappings:                   2625,
+@anicore/api:db:repair-mappings:                   2626,
+@anicore/api:db:repair-mappings:                   2627,
+@anicore/api:db:repair-mappings:                   2628,
+@anicore/api:db:repair-mappings:                   2629,
+@anicore/api:db:repair-mappings:                   2630
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "sourceConfidenceSignatures": [
+@anicore/api:db:repair-mappings:                   "api/85"
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "seasonNumbers": [
+@anicore/api:db:repair-mappings:                   1
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "providerUrlCount": 10,
+@anicore/api:db:repair-mappings:                 "providerEpisodeNumberCount": 10,
+@anicore/api:db:repair-mappings:                 "derivedParentIds": [],
+@anicore/api:db:repair-mappings:                 "evidenceFailureReasons": [
+@anicore/api:db:repair-mappings:                   "invalid-provider-identity"
+@anicore/api:db:repair-mappings:                 ]
+@anicore/api:db:repair-mappings:               },
+@anicore/api:db:repair-mappings:               {
+@anicore/api:db:repair-mappings:                 "animeId": 198,
+@anicore/api:db:repair-mappings:                 "provider": "thetvdb",
+@anicore/api:db:repair-mappings:                 "episodeMappingCount": 1,
+@anicore/api:db:repair-mappings:                 "episodeMappingIds": [
+@anicore/api:db:repair-mappings:                   3281
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "sourceConfidenceSignatures": [
+@anicore/api:db:repair-mappings:                   "api/85"
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "seasonNumbers": [
+@anicore/api:db:repair-mappings:                   1
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "providerUrlCount": 1,
+@anicore/api:db:repair-mappings:                 "providerEpisodeNumberCount": 1,
+@anicore/api:db:repair-mappings:                 "derivedParentIds": [],
+@anicore/api:db:repair-mappings:                 "evidenceFailureReasons": [
+@anicore/api:db:repair-mappings:                   "invalid-provider-identity"
+@anicore/api:db:repair-mappings:                 ]
+@anicore/api:db:repair-mappings:               },
+@anicore/api:db:repair-mappings:               {
+@anicore/api:db:repair-mappings:                 "animeId": 199,
+@anicore/api:db:repair-mappings:                 "provider": "thetvdb",
+@anicore/api:db:repair-mappings:                 "episodeMappingCount": 11,
+@anicore/api:db:repair-mappings:                 "episodeMappingIds": [
+@anicore/api:db:repair-mappings:                   3295,
+@anicore/api:db:repair-mappings:                   3296,
+@anicore/api:db:repair-mappings:                   3297,
+@anicore/api:db:repair-mappings:                   3298,
+@anicore/api:db:repair-mappings:                   3299,
+@anicore/api:db:repair-mappings:                   3300,
+@anicore/api:db:repair-mappings:                   3301,
+@anicore/api:db:repair-mappings:                   3302,
+@anicore/api:db:repair-mappings:                   3303,
+@anicore/api:db:repair-mappings:                   3304
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "sourceConfidenceSignatures": [
+@anicore/api:db:repair-mappings:                   "api/85"
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "seasonNumbers": [
+@anicore/api:db:repair-mappings:                   1
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "providerUrlCount": 11,
+@anicore/api:db:repair-mappings:                 "providerEpisodeNumberCount": 11,
+@anicore/api:db:repair-mappings:                 "derivedParentIds": [],
+@anicore/api:db:repair-mappings:                 "evidenceFailureReasons": [
+@anicore/api:db:repair-mappings:                   "invalid-provider-identity"
+@anicore/api:db:repair-mappings:                 ]
+@anicore/api:db:repair-mappings:               },
+@anicore/api:db:repair-mappings:               {
+@anicore/api:db:repair-mappings:                 "animeId": 216,
+@anicore/api:db:repair-mappings:                 "provider": "thetvdb",
+@anicore/api:db:repair-mappings:                 "episodeMappingCount": 96,
+@anicore/api:db:repair-mappings:                 "episodeMappingIds": [
+@anicore/api:db:repair-mappings:                   3641,
+@anicore/api:db:repair-mappings:                   3642,
+@anicore/api:db:repair-mappings:                   3643,
+@anicore/api:db:repair-mappings:                   3644,
+@anicore/api:db:repair-mappings:                   3645,
+@anicore/api:db:repair-mappings:                   3646,
+@anicore/api:db:repair-mappings:                   3647,
+@anicore/api:db:repair-mappings:                   3648,
+@anicore/api:db:repair-mappings:                   3649,
+@anicore/api:db:repair-mappings:                   3650
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "sourceConfidenceSignatures": [
+@anicore/api:db:repair-mappings:                   "api/85"
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "seasonNumbers": [
+@anicore/api:db:repair-mappings:                   1
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "providerUrlCount": 96,
+@anicore/api:db:repair-mappings:                 "providerEpisodeNumberCount": 96,
+@anicore/api:db:repair-mappings:                 "derivedParentIds": [],
+@anicore/api:db:repair-mappings:                 "evidenceFailureReasons": [
+@anicore/api:db:repair-mappings:                   "invalid-provider-identity"
+@anicore/api:db:repair-mappings:                 ]
+@anicore/api:db:repair-mappings:               },
+@anicore/api:db:repair-mappings:               {
+@anicore/api:db:repair-mappings:                 "animeId": 222,
+@anicore/api:db:repair-mappings:                 "provider": "thetvdb",
+@anicore/api:db:repair-mappings:                 "episodeMappingCount": 23,
+@anicore/api:db:repair-mappings:                 "episodeMappingIds": [
+@anicore/api:db:repair-mappings:                   3777,
+@anicore/api:db:repair-mappings:                   3778,
+@anicore/api:db:repair-mappings:                   3779,
+@anicore/api:db:repair-mappings:                   3780,
+@anicore/api:db:repair-mappings:                   3781,
+@anicore/api:db:repair-mappings:                   3782,
+@anicore/api:db:repair-mappings:                   3783,
+@anicore/api:db:repair-mappings:                   3784,
+@anicore/api:db:repair-mappings:                   3785,
+@anicore/api:db:repair-mappings:                   3786
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "sourceConfidenceSignatures": [
+@anicore/api:db:repair-mappings:                   "api/85"
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "seasonNumbers": [
+@anicore/api:db:repair-mappings:                   1
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "providerUrlCount": 23,
+@anicore/api:db:repair-mappings:                 "providerEpisodeNumberCount": 23,
+@anicore/api:db:repair-mappings:                 "derivedParentIds": [],
+@anicore/api:db:repair-mappings:                 "evidenceFailureReasons": [
+@anicore/api:db:repair-mappings:                   "invalid-provider-identity"
+@anicore/api:db:repair-mappings:                 ]
+@anicore/api:db:repair-mappings:               }
+@anicore/api:db:repair-mappings:             ]
+@anicore/api:db:repair-mappings:           },
+@anicore/api:db:repair-mappings:           "conflicting-parent-evidence": {
+@anicore/api:db:repair-mappings:             "groups": 0,
+@anicore/api:db:repair-mappings:             "episodeMappings": 0,
+@anicore/api:db:repair-mappings:             "samples": []
+@anicore/api:db:repair-mappings:           },
+@anicore/api:db:repair-mappings:           "provider-identity-collision": {
+@anicore/api:db:repair-mappings:             "groups": 44,
+@anicore/api:db:repair-mappings:             "episodeMappings": 1091,
+@anicore/api:db:repair-mappings:             "samples": [
+@anicore/api:db:repair-mappings:               {
+@anicore/api:db:repair-mappings:                 "animeId": 8,
+@anicore/api:db:repair-mappings:                 "provider": "tmdb",
+@anicore/api:db:repair-mappings:                 "episodeMappingCount": 1,
+@anicore/api:db:repair-mappings:                 "episodeMappingIds": [
+@anicore/api:db:repair-mappings:                   267
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "sourceConfidenceSignatures": [
+@anicore/api:db:repair-mappings:                   "api/85"
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "seasonNumbers": [
+@anicore/api:db:repair-mappings:                   1
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "providerUrlCount": 1,
+@anicore/api:db:repair-mappings:                 "providerEpisodeNumberCount": 1,
+@anicore/api:db:repair-mappings:                 "derivedParentIds": [
+@anicore/api:db:repair-mappings:                   "65942:1"
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "evidenceFailureReasons": []
+@anicore/api:db:repair-mappings:               },
+@anicore/api:db:repair-mappings:               {
+@anicore/api:db:repair-mappings:                 "animeId": 155,
+@anicore/api:db:repair-mappings:                 "provider": "tmdb",
+@anicore/api:db:repair-mappings:                 "episodeMappingCount": 3,
+@anicore/api:db:repair-mappings:                 "episodeMappingIds": [
+@anicore/api:db:repair-mappings:                   2606,
+@anicore/api:db:repair-mappings:                   2607,
+@anicore/api:db:repair-mappings:                   2608
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "sourceConfidenceSignatures": [
+@anicore/api:db:repair-mappings:                   "api/85"
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "seasonNumbers": [
+@anicore/api:db:repair-mappings:                   1
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "providerUrlCount": 3,
+@anicore/api:db:repair-mappings:                 "providerEpisodeNumberCount": 3,
+@anicore/api:db:repair-mappings:                 "derivedParentIds": [
+@anicore/api:db:repair-mappings:                   "57706:1"
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "evidenceFailureReasons": []
+@anicore/api:db:repair-mappings:               },
+@anicore/api:db:repair-mappings:               {
+@anicore/api:db:repair-mappings:                 "animeId": 263,
+@anicore/api:db:repair-mappings:                 "provider": "tmdb",
+@anicore/api:db:repair-mappings:                 "episodeMappingCount": 3,
+@anicore/api:db:repair-mappings:                 "episodeMappingIds": [
+@anicore/api:db:repair-mappings:                   2603,
+@anicore/api:db:repair-mappings:                   2604,
+@anicore/api:db:repair-mappings:                   2605
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "sourceConfidenceSignatures": [
+@anicore/api:db:repair-mappings:                   "api/85"
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "seasonNumbers": [
+@anicore/api:db:repair-mappings:                   1
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "providerUrlCount": 3,
+@anicore/api:db:repair-mappings:                 "providerEpisodeNumberCount": 3,
+@anicore/api:db:repair-mappings:                 "derivedParentIds": [
+@anicore/api:db:repair-mappings:                   "57706:1"
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "evidenceFailureReasons": []
+@anicore/api:db:repair-mappings:               },
+@anicore/api:db:repair-mappings:               {
+@anicore/api:db:repair-mappings:                 "animeId": 529,
+@anicore/api:db:repair-mappings:                 "provider": "tmdb",
+@anicore/api:db:repair-mappings:                 "episodeMappingCount": 4,
+@anicore/api:db:repair-mappings:                 "episodeMappingIds": [
+@anicore/api:db:repair-mappings:                   11321,
+@anicore/api:db:repair-mappings:                   11322,
+@anicore/api:db:repair-mappings:                   11323,
+@anicore/api:db:repair-mappings:                   11324
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "sourceConfidenceSignatures": [
+@anicore/api:db:repair-mappings:                   "api/85"
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "seasonNumbers": [
+@anicore/api:db:repair-mappings:                   1
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "providerUrlCount": 4,
+@anicore/api:db:repair-mappings:                 "providerEpisodeNumberCount": 4,
+@anicore/api:db:repair-mappings:                 "derivedParentIds": [
+@anicore/api:db:repair-mappings:                   "71441:1"
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "evidenceFailureReasons": []
+@anicore/api:db:repair-mappings:               },
+@anicore/api:db:repair-mappings:               {
+@anicore/api:db:repair-mappings:                 "animeId": 758,
+@anicore/api:db:repair-mappings:                 "provider": "tmdb",
+@anicore/api:db:repair-mappings:                 "episodeMappingCount": 6,
+@anicore/api:db:repair-mappings:                 "episodeMappingIds": [
+@anicore/api:db:repair-mappings:                   14829,
+@anicore/api:db:repair-mappings:                   14830,
+@anicore/api:db:repair-mappings:                   14831,
+@anicore/api:db:repair-mappings:                   14832,
+@anicore/api:db:repair-mappings:                   14833,
+@anicore/api:db:repair-mappings:                   14834
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "sourceConfidenceSignatures": [
+@anicore/api:db:repair-mappings:                   "api/85"
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "seasonNumbers": [
+@anicore/api:db:repair-mappings:                   2
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "providerUrlCount": 6,
+@anicore/api:db:repair-mappings:                 "providerEpisodeNumberCount": 6,
+@anicore/api:db:repair-mappings:                 "derivedParentIds": [
+@anicore/api:db:repair-mappings:                   "63330:2"
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "evidenceFailureReasons": []
+@anicore/api:db:repair-mappings:               },
+@anicore/api:db:repair-mappings:               {
+@anicore/api:db:repair-mappings:                 "animeId": 857,
+@anicore/api:db:repair-mappings:                 "provider": "tmdb",
+@anicore/api:db:repair-mappings:                 "episodeMappingCount": 2,
+@anicore/api:db:repair-mappings:                 "episodeMappingIds": [
+@anicore/api:db:repair-mappings:                   15303,
+@anicore/api:db:repair-mappings:                   15304
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "sourceConfidenceSignatures": [
+@anicore/api:db:repair-mappings:                   "api/85"
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "seasonNumbers": [
+@anicore/api:db:repair-mappings:                   2
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "providerUrlCount": 2,
+@anicore/api:db:repair-mappings:                 "providerEpisodeNumberCount": 2,
+@anicore/api:db:repair-mappings:                 "derivedParentIds": [
+@anicore/api:db:repair-mappings:                   "30669:2"
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "evidenceFailureReasons": []
+@anicore/api:db:repair-mappings:               },
+@anicore/api:db:repair-mappings:               {
+@anicore/api:db:repair-mappings:                 "animeId": 1104,
+@anicore/api:db:repair-mappings:                 "provider": "tmdb",
+@anicore/api:db:repair-mappings:                 "episodeMappingCount": 13,
+@anicore/api:db:repair-mappings:                 "episodeMappingIds": [
+@anicore/api:db:repair-mappings:                   17806,
+@anicore/api:db:repair-mappings:                   17807,
+@anicore/api:db:repair-mappings:                   17808,
+@anicore/api:db:repair-mappings:                   17809,
+@anicore/api:db:repair-mappings:                   17810,
+@anicore/api:db:repair-mappings:                   17811,
+@anicore/api:db:repair-mappings:                   17812,
+@anicore/api:db:repair-mappings:                   17813,
+@anicore/api:db:repair-mappings:                   17814,
+@anicore/api:db:repair-mappings:                   17815
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "sourceConfidenceSignatures": [
+@anicore/api:db:repair-mappings:                   "api/85"
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "seasonNumbers": [
+@anicore/api:db:repair-mappings:                   1
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "providerUrlCount": 13,
+@anicore/api:db:repair-mappings:                 "providerEpisodeNumberCount": 13,
+@anicore/api:db:repair-mappings:                 "derivedParentIds": [
+@anicore/api:db:repair-mappings:                   "40294:1"
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "evidenceFailureReasons": []
+@anicore/api:db:repair-mappings:               },
+@anicore/api:db:repair-mappings:               {
+@anicore/api:db:repair-mappings:                 "animeId": 1261,
+@anicore/api:db:repair-mappings:                 "provider": "tmdb",
+@anicore/api:db:repair-mappings:                 "episodeMappingCount": 2,
+@anicore/api:db:repair-mappings:                 "episodeMappingIds": [
+@anicore/api:db:repair-mappings:                   20993,
+@anicore/api:db:repair-mappings:                   20994
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "sourceConfidenceSignatures": [
+@anicore/api:db:repair-mappings:                   "api/85"
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "seasonNumbers": [
+@anicore/api:db:repair-mappings:                   2
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "providerUrlCount": 2,
+@anicore/api:db:repair-mappings:                 "providerEpisodeNumberCount": 2,
+@anicore/api:db:repair-mappings:                 "derivedParentIds": [
+@anicore/api:db:repair-mappings:                   "67267:2"
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "evidenceFailureReasons": []
+@anicore/api:db:repair-mappings:               },
+@anicore/api:db:repair-mappings:               {
+@anicore/api:db:repair-mappings:                 "animeId": 1451,
+@anicore/api:db:repair-mappings:                 "provider": "tmdb",
+@anicore/api:db:repair-mappings:                 "episodeMappingCount": 2,
+@anicore/api:db:repair-mappings:                 "episodeMappingIds": [
+@anicore/api:db:repair-mappings:                   24267,
+@anicore/api:db:repair-mappings:                   24268
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "sourceConfidenceSignatures": [
+@anicore/api:db:repair-mappings:                   "api/85"
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "seasonNumbers": [
+@anicore/api:db:repair-mappings:                   1
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "providerUrlCount": 2,
+@anicore/api:db:repair-mappings:                 "providerEpisodeNumberCount": 2,
+@anicore/api:db:repair-mappings:                 "derivedParentIds": [
+@anicore/api:db:repair-mappings:                   "1095:1"
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "evidenceFailureReasons": []
+@anicore/api:db:repair-mappings:               },
+@anicore/api:db:repair-mappings:               {
+@anicore/api:db:repair-mappings:                 "animeId": 1529,
+@anicore/api:db:repair-mappings:                 "provider": "tmdb",
+@anicore/api:db:repair-mappings:                 "episodeMappingCount": 51,
+@anicore/api:db:repair-mappings:                 "episodeMappingIds": [
+@anicore/api:db:repair-mappings:                   25997,
+@anicore/api:db:repair-mappings:                   25998,
+@anicore/api:db:repair-mappings:                   25999,
+@anicore/api:db:repair-mappings:                   26000,
+@anicore/api:db:repair-mappings:                   26001,
+@anicore/api:db:repair-mappings:                   26002,
+@anicore/api:db:repair-mappings:                   26003,
+@anicore/api:db:repair-mappings:                   26004,
+@anicore/api:db:repair-mappings:                   26005,
+@anicore/api:db:repair-mappings:                   26006
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "sourceConfidenceSignatures": [
+@anicore/api:db:repair-mappings:                   "api/85"
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "seasonNumbers": [
+@anicore/api:db:repair-mappings:                   1
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "providerUrlCount": 51,
+@anicore/api:db:repair-mappings:                 "providerEpisodeNumberCount": 51,
+@anicore/api:db:repair-mappings:                 "derivedParentIds": [
+@anicore/api:db:repair-mappings:                   "135728:1"
+@anicore/api:db:repair-mappings:                 ],
+@anicore/api:db:repair-mappings:                 "evidenceFailureReasons": []
+@anicore/api:db:repair-mappings:               }
+@anicore/api:db:repair-mappings:             ]
+@anicore/api:db:repair-mappings:           }
+@anicore/api:db:repair-mappings:         }
+@anicore/api:db:repair-mappings:       },
+@anicore/api:db:repair-mappings:       "samples": []
+@anicore/api:db:repair-mappings:     }
+@anicore/api:db:repair-mappings:   }
+@anicore/api:db:repair-mappings: }
+
+ Tasks:    1 successful, 1 total
+Cached:    0 cached, 1 total
+  Time:    9.658s 
+
