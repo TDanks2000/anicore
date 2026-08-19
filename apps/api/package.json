@@ -9,6 +9,7 @@
     "db:diagnose-provider-collision-identities": "bun src/scripts/diagnose-provider-collision-identities.ts",
     "db:diagnose-provider-local-count-mismatches": "bun src/scripts/diagnose-provider-local-count-mismatches.ts",
     "db:diagnose-provider-season-ownership": "bun src/scripts/diagnose-provider-season-ownership.ts",
+    "db:plan-jojo-segment-migration": "bun src/scripts/plan-jojo-segment-migration.ts",
     "db:plan-provider-collision-segments": "bun src/scripts/plan-provider-collision-segments.ts",
     "db:plan-provider-dual-segments": "bun src/scripts/plan-provider-dual-segments.ts",
     "db:plan-provider-season-ownership-repairs": "bun src/scripts/plan-provider-season-ownership-repairs.ts",
