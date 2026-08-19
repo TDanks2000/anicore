@@ -1,6 +1,12 @@
 import { and, eq, sql } from "drizzle-orm";
 
 import { db } from "@anicore/db";
+import {
+	animeProviderMappings,
+	animeProviderSegments,
+	providerEntities,
+} from "@anicore/db/provider-mapping-schema";
+import type { ProviderEpisodeSegment } from "@anicore/db/provider-segments";
 import { animeMappings, episodeMappings, episodes } from "@anicore/db/schema";
 import { fetchTvdbEpisodeTitles } from "./thetvdb/episodes";
 import { fetchTmdbEpisodeTitles } from "./tmdb/episodes";
@@ -32,6 +38,7 @@ interface EpisodeTitlePreviewRow {
 interface EpisodeTitleMatch {
 	providerEpisodeId: string;
 	providerEpisodeNumber: string;
+	localEpisodeNumber?: number;
 	title: string;
 	description?: string | null;
 	airDate?: string | null;
@@ -44,6 +51,7 @@ interface TitleSourceMatch {
 	animeProviderSlug?: string | null;
 	animeProviderUrl?: string | null;
 	seasonNumber: number;
+	mappingMode?: "legacy" | "segmented";
 	episodes: EpisodeTitleMatch[];
 }
 
@@ -81,6 +89,18 @@ export interface ExistingAnimeSourceMapping {
 	source: MappingSource;
 	isPrimary: boolean;
 	updatedAt: Date;
+}
+
+export interface ExistingSegmentedAnimeSourceMapping {
+	id: number;
+	providerId: string;
+	providerSlug: string | null;
+	providerUrl: string | null;
+	confidence: number;
+	source: MappingSource;
+	isPrimary: boolean;
+	updatedAt: Date;
+	segments: ProviderEpisodeSegment[];
 }
 
 const SOURCE_PRIORITY: Record<MappingSource, number> = {
@@ -195,10 +215,14 @@ async function applySourceMatch(
 	const rowsByNumber = new Map(rows.map((row) => [row.number, row]));
 	let updated = 0;
 
-	await upsertAnimeSourceMapping(animeId, match);
+	if (match.mappingMode !== "segmented") {
+		await upsertAnimeSourceMapping(animeId, match);
+	}
 
 	for (const episode of match.episodes) {
-		const row = rowsByNumber.get(Number(episode.providerEpisodeNumber));
+		const localEpisodeNumber =
+			episode.localEpisodeNumber ?? Number(episode.providerEpisodeNumber);
+		const row = rowsByNumber.get(localEpisodeNumber);
 		if (!row || !isTitleMissing(row)) {
 			continue;
 		}
@@ -309,7 +333,6 @@ export async function enrichEpisodeTitlesForAnime(
 				sourcesUsed.push("tmdb");
 			}
 		}
-	}
 
 	return { updated, sourcesUsed };
 }
@@ -388,7 +411,11 @@ export async function previewEpisodeTitleEnrichment(
 	if (tvdbMatch) {
 		const matchedRows = tvdbMatch.episodes
 			.map((ep) =>
-				rows.find((r) => r.number === Number(ep.providerEpisodeNumber)),
+				rows.find(
+					(r) =>
+						r.number ===
+						(ep.localEpisodeNumber ?? Number(ep.providerEpisodeNumber)),
+				),
 			)
 			.filter((r): r is EpisodeRow => r !== undefined && isTitleMissing(r));
 
@@ -424,7 +451,11 @@ export async function previewEpisodeTitleEnrichment(
 		if (tmdbMatch) {
 			const matchedRows = tmdbMatch.episodes
 				.map((ep) =>
-					rows.find((r) => r.number === Number(ep.providerEpisodeNumber)),
+					rows.find(
+						(r) =>
+							r.number ===
+							(ep.localEpisodeNumber ?? Number(ep.providerEpisodeNumber)),
+					),
 				)
 				.filter(
 					(r): r is EpisodeRow =>
@@ -477,6 +508,77 @@ export async function loadExistingAnimeSourceMapping(
 	return selectPreferredAnimeSourceMapping(
 		rows as ExistingAnimeSourceMapping[],
 	);
+}
+
+export async function loadExistingSegmentedAnimeSourceMapping(
+	animeId: number,
+	provider: "thetvdb" | "tmdb",
+): Promise<ExistingSegmentedAnimeSourceMapping | null> {
+	const rows = await db
+		.select({
+			mappingId: animeProviderMappings.id,
+			providerId: providerEntities.providerId,
+			providerSlug: providerEntities.providerSlug,
+			providerUrl: providerEntities.providerUrl,
+			confidence: animeProviderMappings.confidence,
+			source: animeProviderMappings.source,
+			isPrimary: animeProviderMappings.isPrimary,
+			updatedAt: animeProviderMappings.updatedAt,
+			providerEpisodeStart: animeProviderSegments.providerEpisodeStart,
+			providerEpisodeEnd: animeProviderSegments.providerEpisodeEnd,
+			localEpisodeStart: animeProviderSegments.localEpisodeStart,
+			localEpisodeEnd: animeProviderSegments.localEpisodeEnd,
+		})
+		.from(animeProviderMappings)
+		.innerJoin(
+			providerEntities,
+			eq(animeProviderMappings.providerEntityId, providerEntities.id),
+		)
+		.innerJoin(
+			animeProviderSegments,
+			eq(
+				animeProviderSegments.animeProviderMappingId,
+				animeProviderMappings.id,
+			),
+		)
+		.where(
+			and(
+				eq(animeProviderMappings.animeId, animeId),
+				eq(providerEntities.provider, provider),
+			),
+		);
+
+	if (rows.length === 0) return null;
+	const mappingIds = new Set(rows.map((row) => row.mappingId));
+	if (mappingIds.size !== 1) {
+		throw new Error(
+			`Anime ${animeId} has multiple explicit segmented ${provider} mappings; refusing nondeterministic enrichment`,
+		);
+	}
+
+	const first = rows[0]!;
+	return {
+		id: first.mappingId,
+		providerId: first.providerId,
+		providerSlug: first.providerSlug,
+		providerUrl: first.providerUrl,
+		confidence: first.confidence,
+		source: first.source,
+		isPrimary: first.isPrimary,
+		updatedAt: first.updatedAt,
+		segments: rows
+			.map((row) => ({
+				providerEpisodeStart: row.providerEpisodeStart,
+				providerEpisodeEnd: row.providerEpisodeEnd,
+				localEpisodeStart: row.localEpisodeStart,
+				localEpisodeEnd: row.localEpisodeEnd,
+			}))
+			.sort(
+				(a, b) =>
+					a.providerEpisodeStart - b.providerEpisodeStart ||
+					a.localEpisodeStart - b.localEpisodeStart,
+			),
+	};
 }
 
 export type { EnrichmentContext, EpisodeTitleMatch, TitleSourceMatch };
