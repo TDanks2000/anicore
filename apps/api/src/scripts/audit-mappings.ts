@@ -154,7 +154,7 @@ async function auditMappings(): Promise<MappingAuditReport> {
     code: "episode-mapping-without-anime-provider",
     severity: "error",
     description:
-      "Episode mappings exist for a provider without any corresponding anime-level mapping on the parent anime.",
+      "Episode mappings exist without either a legacy anime-level mapping for the provider or an explicit v2 segment that maps the stored provider episode number to the parent anime's local episode number.",
     countQuery: sql`
       select count(*)::int as count
       from episode_mappings em
@@ -165,10 +165,27 @@ async function auditMappings(): Promise<MappingAuditReport> {
         where am.anime_id = e.anime_id
           and am.provider = em.provider
       )
+        and not exists (
+          select 1
+          from anime_provider_mappings apm
+          join provider_entities pe
+            on pe.id = apm.provider_entity_id
+          join anime_provider_segments aps
+            on aps.anime_provider_mapping_id = apm.id
+          where apm.anime_id = e.anime_id
+            and pe.provider = em.provider
+            and em.provider_episode_number ~ '^[1-9][0-9]*$'
+            and (em.provider_episode_number)::int between
+              aps.provider_episode_start and aps.provider_episode_end
+            and e.number between aps.local_episode_start and aps.local_episode_end
+            and e.number = aps.local_episode_start
+              + ((em.provider_episode_number)::int - aps.provider_episode_start)
+        )
     `,
     sampleQuery: sql`
       select em.id, e.anime_id as "animeId", em.episode_id as "episodeId",
-        em.provider, em.provider_id as "providerId"
+        em.provider, em.provider_id as "providerId",
+        em.provider_episode_number as "providerEpisodeNumber"
       from episode_mappings em
       join episodes e on e.id = em.episode_id
       where not exists (
@@ -177,6 +194,22 @@ async function auditMappings(): Promise<MappingAuditReport> {
         where am.anime_id = e.anime_id
           and am.provider = em.provider
       )
+        and not exists (
+          select 1
+          from anime_provider_mappings apm
+          join provider_entities pe
+            on pe.id = apm.provider_entity_id
+          join anime_provider_segments aps
+            on aps.anime_provider_mapping_id = apm.id
+          where apm.anime_id = e.anime_id
+            and pe.provider = em.provider
+            and em.provider_episode_number ~ '^[1-9][0-9]*$'
+            and (em.provider_episode_number)::int between
+              aps.provider_episode_start and aps.provider_episode_end
+            and e.number between aps.local_episode_start and aps.local_episode_end
+            and e.number = aps.local_episode_start
+              + ((em.provider_episode_number)::int - aps.provider_episode_start)
+        )
       order by em.id
       limit 20
     `,
