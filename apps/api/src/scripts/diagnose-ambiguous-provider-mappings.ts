@@ -1,14 +1,16 @@
 import { sql, type SQL } from "drizzle-orm";
 
 import { closeDb, db } from "@anicore/db";
-import { getTvdbSeasonEpisodes, getTvdbSeriesExtended } from "@anicore/providers/thetvdb/client";
+import { getTvdbOfficialEpisodes, getTvdbSeriesExtended } from "@anicore/providers/thetvdb/client";
 import { TMDB } from "@api-wrappers/tmdb-wrapper";
 
 import {
   diagnoseAmbiguousMappingGroup,
+  parseProviderSeasonId,
   type AmbiguousMappingAnimeIdentity,
   type AmbiguousMappingGroupDiagnosis,
   type AmbiguousMappingProviderEvidence,
+  type ProviderEvidenceStatus,
 } from "./ambiguous-provider-mapping-diagnosis";
 
 type Provider = "thetvdb" | "tmdb";
@@ -39,15 +41,6 @@ interface AnimeIdentityRow extends Record<string, unknown> {
 async function queryRows<T extends Record<string, unknown>>(query: SQL): Promise<T[]> {
   const result = await db.execute(query);
   return [...result] as T[];
-}
-
-function parseProviderSeasonId(providerId: string): { showId: number; seasonNumber: number } | null {
-  const [showIdValue, seasonValue] = providerId.split(":");
-  const showId = Number(showIdValue);
-  const seasonNumber = Number(seasonValue);
-  if (!Number.isInteger(showId) || showId <= 0) return null;
-  if (!Number.isInteger(seasonNumber) || seasonNumber <= 0) return null;
-  return { showId, seasonNumber };
 }
 
 async function loadAmbiguousMappingRows(): Promise<AmbiguousMappingRow[]> {
@@ -115,22 +108,48 @@ async function mapWithConcurrency<T, R>(
   return results;
 }
 
-interface TvdbCache {
-  series: Map<number, { name: string; slug: string | null; firstAired: string | null } | null>;
-  seasons: Map<string, { episodeCount: number | null; firstAired: string | null } | null>;
+function errorStatus(error: unknown): number | null {
+  if (typeof error !== "object" || error === null) return null;
+  const status = (error as { status?: unknown }).status;
+  return typeof status === "number" ? status : null;
 }
 
-async function resolveTvdbEvidence(
-  cache: TvdbCache,
-  providerId: string,
-): Promise<AmbiguousMappingProviderEvidence | null> {
-  const parsed = parseProviderSeasonId(providerId);
-  if (!parsed) return null;
+function isNotFoundError(error: unknown): boolean {
+  return errorStatus(error) === 404 || /request failed:\s*404(?:\s|:|$)/i.test(
+    error instanceof Error ? error.message : String(error),
+  );
+}
 
-  let series = cache.series.get(parsed.showId);
+function missingEvidence(status: ProviderEvidenceStatus): AmbiguousMappingProviderEvidence {
+  return {
+    status,
+    providerSeriesName: null,
+    providerSlug: null,
+    providerFirstAired: null,
+    providerSeasonFirstAired: null,
+    providerSeasonEpisodeCount: null,
+    providerShowEpisodeCount: null,
+  };
+}
+
+interface TvdbCache {
+  series: Map<number, { name: string; slug: string | null; firstAired: string | null } | null>;
+  episodes: Map<number, Array<{ aired: string | null; seasonNumber: number | null }> | null>;
+}
+
+interface TvdbSeriesLookup {
+  evidence: AmbiguousMappingProviderEvidence;
+  series: { name: string; slug: string | null; firstAired: string | null } | null;
+}
+
+async function resolveTvdbSeries(
+  cache: TvdbCache,
+  showId: number,
+): Promise<TvdbSeriesLookup> {
+  let series = cache.series.get(showId);
   if (series === undefined) {
     try {
-      const record = await getTvdbSeriesExtended(parsed.showId);
+      const record = await getTvdbSeriesExtended(showId);
       series = record
         ? {
             name: record.name,
@@ -139,42 +158,100 @@ async function resolveTvdbEvidence(
           }
         : null;
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (!/TVDB request failed:\s*404(?:\s|:|$)/i.test(message)) throw error;
-      series = null;
+      if (isNotFoundError(error)) {
+        return { evidence: missingEvidence("not-found"), series: null };
+      }
+      return { evidence: missingEvidence("fetch-failed"), series: null };
     }
-    cache.series.set(parsed.showId, series);
+    cache.series.set(showId, series);
   }
-  if (!series) return null;
+  if (!series) {
+    return { evidence: missingEvidence("not-found"), series: null };
+  }
+  return { evidence: missingEvidence("ok"), series };
+}
 
-  const seasonKey = `${parsed.showId}:${parsed.seasonNumber}`;
-  let season = cache.seasons.get(seasonKey);
-  if (season === undefined) {
+/**
+ * Derives the season-scoped and show-scoped episode counts from one
+ * language-specific official-episodes fetch (the language endpoint ignores the
+ * season query and returns every season, so the full series is fetched once).
+ */
+async function resolveTvdbSeasonEvidence(
+  cache: TvdbCache,
+  showId: number,
+  seasonNumber: number,
+): Promise<{ episodeCount: number | null; firstAired: string | null } | null> {
+  let episodes = cache.episodes.get(showId);
+  if (episodes === undefined) {
     try {
-      const episodes = await getTvdbSeasonEpisodes(parsed.showId, parsed.seasonNumber, "eng");
-      const aired = episodes
-        .map((episode) => episode.aired?.trim())
-        .filter((value): value is string => Boolean(value))
-        .sort();
-      season = {
-        episodeCount: episodes.length > 0 ? episodes.length : null,
-        firstAired: aired[0] ?? null,
-      };
+      const allEpisodes = await getTvdbOfficialEpisodes(showId, "eng");
+      episodes = allEpisodes.map((episode) => ({
+        aired: episode.aired?.trim() || null,
+        seasonNumber: typeof episode.seasonNumber === "number" ? episode.seasonNumber : null,
+      }));
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (!/TVDB request failed:\s*404(?:\s|:|$)/i.test(message)) throw error;
-      season = null;
+      if (isNotFoundError(error)) {
+        cache.episodes.set(showId, null);
+        return null;
+      }
+      throw error;
     }
-    cache.seasons.set(seasonKey, season);
+    cache.episodes.set(showId, episodes);
   }
+  if (!episodes) return null;
+
+  const seasonEpisodes = episodes.filter(
+    (episode) => episode.seasonNumber === seasonNumber,
+  );
+  const aired = seasonEpisodes
+    .map((episode) => episode.aired)
+    .filter((value): value is string => Boolean(value))
+    .sort();
+  return {
+    episodeCount: seasonEpisodes.length > 0 ? seasonEpisodes.length : null,
+    firstAired: aired[0] ?? null,
+  };
+}
+
+async function resolveTvdbEvidence(
+  cache: TvdbCache,
+  providerId: string,
+): Promise<AmbiguousMappingProviderEvidence> {
+  const parsed = parseProviderSeasonId(providerId);
+  if (!parsed) return missingEvidence("malformed");
+
+  const seriesLookup = await resolveTvdbSeries(cache, parsed.showId);
+  if (!seriesLookup.series) return seriesLookup.evidence;
+
+  let season: { episodeCount: number | null; firstAired: string | null } | null;
+  try {
+    season = await resolveTvdbSeasonEvidence(cache, parsed.showId, parsed.seasonNumber);
+  } catch {
+    return missingEvidence("fetch-failed");
+  }
+  if (!season) {
+    return {
+      ...missingEvidence("not-found"),
+      providerSeriesName: seriesLookup.series.name,
+      providerSlug: seriesLookup.series.slug,
+      providerFirstAired: seriesLookup.series.firstAired,
+    };
+  }
+
+  const allEpisodes = cache.episodes.get(parsed.showId) ?? [];
+  const showEpisodeCount =
+    allEpisodes.length > 0
+      ? allEpisodes.filter((episode) => (episode.seasonNumber ?? 0) > 0).length
+      : null;
 
   return {
-    providerSeriesName: series.name,
-    providerSlug: series.slug,
-    providerFirstAired: series.firstAired,
-    providerSeasonFirstAired: season?.firstAired ?? null,
-    providerSeasonEpisodeCount: season?.episodeCount ?? null,
-    providerShowEpisodeCount: null,
+    status: "ok",
+    providerSeriesName: seriesLookup.series.name,
+    providerSlug: seriesLookup.series.slug,
+    providerFirstAired: seriesLookup.series.firstAired,
+    providerSeasonFirstAired: season.firstAired,
+    providerSeasonEpisodeCount: season.episodeCount,
+    providerShowEpisodeCount: showEpisodeCount,
   };
 }
 
@@ -183,29 +260,49 @@ interface TmdbCache {
   seasons: Map<string, { episodeCount: number | null; firstAired: string | null } | null>;
 }
 
-async function resolveTmdbEvidence(
+interface TmdbShowLookup {
+  evidence: AmbiguousMappingProviderEvidence;
+  show: { name: string; firstAired: string | null; showEpisodeCount: number | null } | null;
+}
+
+async function resolveTmdbShow(
   client: TMDB,
   cache: TmdbCache,
-  providerId: string,
-): Promise<AmbiguousMappingProviderEvidence | null> {
-  const parsed = parseProviderSeasonId(providerId);
-  if (!parsed) return null;
-
-  let show = cache.shows.get(parsed.showId);
+  showId: number,
+): Promise<TmdbShowLookup> {
+  let show = cache.shows.get(showId);
   if (show === undefined) {
     try {
-      const details = await client.tvShows.details(parsed.showId, undefined, "en-US");
+      const details = await client.tvShows.details(showId, undefined, "en-US");
       show = {
         name: details.name,
         firstAired: details.first_air_date?.trim() || null,
         showEpisodeCount: details.number_of_episodes > 0 ? details.number_of_episodes : null,
       };
-    } catch {
-      show = null;
+    } catch (error) {
+      if (isNotFoundError(error)) {
+        return { evidence: missingEvidence("not-found"), show: null };
+      }
+      return { evidence: missingEvidence("fetch-failed"), show: null };
     }
-    cache.shows.set(parsed.showId, show);
+    cache.shows.set(showId, show);
   }
-  if (!show) return null;
+  if (!show) {
+    return { evidence: missingEvidence("not-found"), show: null };
+  }
+  return { evidence: missingEvidence("ok"), show };
+}
+
+async function resolveTmdbEvidence(
+  client: TMDB,
+  cache: TmdbCache,
+  providerId: string,
+): Promise<AmbiguousMappingProviderEvidence> {
+  const parsed = parseProviderSeasonId(providerId);
+  if (!parsed) return missingEvidence("malformed");
+
+  const showLookup = await resolveTmdbShow(client, cache, parsed.showId);
+  if (!showLookup.show) return showLookup.evidence;
 
   const seasonKey = `${parsed.showId}:${parsed.seasonNumber}`;
   let season = cache.seasons.get(seasonKey);
@@ -223,19 +320,37 @@ async function resolveTmdbEvidence(
             : null,
         firstAired: seasonDetails.air_date?.trim() || null,
       };
-    } catch {
-      season = null;
+    } catch (error) {
+      if (isNotFoundError(error)) {
+        season = null;
+      } else {
+        return {
+          ...missingEvidence("fetch-failed"),
+          providerSeriesName: showLookup.show.name,
+          providerFirstAired: showLookup.show.firstAired,
+          providerShowEpisodeCount: showLookup.show.showEpisodeCount,
+        };
+      }
     }
     cache.seasons.set(seasonKey, season);
   }
+  if (!season) {
+    return {
+      ...missingEvidence("not-found"),
+      providerSeriesName: showLookup.show.name,
+      providerFirstAired: showLookup.show.firstAired,
+      providerShowEpisodeCount: showLookup.show.showEpisodeCount,
+    };
+  }
 
   return {
-    providerSeriesName: show.name,
+    status: "ok",
+    providerSeriesName: showLookup.show.name,
     providerSlug: null,
-    providerFirstAired: show.firstAired,
-    providerSeasonFirstAired: season?.firstAired ?? null,
-    providerSeasonEpisodeCount: season?.episodeCount ?? null,
-    providerShowEpisodeCount: show.showEpisodeCount,
+    providerFirstAired: showLookup.show.firstAired,
+    providerSeasonFirstAired: season.firstAired,
+    providerSeasonEpisodeCount: season.episodeCount,
+    providerShowEpisodeCount: showLookup.show.showEpisodeCount,
   };
 }
 
@@ -279,7 +394,7 @@ async function run(): Promise<Record<string, unknown>> {
     rowsByAnime.set(row.animeId, list);
   }
 
-  const tvdbCache: TvdbCache = { series: new Map(), seasons: new Map() };
+  const tvdbCache: TvdbCache = { series: new Map(), episodes: new Map() };
   const tmdbClient = new TMDB({ apiKey: process.env.TMDB_API_KEY?.trim() });
   const tmdbCache: TmdbCache = { shows: new Map(), seasons: new Map() };
 
@@ -298,7 +413,7 @@ async function run(): Promise<Record<string, unknown>> {
         source: string;
         confidence: number;
         isPrimary: boolean;
-        evidence: AmbiguousMappingProviderEvidence | null;
+        evidence: AmbiguousMappingProviderEvidence;
       }> => {
         const evidence =
           row.provider === "thetvdb"
@@ -334,6 +449,16 @@ async function run(): Promise<Record<string, unknown>> {
       );
     }
   }
+  const byRepairStatus = new Map<string, number>();
+  const repairSafeGroups = groups.filter((group) => group.repairSafe);
+  for (const group of groups) {
+    for (const candidate of group.candidates) {
+      byRepairStatus.set(
+        candidate.repair.status,
+        (byRepairStatus.get(candidate.repair.status) ?? 0) + 1,
+      );
+    }
+  }
 
   return {
     ok: true,
@@ -342,7 +467,7 @@ async function run(): Promise<Record<string, unknown>> {
     operation: {
       code: "diagnose-ambiguous-provider-mappings",
       description:
-        "Compare every TVDB/TMDB anime mapping that collides with a sibling mapping for the same anime/provider against authoritative provider series+season metadata (series name, first aired date, season episode count) and AniList identity (titles, start date, episode count). Reports per-candidate classification and per-group verdicts so a later plan/apply can retire the wrong ID and mark the correct one primary. This command never writes data.",
+        "Compare every TVDB/TMDB anime mapping that collides with a sibling mapping for the same anime/provider against authoritative provider series+season metadata (series name, first aired dates, season and show episode counts) and AniList identity (titles, start date, episode count). Reports per-candidate classification plus a fail-closed repair eligibility layer: a candidate is only 'verified-keep' when a single provider scope (season or show, never mixed) exactly matches the anime start date and episode count with a strong title identity, and a sibling is only 'verified-retire' with positive contradictory evidence (title contradiction plus a substantially wrong first-air year or episode count). A group is repair-safe only when exactly one candidate is verified-keep and every sibling is verified-retire. This command never writes data.",
       ambiguousGroups: groups.length,
       ambiguousMappings: rows.length,
       byVerdict: Object.fromEntries(
@@ -351,6 +476,11 @@ async function run(): Promise<Record<string, unknown>> {
       byClassification: Object.fromEntries(
         [...byClassification.entries()].sort(([a], [b]) => a.localeCompare(b)),
       ),
+      byRepairStatus: Object.fromEntries(
+        [...byRepairStatus.entries()].sort(([a], [b]) => a.localeCompare(b)),
+      ),
+      repairSafeGroups: repairSafeGroups.length,
+      repairSafeAnimeIds: repairSafeGroups.map((group) => group.animeId),
       groups,
     },
   };

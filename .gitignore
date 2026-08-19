@@ -20,6 +20,10 @@ apps/api/data/sync-monitor/
 apps/api/data/dry-run-*.json
 mapping-audit.json
 
+# Scratch diagnostic output accidentally committed historically
+repair-diagnostics.txt
+tvdb-repair-dry-run.txt
+
 # SQLite (if ever used locally)
 *.sqlite
 *.sqlite-shm
