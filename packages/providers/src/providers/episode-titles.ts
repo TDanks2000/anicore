@@ -333,6 +333,7 @@ export async function enrichEpisodeTitlesForAnime(
 				sourcesUsed.push("tmdb");
 			}
 		}
+	}
 
 	return { updated, sourcesUsed };
 }
