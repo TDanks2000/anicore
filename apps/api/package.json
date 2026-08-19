@@ -13,6 +13,7 @@
     "db:plan-provider-collision-segments": "bun src/scripts/plan-provider-collision-segments.ts",
     "db:plan-provider-dual-segments": "bun src/scripts/plan-provider-dual-segments.ts",
     "db:plan-provider-season-ownership-repairs": "bun src/scripts/plan-provider-season-ownership-repairs.ts",
+    "db:repair-jojo-segment-migration": "bun src/scripts/repair-jojo-segment-migration.ts",
     "db:repair-mappings": "bun src/scripts/repair-mappings.ts",
     "db:repair-provider-season-ownership": "bun src/scripts/repair-provider-season-ownership.ts",
     "db:repair-tvdb-orphans": "bun src/scripts/repair-tvdb-orphans.ts",
