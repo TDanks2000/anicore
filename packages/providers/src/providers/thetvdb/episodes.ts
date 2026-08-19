@@ -1,4 +1,9 @@
-import { loadExistingAnimeSourceMapping, type EnrichmentContext, type TitleSourceMatch } from "../episode-titles";
+import {
+	loadExistingAnimeSourceMapping,
+	loadExistingSegmentedAnimeSourceMapping,
+	type EnrichmentContext,
+	type TitleSourceMatch,
+} from "../episode-titles";
 import { retireInvalidAutomaticSourceMapping } from "../episode-source-mapping-lifecycle";
 import {
 	MIN_SOURCE_TITLE_SIMILARITY,
@@ -6,6 +11,7 @@ import {
 	selectSourceCandidate,
 	sourceTitleSimilarity,
 } from "../episode-source-matching";
+import { applyProviderEpisodeSegments } from "../segmented-source-mapping";
 import {
 	getTvdbOfficialEpisodes,
 	getTvdbSeasonEpisodes,
@@ -69,9 +75,83 @@ function toTitledEpisodes(
 	);
 }
 
+async function resolveSegmentedStoredMatch(
+	context: EnrichmentContext,
+): Promise<TitleSourceMatch | null> {
+	const mapping = await loadExistingSegmentedAnimeSourceMapping(
+		context.animeId,
+		"thetvdb",
+	);
+	if (!mapping) return null;
+
+	const parsed = parseStoredMapping(mapping.providerId);
+	if (!parsed) {
+		throw new Error(
+			`Explicit segmented thetvdb mapping ${mapping.providerId} is malformed; refusing automatic fallback`,
+		);
+	}
+
+	const episodes = await getTvdbSeasonEpisodes(
+		parsed.seriesId,
+		parsed.seasonNumber,
+		"eng",
+	);
+	const titledEpisodes = toTitledEpisodes(
+		episodes,
+		parsed.seriesId,
+		mapping.providerSlug,
+	);
+	if (!titledEpisodes.length) {
+		throw new Error(
+			`Explicit segmented thetvdb mapping ${mapping.providerId} returned no titled episodes`,
+		);
+	}
+
+	const segmentedEpisodes = applyProviderEpisodeSegments(
+		titledEpisodes,
+		mapping.segments,
+	);
+	if (!segmentedEpisodes.length) {
+		throw new Error(
+			`Explicit segmented thetvdb mapping ${mapping.providerId} matched no provider episodes`,
+		);
+	}
+
+	const batchScore = scoreSourceEpisodeBatch(
+		{
+			seasonYear: context.anilistData.seasonYear,
+			episodeCount: context.anilistData.episodeCount,
+			episodes: context.episodes,
+		},
+		segmentedEpisodes.map((episode) => ({
+			number: episode.localEpisodeNumber,
+			title: episode.title,
+			airDate: episode.airDate,
+		})),
+	);
+	if (!Number.isFinite(batchScore)) {
+		throw new Error(
+			`Explicit segmented thetvdb mapping ${mapping.providerId} no longer passes local episode count/year validation`,
+		);
+	}
+
+	return {
+		provider: "thetvdb",
+		animeProviderId: mapping.providerId,
+		animeProviderSlug: mapping.providerSlug,
+		animeProviderUrl: mapping.providerUrl,
+		seasonNumber: parsed.seasonNumber,
+		mappingMode: "segmented",
+		episodes: segmentedEpisodes,
+	};
+}
+
 async function resolveStoredMatch(
 	context: EnrichmentContext,
 ): Promise<TitleSourceMatch | null> {
+	const segmented = await resolveSegmentedStoredMatch(context);
+	if (segmented) return segmented;
+
 	const mapping = await loadExistingAnimeSourceMapping(context.animeId, "thetvdb");
 	if (!mapping) return null;
 
