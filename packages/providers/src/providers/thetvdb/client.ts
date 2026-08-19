@@ -1,6 +1,10 @@
 import { formatHttpError } from "../../lib/http";
 
 const TVDB_API_BASE = "https://api4.thetvdb.com/v4";
+const TVDB_REQUEST_TIMEOUT_MS = 15_000;
+const TVDB_MAX_ATTEMPTS = 3;
+const TVDB_RETRY_BASE_DELAY_MS = 300;
+const TVDB_RETRIABLE_STATUS_CODES = new Set([429, 502, 503, 504]);
 
 interface TvdbEnvelope<T> {
 	data: T;
@@ -56,6 +60,70 @@ function getCredentials(): { apiKey: string; pin?: string } | null {
 	return pin ? { apiKey, pin } : { apiKey };
 }
 
+function sleep(ms: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function retryDelayMs(response: Response | null, attempt: number): number {
+	const retryAfter = response?.headers.get("retry-after")?.trim();
+	if (retryAfter) {
+		const seconds = Number(retryAfter);
+		if (Number.isFinite(seconds) && seconds >= 0) {
+			return Math.min(seconds * 1000, 10_000);
+		}
+		const dateMs = Date.parse(retryAfter);
+		if (Number.isFinite(dateMs)) {
+			return Math.min(Math.max(0, dateMs - Date.now()), 10_000);
+		}
+	}
+	return TVDB_RETRY_BASE_DELAY_MS * 2 ** (attempt - 1);
+}
+
+function isRetriableNetworkError(error: unknown): boolean {
+	if (error instanceof DOMException) {
+		if (error.name === "AbortError" || error.name === "TimeoutError") return true;
+	}
+	const message = error instanceof Error ? error.message : String(error);
+	return /timed?\s*out|timeout|fetch failed|network|socket|connection|econnreset|etimedout/i.test(
+		message,
+	);
+}
+
+async function tvdbFetch(input: string | URL, init: RequestInit): Promise<Response> {
+	let lastError: unknown = null;
+
+	for (let attempt = 1; attempt <= TVDB_MAX_ATTEMPTS; attempt += 1) {
+		let response: Response | null = null;
+		try {
+			response = await fetch(input, {
+				...init,
+				signal: AbortSignal.timeout(TVDB_REQUEST_TIMEOUT_MS),
+			});
+		} catch (error) {
+			lastError = error;
+			if (attempt >= TVDB_MAX_ATTEMPTS || !isRetriableNetworkError(error)) {
+				throw error;
+			}
+			await sleep(retryDelayMs(null, attempt));
+			continue;
+		}
+
+		if (
+			TVDB_RETRIABLE_STATUS_CODES.has(response.status) &&
+			attempt < TVDB_MAX_ATTEMPTS
+		) {
+			await sleep(retryDelayMs(response, attempt));
+			continue;
+		}
+
+		return response;
+	}
+
+	throw lastError instanceof Error
+		? lastError
+		: new Error("TVDB request failed after retries");
+}
+
 async function getToken(): Promise<string | null> {
 	if (tokenCache && tokenCache.expiresAt > Date.now()) {
 		return tokenCache.token;
@@ -64,7 +132,7 @@ async function getToken(): Promise<string | null> {
 	const credentials = getCredentials();
 	if (!credentials) return null;
 
-	const res = await fetch(`${TVDB_API_BASE}/login`, {
+	const res = await tvdbFetch(`${TVDB_API_BASE}/login`, {
 		method: "POST",
 		headers: {
 			"Content-Type": "application/json",
@@ -75,7 +143,6 @@ async function getToken(): Promise<string | null> {
 				? { apikey: credentials.apiKey, pin: credentials.pin }
 				: { apikey: credentials.apiKey },
 		),
-		signal: AbortSignal.timeout(15_000),
 	});
 
 	if (!res.ok) {
@@ -109,12 +176,11 @@ async function tvdbGetEnvelope<T>(
 		}
 	}
 
-	const res = await fetch(url, {
+	const res = await tvdbFetch(url, {
 		headers: {
 			Accept: "application/json",
 			Authorization: `Bearer ${token}`,
 		},
-		signal: AbortSignal.timeout(15_000),
 	});
 
 	if (!res.ok) {
