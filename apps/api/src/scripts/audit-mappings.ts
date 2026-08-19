@@ -172,14 +172,20 @@ async function auditMappings(): Promise<MappingAuditReport> {
             on pe.id = apm.provider_entity_id
           join anime_provider_segments aps
             on aps.anime_provider_mapping_id = apm.id
+          cross join lateral (
+            select case
+              when em.provider_episode_number ~ '^[1-9][0-9]*$'
+                then em.provider_episode_number::int
+              else null
+            end as provider_episode_number
+          ) parsed
           where apm.anime_id = e.anime_id
             and pe.provider = em.provider
-            and em.provider_episode_number ~ '^[1-9][0-9]*$'
-            and (em.provider_episode_number)::int between
+            and parsed.provider_episode_number between
               aps.provider_episode_start and aps.provider_episode_end
             and e.number between aps.local_episode_start and aps.local_episode_end
             and e.number = aps.local_episode_start
-              + ((em.provider_episode_number)::int - aps.provider_episode_start)
+              + (parsed.provider_episode_number - aps.provider_episode_start)
         )
     `,
     sampleQuery: sql`
@@ -201,14 +207,20 @@ async function auditMappings(): Promise<MappingAuditReport> {
             on pe.id = apm.provider_entity_id
           join anime_provider_segments aps
             on aps.anime_provider_mapping_id = apm.id
+          cross join lateral (
+            select case
+              when em.provider_episode_number ~ '^[1-9][0-9]*$'
+                then em.provider_episode_number::int
+              else null
+            end as provider_episode_number
+          ) parsed
           where apm.anime_id = e.anime_id
             and pe.provider = em.provider
-            and em.provider_episode_number ~ '^[1-9][0-9]*$'
-            and (em.provider_episode_number)::int between
+            and parsed.provider_episode_number between
               aps.provider_episode_start and aps.provider_episode_end
             and e.number between aps.local_episode_start and aps.local_episode_end
             and e.number = aps.local_episode_start
-              + ((em.provider_episode_number)::int - aps.provider_episode_start)
+              + (parsed.provider_episode_number - aps.provider_episode_start)
         )
       order by em.id
       limit 20
