@@ -61,6 +61,9 @@
     "db:plan-provider-season-ownership-repairs": {
       "cache": false
     },
+    "db:repair-air-recap-repair": {
+      "cache": false
+    },
     "db:repair-jojo-segment-migration": {
       "cache": false
     },
