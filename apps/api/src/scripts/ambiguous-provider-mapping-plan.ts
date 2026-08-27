@@ -22,6 +22,7 @@ export type AmbiguousMappingPlanBlockReason =
   | "manual-legacy-mapping-would-be-retired"
   | "keep-v2-association-missing"
   | "keep-v2-association-ambiguous"
+  | "provider-entity-missing"
   | "retire-v2-association-ambiguous"
   | "manual-v2-association-would-be-retired"
   | "explicit-segments-on-keep-association"
@@ -86,15 +87,15 @@ export interface AmbiguousMappingCandidateState {
 export interface AmbiguousMappingGroupState {
   animeId: number;
   candidates: AmbiguousMappingCandidateState[];
-  sameProviderV2Associations: AmbiguousMappingV2AssociationRow[];
+  candidateEntityV2Associations: AmbiguousMappingV2AssociationRow[];
 }
 
 export interface AmbiguousMappingProposedRowUpdate {
   id: number;
   old: { source: string; confidence: number; isPrimary: boolean };
   proposed: {
-    source: typeof PROPOSED_UPGRADE_SOURCE;
-    confidence: typeof PROPOSED_UPGRADE_CONFIDENCE;
+    source: string;
+    confidence: number;
     isPrimary: typeof PROPOSED_UPGRADE_IS_PRIMARY;
   };
 }
@@ -136,6 +137,11 @@ export interface AmbiguousMappingPlanResult {
   keep: AmbiguousMappingCandidateDiagnosis;
   retirees: AmbiguousMappingCandidateDiagnosis[];
   episodeScope: AmbiguousMappingEpisodeScopeAnalysis;
+  providerEntityAssociations: Array<{
+    providerEntityId: number;
+    totalAssociationCount: number;
+    ownerAnimeIds: number[];
+  }>;
   proposedWrites: AmbiguousMappingProposedWrites | null;
 }
 
@@ -156,6 +162,10 @@ function isManualSource(source: string): boolean {
 
 function isAutomaticSource(source: string): boolean {
   return ["api", "fuzzy", "import", "system"].includes(source);
+}
+
+function upgradedSource(source: string): string {
+  return isAutomaticSource(source) ? PROPOSED_UPGRADE_SOURCE : source;
 }
 
 function slugMismatch(rowSlug: string | null, evidenceSlug: string | null): boolean {
@@ -219,8 +229,11 @@ export function planAmbiguousMappingRepair(
   const keepState = keep
     ? stateByProviderId.get(`${keep.provider}:${keep.providerId}`)
     : undefined;
-  const retireStates = retirees.map(
-    (candidate) => stateByProviderId.get(`${candidate.provider}:${candidate.providerId}`)!,
+  const retireStatesMaybe = retirees.map((candidate) =>
+    stateByProviderId.get(`${candidate.provider}:${candidate.providerId}`),
+  );
+  const retireStates = retireStatesMaybe.filter(
+    (candidate): candidate is AmbiguousMappingCandidateState => candidate !== undefined,
   );
 
   const keepEpisodeIds = new Set(
@@ -261,6 +274,20 @@ export function planAmbiguousMappingRepair(
     keepRetireOverlappingProviderEpisodeIds: overlappingEpisodeIds,
     seasonFetchStates,
   };
+  const providerEntityAssociations = [...new Set(
+    state.candidates.flatMap((candidate) => candidate.entities.map((entity) => entity.id)),
+  )].map((providerEntityId) => {
+    const associations = state.candidateEntityV2Associations.filter(
+      (association) => association.providerEntityId === providerEntityId,
+    );
+    return {
+      providerEntityId,
+      totalAssociationCount: associations.length,
+      ownerAnimeIds: [...new Set(associations.map((association) => association.animeId))].sort(
+        (a, b) => a - b,
+      ),
+    };
+  });
 
   const block = (
     blockReason: AmbiguousMappingPlanBlockReason,
@@ -271,13 +298,14 @@ export function planAmbiguousMappingRepair(
     keep: keep ?? group.candidates[0]!,
     retirees,
     episodeScope,
+    providerEntityAssociations,
     proposedWrites: null,
   });
 
   if (!group.repairSafe || !keep || !keepState || retirees.length === 0) {
     return block("group-not-repair-safe");
   }
-  if (retireStates.some((candidate) => !candidate)) {
+  if (retireStates.length !== retirees.length) {
     return block("group-not-repair-safe");
   }
 
@@ -291,6 +319,21 @@ export function planAmbiguousMappingRepair(
     keepState.authoritativeState !== "ok" ||
     retireStates.some((candidate) => candidate.authoritativeState !== "ok")
   ) {
+    return block("authoritative-episode-fetch-incomplete");
+  }
+  const statesAndDiagnoses: Array<[
+    AmbiguousMappingCandidateState,
+    AmbiguousMappingCandidateDiagnosis,
+  ]> = [[keepState, keep], ...retireStates.map((candidateState, index) => [
+    candidateState,
+    retirees[index]!,
+  ] as [AmbiguousMappingCandidateState, AmbiguousMappingCandidateDiagnosis])];
+  if (statesAndDiagnoses.some(([candidateState, diagnosis]) => {
+    const expected = evidenceFor(diagnosis)?.providerSeasonEpisodeCount;
+    return expected !== null
+      && expected !== undefined
+      && expected !== candidateState.authoritativeEpisodes.length;
+  })) {
     return block("authoritative-episode-fetch-incomplete");
   }
 
@@ -323,6 +366,9 @@ export function planAmbiguousMappingRepair(
   if (keepV2Associations.length === 0) {
     return block("keep-v2-association-missing");
   }
+  if (keepState.entities.length === 0) {
+    return block("provider-entity-missing");
+  }
   if (keepV2Associations.length > 1 || keepState.entities.length > 1) {
     return block("keep-v2-association-ambiguous");
   }
@@ -335,6 +381,9 @@ export function planAmbiguousMappingRepair(
   }
 
   for (const retireState of retireStates) {
+    if (retireState.entities.length === 0) {
+      return block("provider-entity-missing");
+    }
     if (retireState.v2Associations.length > 1 || retireState.entities.length > 1) {
       return block("retire-v2-association-ambiguous");
     }
@@ -353,8 +402,9 @@ export function planAmbiguousMappingRepair(
       candidate.entities.map((entity) => entity.id),
     ),
   );
-  const unhandledAssociations = state.sameProviderV2Associations.filter(
-    (association) => !candidateEntityIds.has(association.providerEntityId),
+  const unhandledAssociations = state.candidateEntityV2Associations.filter(
+    (association) =>
+      !candidateEntityIds.has(association.providerEntityId) || association.animeId !== state.animeId,
   );
   if (unhandledAssociations.length > 0) {
     return block("unhandled-same-provider-v2-associations");
@@ -378,8 +428,8 @@ export function planAmbiguousMappingRepair(
         isPrimary: keepLegacyRow.isPrimary,
       },
       proposed: {
-        source: PROPOSED_UPGRADE_SOURCE,
-        confidence: PROPOSED_UPGRADE_CONFIDENCE,
+        source: upgradedSource(keepLegacyRow.source),
+        confidence: Math.max(keepLegacyRow.confidence, PROPOSED_UPGRADE_CONFIDENCE),
         isPrimary: PROPOSED_UPGRADE_IS_PRIMARY,
       },
     },
@@ -393,8 +443,8 @@ export function planAmbiguousMappingRepair(
         isPrimary: association.isPrimary,
       },
       proposed: {
-        source: PROPOSED_UPGRADE_SOURCE,
-        confidence: PROPOSED_UPGRADE_CONFIDENCE,
+        source: upgradedSource(association.source),
+        confidence: Math.max(association.confidence, PROPOSED_UPGRADE_CONFIDENCE),
         isPrimary: PROPOSED_UPGRADE_IS_PRIMARY,
       },
     }),
@@ -410,6 +460,7 @@ export function planAmbiguousMappingRepair(
     keep,
     retirees,
     episodeScope,
+    providerEntityAssociations,
     proposedWrites: {
       legacyMappingsToRetire,
       v2AssociationsToRetire,
