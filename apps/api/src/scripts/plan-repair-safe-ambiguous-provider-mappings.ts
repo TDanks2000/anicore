@@ -108,8 +108,8 @@ async function loadProviderEntities(
   `);
 }
 
-async function loadV2AssociationsByEntityIds(providerEntityIds: number[]): Promise<V2AssociationQueryRow[]> {
-  if (providerEntityIds.length === 0) return [];
+async function loadV2Associations(animeIds: number[]): Promise<V2AssociationQueryRow[]> {
+  if (animeIds.length === 0) return [];
   return queryRows<V2AssociationQueryRow>(sql`
     select
       apm.id,
@@ -127,7 +127,7 @@ async function loadV2AssociationsByEntityIds(providerEntityIds: number[]): Promi
       ) as "segmentCount"
     from public.anime_provider_mappings apm
     join public.provider_entities pe on pe.id = apm.provider_entity_id
-    where apm.provider_entity_id in ${sqlIn(providerEntityIds)}
+    where apm.anime_id in ${sqlIn(animeIds)}
       and pe.provider in ('thetvdb', 'tmdb')
     order by pe.provider, pe.provider_id, apm.id
   `);
@@ -167,14 +167,14 @@ async function run(): Promise<Record<string, unknown>> {
   const repairSafeGroups = groups.filter((group) => group.repairSafe);
   const animeIds = repairSafeGroups.map((group) => group.animeId);
 
-  const [animeIdentityRows, legacyRows, entityRows] = await Promise.all([
+  const [animeIdentityRows, legacyRows, entityRows, v2Rows] = await Promise.all([
     loadAnimeIdentityRows(animeIds),
     loadLegacyRows(animeIds),
     loadProviderEntities(
       repairSafeGroups.flatMap((group) => group.candidates.map((candidate) => candidate.providerId)),
     ),
+    loadV2Associations(animeIds),
   ]);
-  const v2Rows = await loadV2AssociationsByEntityIds(entityRows.map((entity) => entity.id));
 
   const identityByAnimeId = new Map(animeIdentityRows.map((row) => [row.animeId, row]));
   const legacyByKey = new Map<string, AmbiguousMappingLegacyRow[]>();
@@ -191,11 +191,12 @@ async function run(): Promise<Record<string, unknown>> {
     list.push(row);
     entitiesByKey.set(key, list);
   }
-  const v2ByEntityId = new Map<number, V2AssociationQueryRow[]>();
+  const v2ByAnimeProvider = new Map<string, V2AssociationQueryRow[]>();
   for (const row of v2Rows) {
-    const list = v2ByEntityId.get(row.providerEntityId) ?? [];
+    const key = `${row.animeId}:${row.provider}`;
+    const list = v2ByAnimeProvider.get(key) ?? [];
     list.push(row);
-    v2ByEntityId.set(row.providerEntityId, list);
+    v2ByAnimeProvider.set(key, list);
   }
 
   const candidateStates = await mapWithConcurrency(
@@ -222,9 +223,12 @@ async function run(): Promise<Record<string, unknown>> {
           providerId: candidate.providerId,
           legacyRows: legacyByKey.get(`${candidate.provider}:${candidate.providerId}:${candidate.animeId}`) ?? [],
           entities: entitiesByKey.get(`${candidate.provider}:${candidate.providerId}`) ?? [],
-          v2Associations: (entitiesByKey.get(`${candidate.provider}:${candidate.providerId}`) ?? [])
-              .flatMap((entity) => v2ByEntityId.get(entity.id) ?? [])
-              .filter((row) => row.animeId === candidate.animeId)
+          v2Associations:
+            v2ByAnimeProvider
+              .get(`${candidate.animeId}:${candidate.provider}`)
+              ?.filter(
+                (row) => row.providerId === candidate.providerId,
+              )
               .map<AmbiguousMappingV2AssociationRow>((row) => ({
                 id: row.id,
                 animeId: row.animeId,
@@ -233,7 +237,7 @@ async function run(): Promise<Record<string, unknown>> {
                 confidence: row.confidence,
                 isPrimary: row.isPrimary,
                 segmentCount: row.segmentCount,
-              })),
+              })) ?? [],
           authoritativeState: authoritative.state,
           authoritativeEpisodes: authoritative.episodes,
           mappedProviderEpisodes,
@@ -245,17 +249,13 @@ async function run(): Promise<Record<string, unknown>> {
 
   const plans: AmbiguousMappingPlanResult[] = [];
   for (const group of repairSafeGroups) {
+    const provider = group.candidates[0]!.provider;
     const state: AmbiguousMappingGroupState = {
       animeId: group.animeId,
-      candidates: group.candidates.flatMap((candidate) => {
-        const candidateState = stateByKey.get(
-          `${group.animeId}:${candidate.provider}:${candidate.providerId}`,
-        );
-        return candidateState ? [candidateState] : [];
-      }),
-      candidateEntityV2Associations: group.candidates
-        .flatMap((candidate) => entitiesByKey.get(`${candidate.provider}:${candidate.providerId}`) ?? [])
-        .flatMap((entity) => v2ByEntityId.get(entity.id) ?? [])
+      candidates: group.candidates.map(
+        (candidate) => stateByKey.get(`${group.animeId}:${candidate.provider}:${candidate.providerId}`)!,
+      ),
+      sameProviderV2Associations: (v2ByAnimeProvider.get(`${group.animeId}:${provider}`) ?? [])
         .map<AmbiguousMappingV2AssociationRow>((row) => ({
           id: row.id,
           animeId: row.animeId,

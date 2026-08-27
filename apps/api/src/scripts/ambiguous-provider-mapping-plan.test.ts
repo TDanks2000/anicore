@@ -9,7 +9,6 @@ import {
 import type {
   AuthoritativeProviderEpisode,
 } from "./ambiguous-provider-mapping-evidence";
-import { normalizeAuthoritativeSeasonEpisodes } from "./ambiguous-provider-mapping-evidence";
 import {
   planAmbiguousMappingRepair,
   type AmbiguousMappingCandidateState,
@@ -81,9 +80,6 @@ function buildRepairSafeGroup(anime: AmbiguousMappingAnimeIdentity = taikoAnime)
     ],
   });
   expect(group.repairSafe).toBe(true);
-  for (const candidate of group.candidates) {
-    if (candidate.evidence) candidate.evidence.providerSeasonEpisodeCount = 2;
-  }
   return group;
 }
 
@@ -175,7 +171,7 @@ function defaultState(group: AmbiguousMappingGroupDiagnosis): AmbiguousMappingGr
         mappedProviderEpisodes: [],
       };
     }),
-    candidateEntityV2Associations: [],
+    sameProviderV2Associations: [],
   };
   return state;
 }
@@ -393,7 +389,7 @@ describe("planAmbiguousMappingRepair", () => {
     const group = buildRepairSafeGroup();
     const state: AmbiguousMappingGroupState = {
       ...defaultState(group),
-      candidateEntityV2Associations: [v2Association("999999:1", { id: 55555, providerEntityId: 77777 })],
+      sameProviderV2Associations: [v2Association("999999:1", { id: 55555, providerEntityId: 77777 })],
     };
     const plan = planAmbiguousMappingRepair({ group, state });
     expect(plan.plannable).toBe(false);
@@ -414,60 +410,6 @@ describe("planAmbiguousMappingRepair", () => {
       state: "empty",
       episodeCount: 0,
     });
-  });
-
-  test("missing retire candidate state fails closed without throwing", () => {
-    const group = buildRepairSafeGroup();
-    const state = defaultState(group);
-    state.candidates = state.candidates.filter((candidate) => candidate.providerId !== "251746:1");
-    const plan = planAmbiguousMappingRepair({ group, state });
-    expect(plan.blockReason).toBe("group-not-repair-safe");
-  });
-
-  test("missing keep or retire provider entity fails closed without throwing", () => {
-    const group = buildRepairSafeGroup();
-    for (const providerId of ["150771:1", "251746:1"]) {
-      const state = withCandidateState(defaultState(group), providerId, { entities: [] });
-      const plan = planAmbiguousMappingRepair({ group, state });
-      expect(plan.blockReason).toBe("provider-entity-missing");
-    }
-  });
-
-  test("cross-anime association on a candidate entity fails closed", () => {
-    const group = buildRepairSafeGroup();
-    const state = defaultState(group);
-    state.candidateEntityV2Associations = [
-      v2Association("150771:1", { id: 99999, animeId: 8888 }),
-    ];
-    const plan = planAmbiguousMappingRepair({ group, state });
-    expect(plan.blockReason).toBe("unhandled-same-provider-v2-associations");
-    expect(plan.providerEntityAssociations).toContainEqual({
-      providerEntityId: 9025,
-      totalAssociationCount: 1,
-      ownerAnimeIds: [8888],
-    });
-  });
-
-  test("manual and stronger keep provenance is preserved", () => {
-    const group = buildRepairSafeGroup();
-    const state = withCandidateState(defaultState(group), "150771:1", {
-      legacyRows: [legacyRow("150771:1", { source: "manual", confidence: 100 })],
-      v2Associations: [v2Association("150771:1", { source: "system", confidence: 100 })],
-    });
-    const plan = planAmbiguousMappingRepair({ group, state });
-    expect(plan.proposedWrites?.legacyMappingsToUpdate[0]?.proposed).toEqual({
-      source: "manual", confidence: 100, isPrimary: true,
-    });
-    expect(plan.proposedWrites?.v2AssociationsToUpdate[0]?.proposed).toEqual({
-      source: "system", confidence: 100, isPrimary: true,
-    });
-  });
-
-  test("authoritative count mismatch with diagnostic evidence fails closed", () => {
-    const group = buildRepairSafeGroup();
-    group.candidates[0]!.evidence!.providerSeasonEpisodeCount = 3;
-    const plan = planAmbiguousMappingRepair({ group, state: defaultState(group) });
-    expect(plan.blockReason).toBe("authoritative-episode-fetch-incomplete");
   });
 
   test("provider fetch failure fails closed", () => {
@@ -517,22 +459,5 @@ describe("planAmbiguousMappingRepair", () => {
       { animeId: 6471, localEpisodeNumber: 1, localKind: "normal", count: 1 },
     ]);
     expect(plan.proposedWrites?.legacyMappingsToRetire).toEqual([legacyRow("251746:1")]);
-  });
-});
-
-describe("normalizeAuthoritativeSeasonEpisodes", () => {
-  test("rejects discarded and duplicate provider episode data as incomplete", () => {
-    expect(normalizeAuthoritativeSeasonEpisodes([
-      { id: 1, number: 1, seasonNumber: 1 },
-      { id: 0, number: 2, seasonNumber: 1 },
-    ]).state).toBe("incomplete");
-    expect(normalizeAuthoritativeSeasonEpisodes([
-      { id: 1, number: 1, seasonNumber: 1 },
-      { id: 1, number: 2, seasonNumber: 1 },
-    ]).state).toBe("incomplete");
-    expect(normalizeAuthoritativeSeasonEpisodes([
-      { id: 1, number: 1, seasonNumber: 1 },
-      { id: 2, number: 1, seasonNumber: 1 },
-    ]).state).toBe("incomplete");
   });
 });

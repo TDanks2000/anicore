@@ -35,7 +35,6 @@ export interface AuthoritativeProviderEpisode {
 
 export type AuthoritativeSeasonFetchState =
   | "ok"
-  | "incomplete"
   | "malformed"
   | "not-found"
   | "fetch-failed"
@@ -44,36 +43,6 @@ export type AuthoritativeSeasonFetchState =
 export interface AuthoritativeSeasonResult {
   state: AuthoritativeSeasonFetchState;
   episodes: AuthoritativeProviderEpisode[];
-}
-
-interface RawAuthoritativeEpisode {
-  id: number;
-  number: number | null;
-  seasonNumber: number | null;
-}
-
-export function normalizeAuthoritativeSeasonEpisodes(
-  rawEpisodes: RawAuthoritativeEpisode[],
-): AuthoritativeSeasonResult {
-  if (rawEpisodes.length === 0) return { state: "empty", episodes: [] };
-  if (rawEpisodes.some((episode) => episode.id <= 0 || episode.number === null || episode.number <= 0)) {
-    return { state: "incomplete", episodes: [] };
-  }
-  const ids = rawEpisodes.map((episode) => String(episode.id));
-  const numbers = rawEpisodes.map((episode) => episode.number!);
-  if (new Set(ids).size !== ids.length || new Set(numbers).size !== numbers.length) {
-    return { state: "incomplete", episodes: [] };
-  }
-  return {
-    state: "ok",
-    episodes: rawEpisodes
-      .map((episode) => ({
-        providerEpisodeId: String(episode.id),
-        providerEpisodeNumber: episode.number!,
-        seasonNumber: episode.seasonNumber,
-      }))
-      .sort((a, b) => a.providerEpisodeNumber - b.providerEpisodeNumber),
-  };
 }
 
 export interface AmbiguousMappingEvidenceSourceOptions {
@@ -433,16 +402,33 @@ export class AmbiguousMappingEvidenceSource {
       if (!episodesLookup.episodes) {
         return { state: episodesLookup.state, episodes: [] };
       }
-      return normalizeAuthoritativeSeasonEpisodes(
-        episodesLookup.episodes.filter((episode) => episode.seasonNumber === parsed.seasonNumber),
-      );
+      const episodes = episodesLookup.episodes
+        .filter((episode) => episode.seasonNumber === parsed.seasonNumber)
+        .filter((episode) => episode.id > 0 && episode.number !== null && episode.number > 0)
+        .map<AuthoritativeProviderEpisode>((episode) => ({
+          providerEpisodeId: String(episode.id),
+          providerEpisodeNumber: episode.number!,
+          seasonNumber: episode.seasonNumber,
+        }))
+        .sort((a, b) => a.providerEpisodeNumber - b.providerEpisodeNumber);
+      if (episodes.length === 0) return { state: "empty", episodes: [] };
+      return { state: "ok", episodes };
     }
 
     const seasonLookup = await this.tmdbSeasonState(parsed.showId, parsed.seasonNumber);
     if (!seasonLookup.season) {
       return { state: seasonLookup.state, episodes: [] };
     }
-    return normalizeAuthoritativeSeasonEpisodes(seasonLookup.season.episodes);
+    const episodes = seasonLookup.season.episodes
+      .filter((episode) => episode.id > 0 && episode.number !== null && episode.number > 0)
+      .map<AuthoritativeProviderEpisode>((episode) => ({
+        providerEpisodeId: String(episode.id),
+        providerEpisodeNumber: episode.number!,
+        seasonNumber: episode.seasonNumber,
+      }))
+      .sort((a, b) => a.providerEpisodeNumber - b.providerEpisodeNumber);
+    if (episodes.length === 0) return { state: "empty", episodes: [] };
+    return { state: "ok", episodes };
   }
 
   /**
