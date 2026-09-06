@@ -1,4 +1,4 @@
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
 	boolean,
 	index,
@@ -138,6 +138,15 @@ export const animeMappings = pgTable(
 			table.animeId,
 			table.provider,
 		),
+
+		// At most one primary mapping per (anime, provider). Consumers that read a
+		// single mapping rely on this to be deterministic; without it the
+		// invariant was only checked in request validation, so anything writing
+		// outside that path could silently create an ambiguous pair. Partial, so
+		// having no primary at all remains allowed.
+		animeProviderPrimaryIdx: uniqueIndex("anime_mappings_anime_provider_primary_idx")
+			.on(table.animeId, table.provider)
+			.where(sql`${table.isPrimary}`),
 
 		providerSlugIdx: index("anime_mappings_provider_slug_idx").on(
 			table.provider,
