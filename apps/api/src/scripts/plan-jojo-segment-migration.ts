@@ -1,6 +1,7 @@
-import { sql, type SQL } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 
-import { closeDb, db } from "@anicore/db";
+import { closeDb } from "@anicore/db";
+import { queryRows } from "../lib/query-rows";
 import { getTvdbSeasonEpisodes } from "@anicore/providers/thetvdb/client";
 
 const PROVIDER = "thetvdb" as const;
@@ -100,11 +101,6 @@ interface AuthoritativeEpisode {
   providerEpisodeId: string;
   providerEpisodeNumber: number;
   airDate: string | null;
-}
-
-async function queryRows<T>(query: SQL): Promise<T[]> {
-  const result = await db.execute(query);
-  return [...result] as unknown as T[];
 }
 
 function fail(message: string): never {

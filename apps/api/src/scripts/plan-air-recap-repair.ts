@@ -1,6 +1,7 @@
-import { sql, type SQL } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 
-import { closeDb, db } from "@anicore/db";
+import { closeDb } from "@anicore/db";
+import { queryRows } from "../lib/query-rows";
 import { getTvdbSeasonEpisodes } from "@anicore/providers/thetvdb/client";
 
 const PROVIDER = "thetvdb" as const;
@@ -19,11 +20,6 @@ interface V2AssociationRow { id: number; animeId: number; source: MappingSource;
 interface LocalEpisodeRow { id: number; animeId: number; number: number; kind: string }
 interface EpisodeMappingRow { id: number; animeId: number; episodeId: number; localEpisodeNumber: number; localKind: string; providerId: string; providerEpisodeNumber: string | null; source: MappingSource; confidence: number }
 interface AuthoritativeEpisode { providerEpisodeId: string; providerEpisodeNumber: number; title: string | null; overview: string | null; airDate: string | null; seasonNumber: number | null }
-
-async function queryRows<T>(query: SQL): Promise<T[]> {
-  const result = await db.execute(query);
-  return [...result] as unknown as T[];
-}
 
 function fail(message: string): never { throw new Error(message) }
 

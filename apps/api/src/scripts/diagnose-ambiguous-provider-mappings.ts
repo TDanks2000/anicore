@@ -1,6 +1,7 @@
-import { sql, type SQL } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 
-import { closeDb, db } from "@anicore/db";
+import { closeDb } from "@anicore/db";
+import { queryRows } from "../lib/query-rows";
 import { getTvdbOfficialEpisodes, getTvdbSeriesExtended } from "@anicore/providers/thetvdb/client";
 import { TMDB } from "@api-wrappers/tmdb-wrapper";
 
@@ -36,11 +37,6 @@ interface AnimeIdentityRow extends Record<string, unknown> {
   startDate: string | null;
   format: string | null;
   seasonYear: number | null;
-}
-
-async function queryRows<T extends Record<string, unknown>>(query: SQL): Promise<T[]> {
-  const result = await db.execute(query);
-  return [...result] as T[];
 }
 
 async function loadAmbiguousMappingRows(): Promise<AmbiguousMappingRow[]> {

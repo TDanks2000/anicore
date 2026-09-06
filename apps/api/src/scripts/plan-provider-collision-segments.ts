@@ -1,6 +1,6 @@
-import { sql, type SQL } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 
-import { closeDb, db } from "@anicore/db";
+import { closeDb } from "@anicore/db";
 import {
   getTvdbSeasonEpisodes,
   getTvdbSeriesBySlug,
@@ -8,6 +8,7 @@ import {
   type TvdbSeriesBaseRecord,
 } from "@anicore/providers/thetvdb/client";
 
+import { queryRows } from "../lib/query-rows";
 import {
   buildTvdbSlugResolutionGroups,
   verifyResolvedTvdbSlugGroup,
@@ -92,13 +93,6 @@ interface PlanReport {
     rejectedSamples: RejectedSample[];
     ownerSegmentValidationRequired: true;
   };
-}
-
-async function queryRows<T extends Record<string, unknown>>(
-  query: SQL,
-): Promise<T[]> {
-  const result = await db.execute(query);
-  return [...result] as T[];
 }
 
 function key(provider: string, providerId: string): string {
@@ -299,7 +293,7 @@ async function resolveTvdbGroups(
   const representedAnime = new Set(groupPlan.groups.map((group) => group.animeId));
   const rejected: RejectedSample[] = outcomes
     .map((outcome) => outcome.rejected)
-    .filter((sample): sample is RejectedSample => Boolean(sample));
+    .filter((sample) => sample !== null);
 
   for (const [animeId, groupRows] of rowsByAnime) {
     if (!representedAnime.has(animeId)) {
@@ -316,7 +310,7 @@ async function resolveTvdbGroups(
   return {
     groups: outcomes
       .map((outcome) => outcome.group)
-      .filter((group): group is ResolvedCollisionGroup => Boolean(group)),
+      .filter((group) => group !== null),
     rejected,
   };
 }
