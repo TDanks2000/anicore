@@ -12,7 +12,7 @@ import type { ProviderAnimeData } from "../types";
 import { log } from "../../lib/logger";
 import {
   findKitsuMatch,
-  isAuthoritativeAnilistMatch,
+  isAuthoritativeMatch,
   type MatchHints,
 } from "./matching";
 
@@ -236,7 +236,9 @@ export async function syncKitsuFromAnilist(
   const kitsuNode = await findKitsuMatch(hints);
   if (!kitsuNode) return { matched: false };
 
-  const isAuthoritative = isAuthoritativeAnilistMatch(kitsuNode, anilistId);
+  // Either published cross-reference proves identity, so a MAL-only reference
+  // earns full `api` provenance rather than being recorded as a fuzzy guess.
+  const isAuthoritative = isAuthoritativeMatch(kitsuNode, { ...hints, anilistId });
   const provenance = kitsuMappingProvenance(isAuthoritative);
 
   const allMappedEpisodes = await fetchKitsuEpisodeData(kitsuNode.id);

@@ -6,9 +6,9 @@ import {
   tryAcquireSyncLease,
   type SyncLease,
 } from "@anicore/db";
+import { type DbTransaction, queryRows, transactionRows } from "../lib/query-rows";
 
 type Mode = "dry-run" | "apply";
-type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 interface CountRow {
   count: number;
@@ -47,21 +47,6 @@ function parseMode(args: string[]): Mode {
     throw new Error(`Unknown argument: ${arg}`);
   }
   return mode;
-}
-
-async function queryRows<T extends Record<string, unknown>>(
-  query: SQL,
-): Promise<T[]> {
-  const result = await db.execute(query);
-  return [...result] as T[];
-}
-
-async function transactionRows<T extends Record<string, unknown>>(
-  tx: DbTransaction,
-  query: SQL,
-): Promise<T[]> {
-  const result = await tx.execute(query);
-  return [...result] as T[];
 }
 
 async function count(query: SQL): Promise<number> {

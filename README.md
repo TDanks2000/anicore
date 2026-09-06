@@ -77,6 +77,43 @@ bun run sync --parallel=1
 
 Parallel mode batches external fetches, waits out the equivalent AniList request budget after each batch, and temporarily falls back to sequential fetches when rate-limit or fetch errors become frequent.
 
+### Mapping quality
+
+Provider matching prefers published cross-references over fuzzy matching, and leaves near-tied candidates unmatched. Kitsu exposes both AniList and MyAnimeList cross-references on the payload the search already returns, and either one proves identity, so a record Kitsu links only to MyAnimeList is still recorded with `api` provenance rather than as a guess. AnimeSchedule entries carry Kitsu and MyAnimeList links too; those are only trusted after the entry's own AniList link has been confirmed to resolve to the same anime.
+
+Fuzzy matching is the last resort. It weighs title agreement against premiere date, season, episode count and catalogue type:
+
+- Title normalization folds Japanese long-vowel romanizations onto one form, so `Yuusha`, `Yūsha` and `Yusha` compare equal. It ignores Latin accents while preserving meaningful native-script distinctions such as Japanese voiced kana; halfwidth and fullwidth kana remain equivalent.
+- Sequel markers are canonicalized across styles, so `2nd Season`, `Season 2`, `Part 2` and `II` agree. Titles carrying different explicit ordinals are capped well below a match, and a bare trailing sequel number is enough to separate a sequel from its base.
+- An exact premiere date is the strongest fuzzy signal and is what separates entries in the same franchise that agree on title, year and episode count. Records more than roughly a year apart conflict outright.
+- Episode counts that disagree are treated as a counting convention rather than a different work when the premiere dates match exactly, since catalogues split segments and recaps differently.
+- A title that several candidates share — a franchise banner, or an anthology programme name such as `Minna no Uta` repeated on every entry beneath it — is not treated as identity evidence. A record's own primary title always is, even when its specials list it as an alternative.
+- Explicit movie-versus-TV format conflicts are rejected. Missing formats and differences involving OVA, ONA or specials do not trigger that check, since those categories may differ between catalogs.
+
+Measure matching accuracy instead of assuming it. Kitsu's authoritative AniList cross-references form a labelled corpus; the evaluator replays the fuzzy path against it with the cross-reference hidden, so the matcher has to decide from titles and metadata alone:
+
+```sh
+bun apps/api/src/scripts/evaluate-kitsu-matching-corpus.ts --sample=250 --seed=7
+bun apps/api/src/scripts/evaluate-kitsu-matching.ts --verbose
+bun apps/api/src/scripts/evaluate-kitsu-matching.ts --min-precision=0.99
+```
+
+The corpus builder samples the live database stratified by format and caches the Kitsu candidates it fetched; the evaluator is offline and repeatable. It reports precision, recall, abstentions, and cases where the correct record never appeared in the search results at all — a distinct failure worth separating from a scoring mistake. `--min-precision` exits non-zero so a run can gate CI. On a 250-case held-out sample the current matcher scores 100% precision at 98% recall: it prefers to abstain rather than record a wrong mapping.
+
+Audit persisted mappings without changing database rows:
+
+```sh
+bun run db:audit-mappings
+bun run db:audit-mappings --write
+bun run db:audit-mappings --write=reports/mappings.json
+```
+
+`--write` defaults to `mapping-audit.json` at the repository root. Relative output paths also resolve from the repository root. The report includes finding codes, severity, affected-row counts, samples, and a summary that counts finding categories by severity.
+
+An audit with error findings exits with status `1` and still saves its valid report. If the audit fails to produce a valid report, the saved file is preserved. Check `generatedAt` before treating a saved report as current. An audit requires a configured, reachable database; passing unit tests does not establish the quality of persisted mappings.
+
+Review each finding's sampled identities and provider evidence before choosing a repair command. Running an audit does not repair existing rows, and improving matching logic does not retroactively validate stored mappings.
+
 ### Remote sync monitor
 
 When the API starts, it also starts AniCore's automatic sync scheduler. By default, the scheduler runs once every 24 hours, starts immediately when no recent run exists, refreshes the AniList ID list, and performs a real sync from index `0`. It never starts another process while a manual or automatic sync is active. Change the enabled state or interval from the dashboard's Runtime Config card; the settings persist in `data/sync-monitor/runtime-config.json`.

@@ -20,6 +20,10 @@ apps/api/data/sync-monitor/
 apps/api/data/dry-run-*.json
 mapping-audit.json
 
+# Kitsu matching evaluation corpus/report artifacts
+data/eval/
+apps/api/data/eval/
+
 # Scratch diagnostic output accidentally committed historically
 repair-diagnostics.txt
 tvdb-repair-dry-run.txt

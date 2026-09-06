@@ -1,4 +1,4 @@
-import { sql, type SQL } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 
 import {
   closeDb,
@@ -6,6 +6,7 @@ import {
   tryAcquireSyncLease,
   type SyncLease,
 } from "@anicore/db";
+import { queryRows } from "../lib/query-rows";
 
 import {
   buildOrphanParentRepairDiagnostics,
@@ -79,13 +80,6 @@ interface RepairReport {
     kitsuLegacyEpisodeProvenance: KitsuProvenanceOperationReport;
     orphanEpisodeParentMappings: OrphanParentOperationReport;
   };
-}
-
-async function queryRows<T extends Record<string, unknown>>(
-  query: SQL,
-): Promise<T[]> {
-  const result = await db.execute(query);
-  return [...result] as T[];
 }
 
 async function countLegacyKitsuEpisodeProvenance(): Promise<number> {

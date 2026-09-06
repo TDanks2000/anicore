@@ -6,6 +6,7 @@ import {
   tryAcquireSyncLease,
   type SyncLease,
 } from "@anicore/db";
+import { type DbTransaction } from "../lib/query-rows";
 
 import { parseRepairMappingsArgs } from "./repair-mappings-cli";
 
@@ -30,7 +31,6 @@ const EXPECTED_PROVIDER_EPISODE_IDS = [
   "365054",
 ] as const;
 
-type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type ExecuteSql = (query: SQL) => Promise<unknown>;
 
 interface LegacyMappingPlanRow {

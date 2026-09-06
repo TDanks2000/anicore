@@ -6,6 +6,7 @@ import {
   tryAcquireSyncLease,
   type SyncLease,
 } from "@anicore/db";
+import { type DbTransaction } from "../lib/query-rows";
 
 import { parseRepairMappingsArgs } from "./repair-mappings-cli";
 
@@ -17,7 +18,6 @@ const CURRENT_OWNER_ANIME_ID = 6401;
 const PREFIX_END = 24;
 const SEASON_END = 48;
 
-type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type ExecuteSql = (query: SQL) => Promise<unknown>;
 
 interface LegacyMappingPlanRow {

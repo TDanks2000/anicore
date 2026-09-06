@@ -1,8 +1,10 @@
+import { assertDatabaseConfigured } from "@anicore/db";
 import { installProxyFetch } from "@anicore/providers/lib/proxy";
 import { app } from "./app";
 import { startAutomaticSyncScheduler } from "./lib/automatic-sync";
 import { stopApiStartedSyncProcess } from "./lib/sync-process";
 
+assertDatabaseConfigured();
 installProxyFetch();
 
 function readPort(value: string | undefined): number {

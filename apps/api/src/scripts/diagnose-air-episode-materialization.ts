@@ -1,6 +1,7 @@
-import { sql, type SQL } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 
-import { closeDb, db } from "@anicore/db";
+import { closeDb } from "@anicore/db";
+import { queryRows } from "../lib/query-rows";
 import { fetchAnilistAnime } from "@anicore/providers/anilist/sync";
 import { fetchKitsuEpisodeData } from "@anicore/providers/kitsu/sync";
 import { getTvdbSeasonEpisodes } from "@anicore/providers/thetvdb/client";
@@ -61,11 +62,6 @@ interface ProviderAssociationRow {
   confidence: number;
   isPrimary: boolean;
   segmentCount: number;
-}
-
-async function queryRows<T>(query: SQL): Promise<T[]> {
-  const result = await db.execute(query);
-  return [...result] as unknown as T[];
 }
 
 function fail(message: string): never {

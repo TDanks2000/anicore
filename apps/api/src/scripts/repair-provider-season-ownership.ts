@@ -7,6 +7,7 @@ import {
   tryAcquireSyncLease,
   type SyncLease,
 } from "@anicore/db";
+import { queryRows, transactionRows } from "../lib/query-rows";
 import {
   getTvdbSeasonEpisodes,
   getTvdbSeriesBySlug,
@@ -49,7 +50,6 @@ import {
 
 type Mode = "dry-run" | "apply";
 type Provider = "thetvdb" | "tmdb";
-type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type ExecuteSql = (query: SQL) => Promise<unknown>;
 
 type RejectReason =
@@ -178,19 +178,6 @@ function parseProviderIdentity(providerId: string): {
   if (!Number.isInteger(entityId) || entityId <= 0) return null;
   if (!Number.isInteger(seasonNumber) || seasonNumber <= 0) return null;
   return { entityId, seasonNumber };
-}
-
-async function queryRows<T extends Record<string, unknown>>(query: SQL): Promise<T[]> {
-  const result = await db.execute(query);
-  return [...result] as T[];
-}
-
-async function transactionRows<T extends Record<string, unknown>>(
-  tx: DbTransaction,
-  query: SQL,
-): Promise<T[]> {
-  const result = await tx.execute(query);
-  return [...result] as T[];
 }
 
 async function assertProviderMappingTablesExist(): Promise<void> {
@@ -856,7 +843,7 @@ async function verifyExpectedState(
 
   const runCount = async (query: SQL): Promise<number> => {
     const result = await executeSql(query);
-    const rows = [...(result as Iterable<Record<string, unknown>>)] as CountRow[];
+    const rows = [...(result as Iterable<unknown>)] as CountRow[];
     return Number(rows[0]?.count ?? 0);
   };
 

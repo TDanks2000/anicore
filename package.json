@@ -53,6 +53,7 @@
     "db:plan-provider-season-ownership-repairs": "turbo run db:plan-provider-season-ownership-repairs --filter=@anicore/api --ui=stream --",
     "db:repair-air-recap-repair": "turbo run db:repair-air-recap-repair --filter=@anicore/api --ui=stream --",
     "db:repair-jojo-segment-migration": "turbo run db:repair-jojo-segment-migration --filter=@anicore/api --ui=stream --",
+    "db:repair-ambiguous-mapping-primaries": "turbo run db:repair-ambiguous-mapping-primaries --filter=@anicore/api --ui=stream --",
     "db:repair-mappings": "turbo run db:repair-mappings --filter=@anicore/api --ui=stream --",
     "db:repair-provider-season-ownership": "turbo run db:repair-provider-season-ownership --filter=@anicore/api --ui=stream --",
     "db:repair-tvdb-orphans": "turbo run db:repair-tvdb-orphans --filter=@anicore/api --ui=stream --",

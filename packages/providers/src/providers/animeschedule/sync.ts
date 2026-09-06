@@ -17,9 +17,14 @@ import {
   hasDub,
   isFinished,
   parseAnilistId,
+  parseKitsuReference,
+  parseMalId,
   searchByTitle,
   type AnimeScheduleEntry,
 } from "./client";
+import type { ProviderAuthoritativeMapping } from "../types";
+import { syncAuthoritativeCrossMappings } from "../authoritative-cross-mappings";
+import { log } from "../../lib/logger";
 
 export type DubSyncStatus =
   | "matched-fully-dubbed"
@@ -46,6 +51,46 @@ export function isAnimeScheduleEntryForAnilist(
   return Boolean(
     entry?.websites && parseAnilistId(entry.websites.aniList) === anilistId,
   );
+}
+
+/**
+ * Cross-references AnimeSchedule publishes alongside its own route.
+ *
+ * These are only read from an entry that `isAnimeScheduleEntryForAnilist` has
+ * already tied to our AniList id, so the third party's own AniList link is what
+ * authorises trusting its sibling links. That verification is what separates
+ * this from a guess: an entry whose AniList link does not resolve to us is
+ * never reached.
+ *
+ * Kitsu slug-only references are deliberately skipped rather than guessed at —
+ * a provider id must be an id. They are reported by the caller so the remaining
+ * gap stays visible.
+ */
+export function animeScheduleCrossMappings(
+  entry: AnimeScheduleEntry,
+): { mappings: ProviderAuthoritativeMapping[]; skippedKitsuSlug: string | null } {
+  const mappings: ProviderAuthoritativeMapping[] = [];
+
+  const malId = parseMalId(entry.websites?.mal);
+  if (malId) {
+    mappings.push({
+      provider: "mal",
+      providerId: malId,
+      providerUrl: `https://myanimelist.net/anime/${malId}`,
+    });
+  }
+
+  const { kitsuId, kitsuSlug } = parseKitsuReference(entry.websites?.kitsu);
+  if (kitsuId) {
+    mappings.push({
+      provider: "kitsu",
+      providerId: kitsuId,
+      providerSlug: kitsuSlug,
+      providerUrl: `https://kitsu.io/anime/${kitsuId}`,
+    });
+  }
+
+  return { mappings, skippedKitsuSlug: kitsuId ? null : kitsuSlug };
 }
 
 export function animeScheduleDubEvidenceAction(
@@ -291,6 +336,42 @@ async function upsertDubStatus(
   return rows.length;
 }
 
+/**
+ * Persists the Kitsu/MAL cross-references carried by a verified entry.
+ *
+ * Reached only after `isAnimeScheduleEntryForAnilist` has confirmed the entry's
+ * own AniList link resolves to this anime, which is what makes its sibling
+ * links trustworthy rather than a guess.
+ *
+ * Failures are contained: a cross-reference that disagrees with an identity we
+ * already hold is worth reporting, but it must not fail the dub sync this
+ * function exists to perform. The conflict stays visible in the log and in
+ * `db:audit-mappings`.
+ */
+async function persistCrossMappings(
+  animeId: number,
+  entry: AnimeScheduleEntry,
+): Promise<void> {
+  const { mappings, skippedKitsuSlug } = animeScheduleCrossMappings(entry);
+
+  if (skippedKitsuSlug) {
+    log.warn(
+      `AnimeSchedule ${entry.route} references Kitsu by slug (${skippedKitsuSlug}); no numeric id to store`,
+    );
+  }
+  if (!mappings.length) return;
+
+  try {
+    await syncAuthoritativeCrossMappings(animeId, mappings);
+  } catch (err) {
+    log.warn(
+      `AnimeSchedule cross-mapping for anime ${animeId} (${entry.route}) rejected: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+  }
+}
+
 export async function syncDubStatus(opts: {
   animeId: number;
   anilistId: string;
@@ -317,6 +398,8 @@ export async function syncDubStatus(opts: {
       `AnimeSchedule route ${entry.route} does not match AniList ${opts.anilistId}`,
     );
   }
+
+  await persistCrossMappings(opts.animeId, entry);
 
   const sourceUrl = animeScheduleEvidenceSourceUrl(entry.route);
   const evidenceAction = animeScheduleDubEvidenceAction(entry);

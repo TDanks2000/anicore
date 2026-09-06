@@ -1,7 +1,8 @@
 import { TMDB } from "@api-wrappers/tmdb-wrapper";
-import { sql, type SQL } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 
-import { closeDb, db } from "@anicore/db";
+import { closeDb } from "@anicore/db";
+import { queryRows } from "../lib/query-rows";
 import { getTvdbSeasonEpisodes } from "@anicore/providers/thetvdb/client";
 
 import { analyzeSuffixSegmentEvidence } from "./provider-suffix-segment-evidence";
@@ -62,11 +63,6 @@ interface AuthoritativeEpisode {
   providerEpisodeId: string;
   providerEpisodeNumber: number;
   airDate: string | null;
-}
-
-async function queryRows<T extends Record<string, unknown>>(query: SQL): Promise<T[]> {
-  const result = await db.execute(query);
-  return [...result] as T[];
 }
 
 function identityKey(provider: string, providerEpisodeId: string): string {

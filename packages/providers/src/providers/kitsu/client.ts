@@ -1,4 +1,5 @@
 import { formatHttpError } from "../../lib/http";
+import { log } from "../../lib/logger";
 
 const KITSU_GRAPHQL_URL = "https://kitsu.io/api/graphql";
 
@@ -135,8 +136,19 @@ async function gql<T>(
 
   const json = (await res.json()) as { data?: T; errors?: { message: string }[] };
 
+  // GraphQL reports a non-null field violation by nulling the offending record
+  // and returning everything else alongside an error. Kitsu trips this on its
+  // own schema (TitlesList.alternatives is declared non-null but comes back
+  // null for some records), so treating any error as fatal threw away entire
+  // search result sets over one malformed row and left the anime unmatched.
+  // Partial data is still usable evidence; only a response with no data at all
+  // is a genuine failure.
   if (json.errors?.length) {
-    throw new Error(`Kitsu GraphQL: ${json.errors.map((e) => e.message).join(", ")}`);
+    const message = json.errors.map((error) => error.message).join(", ");
+    if (json.data === undefined || json.data === null) {
+      throw new Error(`Kitsu GraphQL: ${message}`);
+    }
+    log.warn(`Kitsu GraphQL returned partial data: ${message}`);
   }
 
   if (!json.data) {
@@ -152,7 +164,10 @@ export async function searchKitsuByTitle(
   const data = await gql<{
     searchAnimeByTitle: { nodes: KitsuSearchNode[] };
   }>(ANIME_SEARCH_QUERY, { title });
-  return data?.searchAnimeByTitle?.nodes ?? [];
+  // A partial response leaves null holes where records failed to serialise.
+  return (data?.searchAnimeByTitle?.nodes ?? []).filter(
+    (node): node is KitsuSearchNode => node !== null,
+  );
 }
 
 export async function fetchKitsuEpisodes(
@@ -161,5 +176,7 @@ export async function fetchKitsuEpisodes(
   const data = await gql<{
     findAnimeById: { episodes: { nodes: KitsuEpisodeNode[] } } | null;
   }>(ANIME_EPISODES_QUERY, { id: kitsuId });
-  return data?.findAnimeById?.episodes?.nodes ?? [];
+  return (data?.findAnimeById?.episodes?.nodes ?? []).filter(
+    (node): node is KitsuEpisodeNode => node !== null,
+  );
 }

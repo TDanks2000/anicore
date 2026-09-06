@@ -1,6 +1,7 @@
 import { sql, type SQL } from "drizzle-orm";
 
-import { closeDb, db } from "@anicore/db";
+import { closeDb } from "@anicore/db";
+import { queryRows } from "../lib/query-rows";
 
 type Severity = "error" | "warning" | "info";
 
@@ -17,13 +18,6 @@ interface MappingAuditReport {
   generatedAt: string;
   findings: MappingAuditFinding[];
   summary: Record<Severity, number>;
-}
-
-async function queryRows<T extends Record<string, unknown>>(
-  query: SQL,
-): Promise<T[]> {
-  const result = await db.execute(query);
-  return [...result] as T[];
 }
 
 async function countRows(query: SQL): Promise<number> {
