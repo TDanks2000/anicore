@@ -69,6 +69,37 @@ export function parseAnilistId(url: string | undefined): string | null {
   return match?.[1] ?? null;
 }
 
+// Parses MyAnimeList numeric ID out of strings like:
+//   "myanimelist.net/anime/36522"
+//   "myanimelist.net/anime/37029/Hoozuki_no_Reitetsu_2nd_Season__Sono_Ni"
+export function parseMalId(url: string | undefined): string | null {
+  if (!url) return null;
+  const match = url.match(/\/anime\/(\d+)/);
+  return match?.[1] ?? null;
+}
+
+export interface KitsuReference {
+  kitsuId: string | null;
+  kitsuSlug: string | null;
+}
+
+/**
+ * Parses a Kitsu reference, which AnimeSchedule publishes in two shapes:
+ *   "kitsu.io/anime/13628"                        -> numeric id
+ *   "kitsu.io/anime/hoozuki-no-reitetsu-2nd-...'  -> slug
+ * Only the numeric form can be stored as a provider id directly; the slug form
+ * is returned separately so callers can resolve it when they are able to.
+ */
+export function parseKitsuReference(url: string | undefined): KitsuReference {
+  if (!url) return { kitsuId: null, kitsuSlug: null };
+  const match = url.match(/\/anime\/([^/?#]+)/);
+  const value = match?.[1]?.trim();
+  if (!value) return { kitsuId: null, kitsuSlug: null };
+  return /^\d+$/.test(value)
+    ? { kitsuId: value, kitsuSlug: null }
+    : { kitsuId: null, kitsuSlug: value };
+}
+
 export async function fetchByRoute(
   route: string,
 ): Promise<AnimeScheduleEntry | null> {
