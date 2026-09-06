@@ -3,16 +3,23 @@ import { mapKitsuAnime } from "./mapper";
 import { findKitsuMatch } from "./matching";
 import { fetchKitsuEpisodeData, syncKitsuFromAnilist } from "./sync";
 
+function malIdOf(data: ProviderAnimeData): string | undefined {
+	return data.authoritativeMappings?.find((m) => m.provider === "mal")?.providerId;
+}
+
 function toHints(data: ProviderAnimeData) {
 	return {
 		anilistId:    data.provider === "anilist" ? data.providerId : undefined,
+		malId:        malIdOf(data),
 		titleRomaji:  data.titleRomaji,
 		titleEnglish: data.titleEnglish,
 		titleNative:  data.titleNative,
 		synonyms:     data.synonyms,
 		season:       data.season,
 		seasonYear:   data.seasonYear,
+		startDate:    data.startDate,
 		episodeCount: data.episodeCount,
+		format:       data.format,
 	};
 }
 
