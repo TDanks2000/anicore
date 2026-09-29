@@ -14,9 +14,7 @@ function describeJsonError(value: unknown): string | null {
   if (typeof value === "string") return value;
 
   const directMessage =
-    stringField(value, "error") ??
-    stringField(value, "message") ??
-    stringField(value, "detail");
+    stringField(value, "error") ?? stringField(value, "message") ?? stringField(value, "detail");
   if (directMessage) return directMessage;
 
   if (isRecord(value) && Array.isArray(value.errors)) {
@@ -24,7 +22,7 @@ function describeJsonError(value: unknown): string | null {
       .map((entry) =>
         typeof entry === "string"
           ? entry
-          : stringField(entry, "message") ?? stringField(entry, "detail"),
+          : (stringField(entry, "message") ?? stringField(entry, "detail")),
       )
       .filter((message): message is string => Boolean(message));
     if (messages.length) return messages.join(", ");
@@ -43,9 +41,7 @@ function limitDetail(value: string): string {
   return `${trimmed.slice(0, MAX_ERROR_DETAIL_LENGTH)}...`;
 }
 
-export async function readHttpErrorDetail(
-  response: Response,
-): Promise<string | null> {
+export async function readHttpErrorDetail(response: Response): Promise<string | null> {
   const contentType = response.headers.get("content-type") ?? "";
 
   try {
@@ -61,13 +57,8 @@ export async function readHttpErrorDetail(
   }
 }
 
-export async function formatHttpError(
-  prefix: string,
-  response: Response,
-): Promise<string> {
-  const status = `${response.status}${
-    response.statusText ? ` ${response.statusText}` : ""
-  }`;
+export async function formatHttpError(prefix: string, response: Response): Promise<string> {
+  const status = `${response.status}${response.statusText ? ` ${response.statusText}` : ""}`;
   const detail = await readHttpErrorDetail(response);
   return detail ? `${prefix}: ${status}: ${detail}` : `${prefix}: ${status}`;
 }

@@ -11,28 +11,8 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 
+import { mappingSources, providers } from "./enums";
 import { anime } from "./schema";
-
-const PROVIDERS = [
-  "anilist",
-  "kitsu",
-  "thetvdb",
-  "mal",
-  "tmdb",
-  "simkl",
-  "anisearch",
-  "animeplanet",
-  "animeschedule",
-  "other",
-] as const;
-
-const MAPPING_SOURCES = [
-  "manual",
-  "api",
-  "import",
-  "fuzzy",
-  "system",
-] as const;
 
 /**
  * Canonical external-provider identity.
@@ -45,16 +25,12 @@ export const providerEntities = pgTable(
   "provider_entities",
   {
     id: serial("id").primaryKey(),
-    provider: text("provider", { enum: PROVIDERS }).notNull(),
+    provider: text("provider", { enum: providers }).notNull(),
     providerId: text("provider_id").notNull(),
     providerSlug: text("provider_slug"),
     providerUrl: text("provider_url"),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
     providerIdentityIdx: uniqueIndex("provider_entities_provider_id_idx").on(
@@ -86,25 +62,18 @@ export const animeProviderMappings = pgTable(
       .notNull()
       .references(() => providerEntities.id, { onDelete: "cascade" }),
     confidence: integer("confidence").notNull().default(100),
-    source: text("source", { enum: MAPPING_SOURCES })
-      .notNull()
-      .default("manual"),
+    source: text("source", { enum: mappingSources }).notNull().default("manual"),
     isPrimary: boolean("is_primary").notNull().default(false),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
-    animeEntityIdx: uniqueIndex(
-      "anime_provider_mappings_anime_entity_idx",
-    ).on(table.animeId, table.providerEntityId),
-    animeIdx: index("anime_provider_mappings_anime_idx").on(table.animeId),
-    entityIdx: index("anime_provider_mappings_entity_idx").on(
+    animeEntityIdx: uniqueIndex("anime_provider_mappings_anime_entity_idx").on(
+      table.animeId,
       table.providerEntityId,
     ),
+    animeIdx: index("anime_provider_mappings_anime_idx").on(table.animeId),
+    entityIdx: index("anime_provider_mappings_entity_idx").on(table.providerEntityId),
     confidenceCheck: check(
       "anime_provider_mappings_confidence_check",
       sql`${table.confidence} between 0 and 100`,
@@ -131,12 +100,8 @@ export const animeProviderSegments = pgTable(
     providerEpisodeEnd: integer("provider_episode_end").notNull(),
     localEpisodeStart: integer("local_episode_start").notNull(),
     localEpisodeEnd: integer("local_episode_end").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
     segmentIdx: uniqueIndex("anime_provider_segments_range_idx").on(
@@ -146,9 +111,7 @@ export const animeProviderSegments = pgTable(
       table.localEpisodeStart,
       table.localEpisodeEnd,
     ),
-    mappingIdx: index("anime_provider_segments_mapping_idx").on(
-      table.animeProviderMappingId,
-    ),
+    mappingIdx: index("anime_provider_segments_mapping_idx").on(table.animeProviderMappingId),
     positiveProviderStartCheck: check(
       "anime_provider_segments_provider_start_positive_check",
       sql`${table.providerEpisodeStart} > 0`,

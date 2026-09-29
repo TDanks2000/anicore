@@ -6,9 +6,7 @@ import {
 } from "./orphan-episode-parent-diagnostics";
 import type { OrphanEpisodeMappingRow } from "./orphan-episode-parent-repair";
 
-function row(
-  overrides: Partial<OrphanEpisodeMappingRow> = {},
-): OrphanEpisodeMappingRow {
+function row(overrides: Partial<OrphanEpisodeMappingRow> = {}): OrphanEpisodeMappingRow {
   return {
     episodeMappingId: 1,
     animeId: 10,
@@ -26,15 +24,15 @@ function row(
 
 describe("orphan parent evidence diagnostics", () => {
   test("explains missing structural evidence precisely", () => {
-    expect(
-      diagnoseOrphanParentEvidence(row({ episodeSeasonNumber: null })).reason,
-    ).toBe("missing-season-number");
+    expect(diagnoseOrphanParentEvidence(row({ episodeSeasonNumber: null })).reason).toBe(
+      "missing-season-number",
+    );
     expect(diagnoseOrphanParentEvidence(row({ providerUrl: null })).reason).toBe(
       "missing-provider-url",
     );
-    expect(
-      diagnoseOrphanParentEvidence(row({ providerUrl: "not a url" })).reason,
-    ).toBe("invalid-provider-url");
+    expect(diagnoseOrphanParentEvidence(row({ providerUrl: "not a url" })).reason).toBe(
+      "invalid-provider-url",
+    );
   });
 
   test("explains TMDB disagreements instead of returning an opaque null", () => {
@@ -52,15 +50,15 @@ describe("orphan parent evidence diagnostics", () => {
         }),
       ).reason,
     ).toBe("unsupported-url-path");
-    expect(
-      diagnoseOrphanParentEvidence(row({ providerEpisodeNumber: null })).reason,
-    ).toBe("missing-provider-episode-number");
-    expect(
-      diagnoseOrphanParentEvidence(row({ episodeSeasonNumber: 3 })).reason,
-    ).toBe("provider-season-mismatch");
-    expect(
-      diagnoseOrphanParentEvidence(row({ providerEpisodeNumber: "4" })).reason,
-    ).toBe("provider-episode-number-mismatch");
+    expect(diagnoseOrphanParentEvidence(row({ providerEpisodeNumber: null })).reason).toBe(
+      "missing-provider-episode-number",
+    );
+    expect(diagnoseOrphanParentEvidence(row({ episodeSeasonNumber: 3 })).reason).toBe(
+      "provider-season-mismatch",
+    );
+    expect(diagnoseOrphanParentEvidence(row({ providerEpisodeNumber: "4" })).reason).toBe(
+      "provider-episode-number-mismatch",
+    );
   });
 
   test("explains TVDB identity mismatch", () => {
@@ -148,9 +146,7 @@ describe("orphan repair diagnostic summary", () => {
       episodeMappings: 2,
       rows: 2,
     });
-    expect(
-      diagnostics.categories["incomplete-parent-evidence"].samples[0],
-    ).toMatchObject({
+    expect(diagnostics.categories["incomplete-parent-evidence"].samples[0]).toMatchObject({
       animeId: 10,
       provider: "tmdb",
       episodeMappingCount: 2,

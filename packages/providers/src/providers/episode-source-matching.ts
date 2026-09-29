@@ -1,8 +1,5 @@
 import { hasConflictingExplicitEpisodeNumbers } from "./episode-title-scoring";
-import {
-  normalizeComparableTitle,
-  titleSimilarity,
-} from "./title-similarity";
+import { normalizeComparableTitle, titleSimilarity } from "./title-similarity";
 
 export const MIN_SOURCE_TITLE_SIMILARITY = 0.5;
 export const SOURCE_MATCH_AMBIGUITY_MARGIN = 10;
@@ -48,11 +45,7 @@ export function hasUsableEpisodeNumberAlignment(
   titles: EpisodeSourceTitle[],
 ): boolean {
   const providerNumbers = titles.map((episode) => episode.number);
-  if (
-    providerNumbers.some(
-      (number) => !Number.isInteger(number) || number <= 0,
-    )
-  ) {
+  if (providerNumbers.some((number) => !Number.isInteger(number) || number <= 0)) {
     return false;
   }
 
@@ -63,13 +56,9 @@ export function hasUsableEpisodeNumberAlignment(
   }
 
   const canonicalEpisodeCount =
-    context.episodeCount && context.episodeCount > 0
-      ? context.episodeCount
-      : null;
+    context.episodeCount && context.episodeCount > 0 ? context.episodeCount : null;
   const expectedNumbers = canonicalEpisodeCount
-    ? new Set(
-        Array.from({ length: canonicalEpisodeCount }, (_, index) => index + 1),
-      )
+    ? new Set(Array.from({ length: canonicalEpisodeCount }, (_, index) => index + 1))
     : new Set(
         context.episodes
           .map((episode) => episode.number)
@@ -80,9 +69,7 @@ export function hasUsableEpisodeNumberAlignment(
   // alignment evidence available. Do not invent a numbering assumption here.
   if (expectedNumbers.size === 0) return true;
 
-  const aligned = providerNumbers.filter((number) =>
-    expectedNumbers.has(number),
-  ).length;
+  const aligned = providerNumbers.filter((number) => expectedNumbers.has(number)).length;
   const comparableCount = Math.min(expectedNumbers.size, providerNumbers.length);
   const requiredAligned = Math.max(1, Math.ceil(comparableCount * 0.75));
 
@@ -102,29 +89,18 @@ export function scoreSourceEpisodeBatch(
   }
 
   const canonicalEpisodeCount =
-    context.episodeCount && context.episodeCount > 0
-      ? context.episodeCount
-      : null;
+    context.episodeCount && context.episodeCount > 0 ? context.episodeCount : null;
   const knownEpisodeCount = canonicalEpisodeCount ?? context.episodes.length;
 
   if (canonicalEpisodeCount) {
     const ratio = titles.length / canonicalEpisodeCount;
-    if (
-      canonicalEpisodeCount >= 8 &&
-      (ratio < 0.75 || ratio > 1.35)
-    ) {
+    if (canonicalEpisodeCount >= 8 && (ratio < 0.75 || ratio > 1.35)) {
       return Number.NEGATIVE_INFINITY;
     }
-    if (
-      canonicalEpisodeCount >= 3 &&
-      (ratio < 0.5 || ratio > 1.75)
-    ) {
+    if (canonicalEpisodeCount >= 3 && (ratio < 0.5 || ratio > 1.75)) {
       return Number.NEGATIVE_INFINITY;
     }
-  } else if (
-    knownEpisodeCount >= 8 &&
-    titles.length < Math.ceil(knownEpisodeCount * 0.75)
-  ) {
+  } else if (knownEpisodeCount >= 8 && titles.length < Math.ceil(knownEpisodeCount * 0.75)) {
     // With an unknown final episode count we can safely reject a provider batch
     // that is missing many episodes we already know about, but must not reject a
     // larger provider batch merely because the local database is still partial.
@@ -169,9 +145,7 @@ export function scoreSourceEpisodeBatch(
   return score;
 }
 
-export function selectSourceCandidate<T>(
-  candidates: ScoredSourceCandidate<T>[],
-): T | null {
+export function selectSourceCandidate<T>(candidates: ScoredSourceCandidate<T>[]): T | null {
   const ranked = candidates
     .filter((candidate) => Number.isFinite(candidate.score))
     .sort((a, b) => b.score - a.score);
@@ -179,10 +153,7 @@ export function selectSourceCandidate<T>(
   if (!best) return null;
 
   const runnerUp = ranked[1];
-  if (
-    runnerUp &&
-    best.score - runnerUp.score < SOURCE_MATCH_AMBIGUITY_MARGIN
-  ) {
+  if (runnerUp && best.score - runnerUp.score < SOURCE_MATCH_AMBIGUITY_MARGIN) {
     return null;
   }
 

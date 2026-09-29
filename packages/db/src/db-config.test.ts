@@ -4,9 +4,7 @@ import { getDatabaseConfig } from "./db-config";
 
 describe("getDatabaseConfig", () => {
   test("requires DATABASE_URL", () => {
-    expect(() => getDatabaseConfig({})).toThrow(
-      "DATABASE_URL is required to connect to Postgres.",
-    );
+    expect(() => getDatabaseConfig({})).toThrow("DATABASE_URL is required to connect to Postgres.");
   });
 
   test("defaults to ssl require", () => {

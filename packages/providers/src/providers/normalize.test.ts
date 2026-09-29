@@ -1,10 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import {
-  dedupeProviderStudios,
-  dedupeProviderTags,
-  normalizeEntityName,
-} from "./normalize";
+import { dedupeProviderStudios, dedupeProviderTags, normalizeEntityName } from "./normalize";
 
 describe("provider normalization", () => {
   test("normalizes entity names consistently", () => {

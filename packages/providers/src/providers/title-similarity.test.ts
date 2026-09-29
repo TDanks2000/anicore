@@ -35,15 +35,11 @@ describe("title similarity", () => {
   });
 
   test("retains tolerance for small spelling differences", () => {
-    expect(
-      titleSimilarity("Cyberpunk Edgerunners", "Cyberpunk: Edgerunner"),
-    ).toBeGreaterThan(0.7);
+    expect(titleSimilarity("Cyberpunk Edgerunners", "Cyberpunk: Edgerunner")).toBeGreaterThan(0.7);
   });
 
   test("does not treat a longer related franchise title as exact identity", () => {
-    expect(
-      titleSimilarity("Sword Art Online", "Sword Art Online Alternative"),
-    ).toBeLessThan(1);
+    expect(titleSimilarity("Sword Art Online", "Sword Art Online Alternative")).toBeLessThan(1);
   });
 
   describe("requirement 1: Japanese romanisation variance", () => {
@@ -163,15 +159,10 @@ describe("title similarity", () => {
   describe("sequel numbering", () => {
     test("word-form ordinals reach the same token as digit forms", () => {
       expect(
-        titleSimilarity(
-          "Monogatari Series: Second Season",
-          "Monogatari Series Season 2",
-        ),
+        titleSimilarity("Monogatari Series: Second Season", "Monogatari Series Season 2"),
       ).toBe(1);
       // Initial D numbers its seasons as "Stage".
-      expect(
-        titleSimilarity("Initial D Fourth Stage", "Initial D Stage 4"),
-      ).toBe(1);
+      expect(titleSimilarity("Initial D Fourth Stage", "Initial D Stage 4")).toBe(1);
     });
 
     test("a bare trailing sequel number separates a sequel from its base", () => {
@@ -183,9 +174,7 @@ describe("title similarity", () => {
           "Kono Subarashii Sekai ni Shukufuku wo! 2",
         ),
       ).toBeLessThanOrEqual(0.6);
-      expect(titleSimilarity("Steins;Gate", "Steins Gate 0")).toBeLessThanOrEqual(
-        0.6,
-      );
+      expect(titleSimilarity("Steins;Gate", "Steins Gate 0")).toBeLessThanOrEqual(0.6);
     });
 
     test("season 1 is not treated as a sequel of the unnumbered title", () => {
@@ -205,9 +194,7 @@ describe("title similarity", () => {
       expect(normalizeComparableTitle("86")).toBe("86");
       expect(normalizeComparableTitle("91 Days")).toBe("91 days");
       // "second" here is a unit of time, not an ordinal.
-      expect(normalizeComparableTitle("5 Centimeters per Second")).toBe(
-        "5 centimeters per second",
-      );
+      expect(normalizeComparableTitle("5 Centimeters per Second")).toBe("5 centimeters per second");
     });
   });
 });

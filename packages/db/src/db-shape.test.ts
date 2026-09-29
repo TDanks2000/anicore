@@ -1,11 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import {
-  analyzeDbShape,
-  expectedIndexes,
-  expectedTables,
-  legacyTables,
-} from "./db-shape";
+import { analyzeDbShape, expectedIndexes, expectedTables, legacyTables } from "./db-shape";
 
 describe("analyzeDbShape", () => {
   test("passes when normalized tables and key indexes are present", () => {
@@ -43,9 +38,7 @@ describe("analyzeDbShape", () => {
         .filter((tableName) => tableName !== "anime_studio_links")
         .map((tableName) => ({ tableName })),
       expectedIndexes
-        .filter(
-          ({ indexName }) => indexName !== "anime_studio_links_anime_studio_idx",
-        )
+        .filter(({ indexName }) => indexName !== "anime_studio_links_anime_studio_idx")
         .map(({ tableName, indexName }) => ({ tableName, indexName })),
     );
 

@@ -11,10 +11,7 @@ describe("Kitsu authoritative repair cleanup", () => {
       { kitsuId: "episode-101" },
     ] as MappedEpisode[];
 
-    expect(kitsuEpisodeProviderIdsForRepair(episodes)).toEqual([
-      "episode-101",
-      "episode-102",
-    ]);
+    expect(kitsuEpisodeProviderIdsForRepair(episodes)).toEqual(["episode-101", "episode-102"]);
   });
 
   test("does not invent cleanup IDs when Kitsu exposes no episodes", () => {

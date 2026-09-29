@@ -1,6 +1,3 @@
-import { sql } from "drizzle-orm";
-import type { PgTable } from "drizzle-orm/pg-core";
-
 import { db } from "@anicore/db";
 import {
   anime,
@@ -20,6 +17,8 @@ import {
 } from "@anicore/db/schema";
 import { clearAllUnmatched, resetProgress } from "@anicore/providers/lib/cache";
 import { log } from "@anicore/providers/lib/logger";
+import { sql } from "drizzle-orm";
+import type { PgTable } from "drizzle-orm/pg-core";
 
 const n = sql<number>`count(*)::int`;
 
@@ -31,20 +30,20 @@ async function rowCount(table: PgTable): Promise<number> {
 log.info("Counting rows before wipe…");
 
 const counts = {
-  anime:               await rowCount(anime),
-  anime_mappings:      await rowCount(animeMappings),
-  anime_relation_links:await rowCount(animeRelationLinks),
-  studios:             await rowCount(studios),
-  anime_studio_links:  await rowCount(animeStudioLinks),
-  tags:                await rowCount(tags),
-  anime_tag_links:     await rowCount(animeTagLinks),
-  anime_external_links:await rowCount(animeExternalLinks),
-  anime_language_status:await rowCount(animeLanguageStatus),
-  anime_language_evidence:await rowCount(animeLanguageEvidence),
-  episodes:            await rowCount(episodes),
-  episode_mappings:    await rowCount(episodeMappings),
-  episode_language_status:await rowCount(episodeLanguageStatus),
-  sync_runs:           await rowCount(syncRuns),
+  anime: await rowCount(anime),
+  anime_mappings: await rowCount(animeMappings),
+  anime_relation_links: await rowCount(animeRelationLinks),
+  studios: await rowCount(studios),
+  anime_studio_links: await rowCount(animeStudioLinks),
+  tags: await rowCount(tags),
+  anime_tag_links: await rowCount(animeTagLinks),
+  anime_external_links: await rowCount(animeExternalLinks),
+  anime_language_status: await rowCount(animeLanguageStatus),
+  anime_language_evidence: await rowCount(animeLanguageEvidence),
+  episodes: await rowCount(episodes),
+  episode_mappings: await rowCount(episodeMappings),
+  episode_language_status: await rowCount(episodeLanguageStatus),
+  sync_runs: await rowCount(syncRuns),
 };
 
 const total = Object.values(counts).reduce((a, b) => a + b, 0);

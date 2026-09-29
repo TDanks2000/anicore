@@ -1,12 +1,8 @@
 import { mkdir } from "node:fs/promises";
 import { dirname, isAbsolute, resolve } from "node:path";
-
-import { sql } from "drizzle-orm";
-
 import { closeDb } from "@anicore/db";
-import { searchKitsuByTitle, type KitsuSearchNode } from "@anicore/providers/kitsu/client";
-
-import { queryRows } from "../lib/query-rows";
+import { type KitsuSearchNode, searchKitsuByTitle } from "@anicore/providers/kitsu/client";
+import { sql } from "drizzle-orm";
 // `matching.ts` is intentionally not exported from @anicore/providers' package.json
 // exports map, so it is reached with a relative path into the package's source
 // instead of inventing a new public subpath for a one-off measurement script.
@@ -14,6 +10,7 @@ import {
   kitsuSearchTitles,
   type MatchHints,
 } from "../../../../packages/providers/src/providers/kitsu/matching";
+import { queryRows } from "../lib/query-rows";
 
 const DEFAULT_SAMPLE_SIZE = 300;
 const DEFAULT_SEED = 1;
@@ -55,10 +52,7 @@ export interface CorpusCommandOptions {
   outPath: string;
 }
 
-export function parseCorpusCommandArgs(
-  args: string[],
-  cwd = process.cwd(),
-): CorpusCommandOptions {
+export function parseCorpusCommandArgs(args: string[], cwd = process.cwd()): CorpusCommandOptions {
   let sampleSize = DEFAULT_SAMPLE_SIZE;
   let seed = DEFAULT_SEED;
   let outPath = resolve(cwd, DEFAULT_OUT_PATH);
@@ -302,9 +296,7 @@ async function fetchCandidatesForHints(hints: MatchHints): Promise<KitsuSearchNo
 async function buildCorpus(options: CorpusCommandOptions): Promise<KitsuMatchingCorpus> {
   const rows = await loadAuthoritativeRows();
   if (rows.length === 0) {
-    throw new Error(
-      "No authoritative kitsu mappings (provider='kitsu', source='api') were found",
-    );
+    throw new Error("No authoritative kitsu mappings (provider='kitsu', source='api') were found");
   }
 
   const sampledRows = stratifiedSample(rows, options.sampleSize, options.seed);

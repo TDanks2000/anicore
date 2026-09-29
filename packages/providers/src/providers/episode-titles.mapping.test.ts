@@ -19,9 +19,7 @@ describe("episode source mapping preference", () => {
       confidence: 100,
     };
 
-    expect(selectPreferredAnimeSourceMapping([manual, fuzzyPrimary])).toBe(
-      fuzzyPrimary,
-    );
+    expect(selectPreferredAnimeSourceMapping([manual, fuzzyPrimary])).toBe(fuzzyPrimary);
   });
 
   test("prefers stronger provenance when no mapping is primary", () => {

@@ -1,17 +1,14 @@
 import { describe, expect, test } from "bun:test";
-
+import type { OrphanEpisodeMappingRow } from "./orphan-episode-parent-repair";
 import {
   buildTvdbSlugResolutionGroups,
   deriveTvdbSlugEpisodeEvidence,
   filterTvdbSlugCandidateCollisions,
-  verifyResolvedTvdbSlugGroup,
   type TvdbSlugRepairCandidate,
+  verifyResolvedTvdbSlugGroup,
 } from "./orphan-tvdb-slug-repair";
-import type { OrphanEpisodeMappingRow } from "./orphan-episode-parent-repair";
 
-function row(
-  overrides: Partial<OrphanEpisodeMappingRow> = {},
-): OrphanEpisodeMappingRow {
+function row(overrides: Partial<OrphanEpisodeMappingRow> = {}): OrphanEpisodeMappingRow {
   return {
     episodeMappingId: 1,
     animeId: 10,
@@ -27,9 +24,7 @@ function row(
   };
 }
 
-function candidate(
-  overrides: Partial<TvdbSlugRepairCandidate> = {},
-): TvdbSlugRepairCandidate {
+function candidate(overrides: Partial<TvdbSlugRepairCandidate> = {}): TvdbSlugRepairCandidate {
   return {
     animeId: 10,
     provider: "thetvdb",
@@ -154,9 +149,7 @@ describe("TVDB slug resolution groups", () => {
     ]);
     expect(conflictingNumeric.groups).toHaveLength(0);
 
-    const strong = buildTvdbSlugResolutionGroups([
-      row({ source: "manual", confidence: 100 }),
-    ]);
+    const strong = buildTvdbSlugResolutionGroups([row({ source: "manual", confidence: 100 })]);
     expect(strong.groups).toHaveLength(0);
   });
 });
@@ -173,27 +166,19 @@ describe("TVDB remote verification", () => {
       }),
     ]).groups[0]!;
 
-    const verified = verifyResolvedTvdbSlugGroup(
-      group,
-      { id: 777, slug: "example-show" },
-      [
-        { id: 343273, number: 1 },
-        { id: 343274, number: 2 },
-      ],
-    );
+    const verified = verifyResolvedTvdbSlugGroup(group, { id: 777, slug: "example-show" }, [
+      { id: 343273, number: 1 },
+      { id: 343274, number: 2 },
+    ]);
     expect(verified?.providerId).toBe("777:1");
     expect(verified?.source).toBe("fuzzy");
     expect(verified?.confidence).toBe(85);
 
     expect(
-      verifyResolvedTvdbSlugGroup(
-        group,
-        { id: 777, slug: "example-show" },
-        [
-          { id: 343273, number: 1 },
-          { id: 343274, number: 3 },
-        ],
-      ),
+      verifyResolvedTvdbSlugGroup(group, { id: 777, slug: "example-show" }, [
+        { id: 343273, number: 1 },
+        { id: 343274, number: 3 },
+      ]),
     ).toBeNull();
   });
 
@@ -209,45 +194,36 @@ describe("TVDB remote verification", () => {
     ]).groups[0]!;
 
     expect(
-      verifyResolvedTvdbSlugGroup(
-        group,
-        { id: 777, slug: "example-show" },
-        [
-          { id: 343273, number: 1 },
-          { id: 343274, number: 2 },
-        ],
-      )?.providerId,
+      verifyResolvedTvdbSlugGroup(group, { id: 777, slug: "example-show" }, [
+        { id: 343273, number: 1 },
+        { id: 343274, number: 2 },
+      ])?.providerId,
     ).toBe("777:1");
 
     expect(
-      verifyResolvedTvdbSlugGroup(
-        group,
-        { id: 999, slug: "example-show" },
-        [
-          { id: 343273, number: 1 },
-          { id: 343274, number: 2 },
-        ],
-      ),
+      verifyResolvedTvdbSlugGroup(group, { id: 999, slug: "example-show" }, [
+        { id: 343273, number: 1 },
+        { id: 343274, number: 2 },
+      ]),
     ).toBeNull();
   });
 
   test("rejects an unexpected slug returned by TVDB", () => {
     const group = buildTvdbSlugResolutionGroups([row()]).groups[0]!;
     expect(
-      verifyResolvedTvdbSlugGroup(
-        group,
-        { id: 777, slug: "different-show" },
-        [{ id: 343273, number: 1 }],
-      ),
+      verifyResolvedTvdbSlugGroup(group, { id: 777, slug: "different-show" }, [
+        { id: 343273, number: 1 },
+      ]),
     ).toBeNull();
   });
 });
 
 describe("TVDB candidate collision filtering", () => {
   test("skips a provider season already owned by another anime", () => {
-    const result = filterTvdbSlugCandidateCollisions([candidate()], [
-      { animeId: 999, provider: "thetvdb", providerId: "777:1" },
-    ]);
+    const result = filterTvdbSlugCandidateCollisions(
+      [candidate()],
+      [{ animeId: 999, provider: "thetvdb", providerId: "777:1" }],
+    );
     expect(result.candidates).toHaveLength(0);
     expect(result.skippedCollisionGroups).toBe(1);
     expect(result.skippedCollisionEpisodeMappings).toBe(2);

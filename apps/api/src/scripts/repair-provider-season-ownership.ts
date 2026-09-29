@@ -1,13 +1,4 @@
-import { TMDB } from "@api-wrappers/tmdb-wrapper";
-import { sql, type SQL } from "drizzle-orm";
-
-import {
-  closeDb,
-  db,
-  tryAcquireSyncLease,
-  type SyncLease,
-} from "@anicore/db";
-import { queryRows, transactionRows } from "../lib/query-rows";
+import { closeDb, db, type SyncLease, tryAcquireSyncLease } from "@anicore/db";
 import {
   getTvdbSeasonEpisodes,
   getTvdbSeriesBySlug,
@@ -15,11 +6,14 @@ import {
   type TvdbEpisodeBase,
   type TvdbSeriesBaseRecord,
 } from "@anicore/providers/thetvdb/client";
+import { TMDB } from "@api-wrappers/tmdb-wrapper";
+import { type SQL, sql } from "drizzle-orm";
+import { queryRows, transactionRows } from "../lib/query-rows";
 
 import {
   buildTvdbSlugResolutionGroups,
-  verifyResolvedTvdbSlugGroup,
   type TvdbSlugResolutionGroup,
+  verifyResolvedTvdbSlugGroup,
 } from "./orphan-tvdb-slug-repair";
 import {
   buildTmdbResolvedCollisionGroups,
@@ -28,17 +22,17 @@ import {
 } from "./provider-collision-segment-plan";
 import {
   earliestProviderAirDate,
-  verifyProviderSeasonAirdate,
   type ProviderSeasonAirdateRejectReason,
+  verifyProviderSeasonAirdate,
 } from "./provider-season-airdate-verification";
 import {
-  verifyProviderSeasonIdentity,
   type ProviderSeasonIdentityRejectReason,
+  verifyProviderSeasonIdentity,
 } from "./provider-season-identity-verification";
 import {
-  planEpisodeOwnershipTransfers,
   type EpisodeOwnershipTransferMove,
   type EpisodeOwnershipTransferRejectReason,
+  planEpisodeOwnershipTransfers,
 } from "./provider-season-ownership-transfer-plan";
 import { parseRepairMappingsArgs } from "./repair-mappings-cli";
 import {
@@ -330,9 +324,7 @@ async function mapWithConcurrency<T, R>(
       results[index] = await mapper(items[index]!);
     }
   };
-  await Promise.all(
-    Array.from({ length: Math.min(concurrency, items.length) }, () => worker()),
-  );
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => worker()));
   return results;
 }
 
@@ -437,10 +429,7 @@ function uniqueIds(values: number[], label: string): void {
   }
 }
 
-function rejectedOutcome(
-  group: ResolvedCollisionGroup,
-  reason: RejectReason,
-): PlanningOutcome {
+function rejectedOutcome(group: ResolvedCollisionGroup, reason: RejectReason): PlanningOutcome {
   return { group, candidate: null, reason };
 }
 
@@ -507,10 +496,7 @@ async function buildRepairPlan(): Promise<{
   const episodeRowsByAnimeProvider = new Map<string, EpisodeMappingRow[]>();
   const episodeProviderSlots = new Set<string>();
   for (const row of episodeRows) {
-    episodeByProviderIdentity.set(
-      episodeIdentityKey(row.provider, row.providerEpisodeId),
-      row,
-    );
+    episodeByProviderIdentity.set(episodeIdentityKey(row.provider, row.providerEpisodeId), row);
     const key = animeProviderKey(row.animeId, row.provider);
     const list = episodeRowsByAnimeProvider.get(key) ?? [];
     list.push(row);
@@ -767,8 +753,14 @@ async function buildRepairPlan(): Promise<{
       a.targetAnimeId - b.targetAnimeId,
   );
 
-  uniqueIds(candidates.map((candidate) => candidate.legacyMappingId), "legacy mapping IDs");
-  uniqueIds(candidates.map((candidate) => candidate.animeProviderMappingId), "v2 mapping IDs");
+  uniqueIds(
+    candidates.map((candidate) => candidate.legacyMappingId),
+    "legacy mapping IDs",
+  );
+  uniqueIds(
+    candidates.map((candidate) => candidate.animeProviderMappingId),
+    "v2 mapping IDs",
+  );
   uniqueIds(
     candidates.flatMap((candidate) => candidate.episodeMoves.map((move) => move.episodeMappingId)),
     "episode mapping IDs",
@@ -793,34 +785,40 @@ async function buildRepairPlan(): Promise<{
 
 function episodeMoveValues(candidates: RepairCandidate[]): SQL[] {
   return candidates.flatMap((candidate) =>
-    candidate.episodeMoves.map((move) => sql`(
+    candidate.episodeMoves.map(
+      (move) => sql`(
       ${move.episodeMappingId}::int,
       ${move.fromEpisodeId}::int,
       ${move.toEpisodeId}::int,
       ${candidate.provider}::text,
       ${move.providerEpisodeId}::text
-    )`),
+    )`,
+    ),
   );
 }
 
 function parentTransferValues(candidates: RepairCandidate[]): SQL[] {
-  return candidates.map((candidate) => sql`(
+  return candidates.map(
+    (candidate) => sql`(
     ${candidate.legacyMappingId}::int,
     ${candidate.currentOwnerAnimeId}::int,
     ${candidate.targetAnimeId}::int,
     ${candidate.provider}::text,
     ${candidate.providerId}::text
-  )`);
+  )`,
+  );
 }
 
 function v2TransferValues(candidates: RepairCandidate[]): SQL[] {
-  return candidates.map((candidate) => sql`(
+  return candidates.map(
+    (candidate) => sql`(
     ${candidate.animeProviderMappingId}::int,
     ${candidate.providerEntityId}::int,
     ${candidate.currentOwnerAnimeId}::int,
     ${candidate.targetAnimeId}::int,
     ${candidate.provider}::text
-  )`);
+  )`,
+  );
 }
 
 async function verifyExpectedState(
@@ -856,8 +854,7 @@ async function verifyExpectedState(
     (candidate) => sql`(${candidate.legacyMappingId}::int, ${candidate.targetAnimeId}::int)`,
   );
   const v2Values = candidates.map(
-    (candidate) =>
-      sql`(${candidate.animeProviderMappingId}::int, ${candidate.targetAnimeId}::int)`,
+    (candidate) => sql`(${candidate.animeProviderMappingId}::int, ${candidate.targetAnimeId}::int)`,
   );
   const mappingIds = candidates.map((candidate) => candidate.animeProviderMappingId);
 
@@ -908,7 +905,10 @@ async function verifyExpectedState(
     select count(*)::int as count
     from public.anime_provider_segments aps
     where aps.anime_provider_mapping_id in (
-      ${sql.join(mappingIds.map((id) => sql`${id}`), sql`, `)}
+      ${sql.join(
+        mappingIds.map((id) => sql`${id}`),
+        sql`, `,
+      )}
     )
   `);
 
@@ -943,7 +943,9 @@ async function applyCandidates(candidates: RepairCandidate[]): Promise<{
     const episodeRows =
       episodeValues.length === 0
         ? []
-        : await transactionRows<{ id: number }>(tx, sql`
+        : await transactionRows<{ id: number }>(
+            tx,
+            sql`
             with moves(id, from_episode_id, to_episode_id, provider, provider_id) as (
               values ${sql.join(episodeValues, sql`, `)}
             )
@@ -957,10 +959,13 @@ async function applyCandidates(candidates: RepairCandidate[]): Promise<{
               and em.provider = moves.provider
               and em.provider_id = moves.provider_id
             returning em.id
-          `);
+          `,
+          );
 
     const legacyValues = parentTransferValues(candidates);
-    const legacyRows = await transactionRows<{ id: number }>(tx, sql`
+    const legacyRows = await transactionRows<{ id: number }>(
+      tx,
+      sql`
       with transfers(id, from_anime_id, to_anime_id, provider, provider_id) as (
         values ${sql.join(legacyValues, sql`, `)}
       )
@@ -982,10 +987,13 @@ async function applyCandidates(candidates: RepairCandidate[]): Promise<{
             and target.provider = transfers.provider
         )
       returning am.id
-    `);
+    `,
+    );
 
     const v2Values = v2TransferValues(candidates);
-    const v2Rows = await transactionRows<{ id: number }>(tx, sql`
+    const v2Rows = await transactionRows<{ id: number }>(
+      tx,
+      sql`
       with transfers(id, provider_entity_id, from_anime_id, to_anime_id, provider) as (
         values ${sql.join(v2Values, sql`, `)}
       )
@@ -1013,7 +1021,8 @@ async function applyCandidates(candidates: RepairCandidate[]): Promise<{
             and target_pe.provider = transfers.provider
         )
       returning apm.id
-    `);
+    `,
+    );
 
     if (episodeRows.length !== plannedEpisodeMoves) {
       throw new Error(

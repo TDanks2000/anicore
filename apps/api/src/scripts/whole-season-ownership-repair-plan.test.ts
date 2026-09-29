@@ -112,8 +112,7 @@ describe("planWholeSeasonOwnershipRepair", () => {
       mappedEpisodes: authoritative(12).map((episode) => ({
         providerEpisodeId: episode.providerEpisodeId,
         animeId: episode.providerEpisodeNumber === 1 ? 20 : 10,
-        localEpisodeNumber:
-          episode.providerEpisodeNumber === 5 ? 4 : episode.providerEpisodeNumber,
+        localEpisodeNumber: episode.providerEpisodeNumber === 5 ? 4 : episode.providerEpisodeNumber,
         localKind: "normal",
       })),
     });

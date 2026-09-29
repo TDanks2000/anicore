@@ -25,14 +25,10 @@ export function assertAnimeScheduleRouteCompatible(
   mappings: AnimeScheduleIdentity[],
   incomingRoute: string,
 ): void {
-  const conflicting = mappings.filter(
-    (mapping) => mapping.providerId !== incomingRoute,
-  );
+  const conflicting = mappings.filter((mapping) => mapping.providerId !== incomingRoute);
   if (!conflicting.length) return;
 
-  const ids = conflicting
-    .map((mapping) => `${mapping.providerId} (${mapping.source})`)
-    .join(", ");
+  const ids = conflicting.map((mapping) => `${mapping.providerId} (${mapping.source})`).join(", ");
   throw new Error(
     `Refusing to add AnimeSchedule route ${incomingRoute}: this anime already has a different AnimeSchedule identity (${ids})`,
   );

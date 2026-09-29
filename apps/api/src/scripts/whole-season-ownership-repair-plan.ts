@@ -62,12 +62,8 @@ export function planWholeSeasonOwnershipRepair(input: {
   const authoritative = [...authoritativeEpisodes].sort(
     (a, b) => a.providerEpisodeNumber - b.providerEpisodeNumber,
   );
-  const authoritativeNumbers = authoritative.map(
-    (episode) => episode.providerEpisodeNumber,
-  );
-  const authoritativeIds = new Set(
-    authoritative.map((episode) => episode.providerEpisodeId),
-  );
+  const authoritativeNumbers = authoritative.map((episode) => episode.providerEpisodeNumber);
+  const authoritativeIds = new Set(authoritative.map((episode) => episode.providerEpisodeId));
   if (
     authoritative.length === 0 ||
     !normalizedOneToN(authoritativeNumbers) ||
@@ -120,15 +116,11 @@ export function planWholeSeasonOwnershipRepair(input: {
   }
 
   const targetOwnedSet = new Set(targetOwnedNumbers);
-  const missingTargetNumbers = authoritativeNumbers.filter(
-    (number) => !targetOwnedSet.has(number),
-  );
+  const missingTargetNumbers = authoritativeNumbers.filter((number) => !targetOwnedSet.has(number));
   const sortedOwnerNumbers = [...ownerOwnedNumbers].sort((a, b) => a - b);
   if (
     missingTargetNumbers.length !== sortedOwnerNumbers.length ||
-    missingTargetNumbers.some(
-      (number, index) => number !== sortedOwnerNumbers[index],
-    )
+    missingTargetNumbers.some((number, index) => number !== sortedOwnerNumbers[index])
   ) {
     return { candidate: null, reason: "owner-does-not-fill-target-gaps" };
   }

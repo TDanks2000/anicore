@@ -1,14 +1,13 @@
-import { sql } from "drizzle-orm";
-
 import { closeDb } from "@anicore/db";
+import { sql } from "drizzle-orm";
 import { queryRows } from "../lib/query-rows";
 
 import {
   analyzeCollisionCoverageGroup,
   type CoverageDiagnosticRow,
   type CoverageGapPosition,
-  type CoverageProvider,
   type CoverageGroupDiagnostic,
+  type CoverageProvider,
 } from "./provider-collision-coverage-diagnostics";
 
 type Stat = { groups: number; episodeMappings: number };
@@ -80,8 +79,7 @@ function sample(diagnostic: CoverageGroupDiagnostic): DiagnosticSample {
         ? `${diagnostic.localEpisodeStart}-${diagnostic.localEpisodeEnd}`
         : null,
     providerRange:
-      diagnostic.providerEpisodeStart !== null &&
-      diagnostic.providerEpisodeEnd !== null
+      diagnostic.providerEpisodeStart !== null && diagnostic.providerEpisodeEnd !== null
         ? `${diagnostic.providerEpisodeStart}-${diagnostic.providerEpisodeEnd}`
         : null,
     offset: diagnostic.offset,
@@ -116,12 +114,15 @@ async function run() {
     "both-ends": emptyStat(),
     "internal-or-nonlinear": emptyStat(),
   };
-  const byProvider: Record<CoverageProvider, {
-    total: Stat;
-    partial: Stat;
-    partialLinear: Stat;
-    partialLinearNonZeroOffset: Stat;
-  }> = {
+  const byProvider: Record<
+    CoverageProvider,
+    {
+      total: Stat;
+      partial: Stat;
+      partialLinear: Stat;
+      partialLinearNonZeroOffset: Stat;
+    }
+  > = {
     thetvdb: {
       total: emptyStat(),
       partial: emptyStat(),
@@ -159,10 +160,7 @@ async function run() {
           addStat(partialLinearZeroOffset, count);
         } else {
           addStat(partialLinearNonZeroOffset, count);
-          addStat(
-            byProvider[diagnostic.provider].partialLinearNonZeroOffset,
-            count,
-          );
+          addStat(byProvider[diagnostic.provider].partialLinearNonZeroOffset, count);
         }
       }
       if (diagnostic.offset !== null) {
@@ -182,10 +180,7 @@ async function run() {
   }
 
   const partialLinearSamples = diagnostics
-    .filter(
-      (diagnostic) =>
-        !diagnostic.completeCoverage && diagnostic.evidenceBackedLinear,
-    )
+    .filter((diagnostic) => !diagnostic.completeCoverage && diagnostic.evidenceBackedLinear)
     .sort(
       (a, b) =>
         Number(b.offset !== 0) - Number(a.offset !== 0) ||

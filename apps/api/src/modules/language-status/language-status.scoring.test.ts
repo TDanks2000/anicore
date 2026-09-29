@@ -95,23 +95,20 @@ describe("language status scoring", () => {
 
   test("episode audio compatibility response is backed by language rows", () => {
     expect(
-      toLegacyEpisodeAudioResponse(
-        { id: 10 },
-        [
-          {
-            languageCode: "en",
-            mediaType: "audio",
-            status: "available",
-            provider: "manual",
-          },
-          {
-            languageCode: "en",
-            mediaType: "subtitle",
-            status: "available",
-            provider: "manual",
-          },
-        ],
-      ),
+      toLegacyEpisodeAudioResponse({ id: 10 }, [
+        {
+          languageCode: "en",
+          mediaType: "audio",
+          status: "available",
+          provider: "manual",
+        },
+        {
+          languageCode: "en",
+          mediaType: "subtitle",
+          status: "available",
+          provider: "manual",
+        },
+      ]),
     ).toEqual([
       {
         languageCode: "en",

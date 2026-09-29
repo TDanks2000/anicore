@@ -1,8 +1,5 @@
-import {
-  normalizeComparableTitle,
-  titleSimilarity,
-} from "../title-similarity";
-import { searchKitsuByTitle, type KitsuSearchNode } from "./client";
+import { normalizeComparableTitle, titleSimilarity } from "../title-similarity";
+import { type KitsuSearchNode, searchKitsuByTitle } from "./client";
 
 export interface MatchHints {
   anilistId?: string;
@@ -79,10 +76,7 @@ function parseIsoDate(value: string | null | undefined): number | null {
   return Number.isFinite(time) ? time : null;
 }
 
-function startDateDistanceDays(
-  node: KitsuSearchNode,
-  hints: MatchHints,
-): number | null {
+function startDateDistanceDays(node: KitsuSearchNode, hints: MatchHints): number | null {
   const hintTime = parseIsoDate(hints.startDate);
   const nodeTime = parseIsoDate(node.startDate);
   if (hintTime === null || nodeTime === null) return null;
@@ -113,10 +107,7 @@ export function isAuthoritativeAnilistMatch(
   return Boolean(anilistId && anilistMappingsFor(node).includes(anilistId));
 }
 
-export function isAuthoritativeMalMatch(
-  node: KitsuSearchNode,
-  malId: string | undefined,
-): boolean {
+export function isAuthoritativeMalMatch(node: KitsuSearchNode, malId: string | undefined): boolean {
   return Boolean(malId && malMappingsFor(node).includes(malId));
 }
 
@@ -129,19 +120,13 @@ export function isAuthoritativeMalMatch(
  * roughly two-and-a-half times as often as an AniList one, so consulting both
  * converts a large slice of guesses into certainties at no extra request cost.
  */
-export function isAuthoritativeMatch(
-  node: KitsuSearchNode,
-  hints: MatchHints,
-): boolean {
+export function isAuthoritativeMatch(node: KitsuSearchNode, hints: MatchHints): boolean {
   return (
-    isAuthoritativeAnilistMatch(node, hints.anilistId) ||
-    isAuthoritativeMalMatch(node, hints.malId)
+    isAuthoritativeAnilistMatch(node, hints.anilistId) || isAuthoritativeMalMatch(node, hints.malId)
   );
 }
 
-export function kitsuSearchTitles(
-  hints: MatchHints,
-): { primary: string[]; fallback: string[] } {
+export function kitsuSearchTitles(hints: MatchHints): { primary: string[]; fallback: string[] } {
   const seen = new Set<string>();
   const unique = (values: Array<string | null | undefined>): string[] => {
     const result: string[] = [];
@@ -157,10 +142,10 @@ export function kitsuSearchTitles(
   };
 
   const primary = unique([hints.titleRomaji, hints.titleEnglish]);
-  const fallback = unique([
-    hints.titleNative,
-    ...(hints.synonyms ?? []),
-  ]).slice(0, MAX_FALLBACK_SEARCH_TITLES);
+  const fallback = unique([hints.titleNative, ...(hints.synonyms ?? [])]).slice(
+    0,
+    MAX_FALLBACK_SEARCH_TITLES,
+  );
 
   return { primary, fallback };
 }
@@ -175,8 +160,8 @@ export function kitsuNodeTitles(node: KitsuSearchNode): string[] {
  * evidence and are never discounted.
  */
 function kitsuPrimaryTitles(node: KitsuSearchNode): string[] {
-  return [node.titles?.romanized, node.titles?.translated].filter(
-    (title): title is string => Boolean(title),
+  return [node.titles?.romanized, node.titles?.translated].filter((title): title is string =>
+    Boolean(title),
   );
 }
 
@@ -221,10 +206,7 @@ function bestTitleSimilarity(
   return best;
 }
 
-export function hasKitsuStructuralConflict(
-  node: KitsuSearchNode,
-  hints: MatchHints,
-): boolean {
+export function hasKitsuStructuralConflict(node: KitsuSearchNode, hints: MatchHints): boolean {
   const hintFormat = hints.format?.trim().toUpperCase();
   const nodeFormat = node.subtype?.trim().toUpperCase();
   const hintIsMovie = hintFormat === "MOVIE";
@@ -243,9 +225,7 @@ export function hasKitsuStructuralConflict(
     return true;
   }
 
-  const nodeYear = node.startDate
-    ? Number(node.startDate.trim().split("-")[0])
-    : null;
+  const nodeYear = node.startDate ? Number(node.startDate.trim().split("-")[0]) : null;
 
   if (
     hints.seasonYear &&
@@ -272,16 +252,10 @@ export function hasKitsuStructuralConflict(
     node.episodeCount > 0
   ) {
     const ratio = node.episodeCount / hints.episodeCount;
-    if (
-      hints.episodeCount >= 8 &&
-      (ratio < 0.75 || ratio > 1.35)
-    ) {
+    if (hints.episodeCount >= 8 && (ratio < 0.75 || ratio > 1.35)) {
       return true;
     }
-    if (
-      hints.episodeCount >= 3 &&
-      (ratio < 0.5 || ratio > 1.75)
-    ) {
+    if (hints.episodeCount >= 3 && (ratio < 0.5 || ratio > 1.75)) {
       return true;
     }
   }
@@ -345,18 +319,13 @@ export function scoreKitsuCandidate(
 
   if (hasFormatAgreement(node, hints)) score += FORMAT_AGREEMENT_SCORE;
 
-  const nodeYear = node.startDate
-    ? parseInt(node.startDate.trim().split("-")[0]!, 10)
-    : null;
+  const nodeYear = node.startDate ? parseInt(node.startDate.trim().split("-")[0]!, 10) : null;
 
   if (hints.seasonYear && nodeYear) {
     if (nodeYear === hints.seasonYear) score += 30;
     else if (Math.abs(nodeYear - hints.seasonYear) === 1) score += 8;
   }
-  if (
-    hints.season &&
-    node.season?.toUpperCase() === hints.season.toUpperCase()
-  ) {
+  if (hints.season && node.season?.toUpperCase() === hints.season.toUpperCase()) {
     score += 20;
   }
   if (hints.episodeCount && node.episodeCount) {
@@ -385,9 +354,7 @@ export function scoreKitsuCandidate(
  * series and merely an alternative title on its specials, so discounting it
  * everywhere would erase the correct record's only evidence.
  */
-export function sharedCandidateTitles(
-  nodes: KitsuSearchNode[],
-): ReadonlySet<string> {
+export function sharedCandidateTitles(nodes: KitsuSearchNode[]): ReadonlySet<string> {
   const counts = new Map<string, number>();
 
   for (const node of nodes) {
@@ -419,9 +386,7 @@ export function scoreKitsuCandidates(
   }));
 }
 
-export function selectKitsuMatch(
-  candidates: ScoredKitsuCandidate[],
-): KitsuSearchNode | null {
+export function selectKitsuMatch(candidates: ScoredKitsuCandidate[]): KitsuSearchNode | null {
   const ranked = [...candidates].sort((a, b) => b.score - a.score);
   const best = ranked[0];
   if (!best || best.score < MATCH_THRESHOLD) return null;
@@ -438,25 +403,17 @@ export function selectKitsuMatch(
   return best.node;
 }
 
-async function searchAndScore(
-  title: string,
-  hints: MatchHints,
-): Promise<KitsuSearchNode[]> {
+async function searchAndScore(title: string, _hints: MatchHints): Promise<KitsuSearchNode[]> {
   return searchKitsuByTitle(title);
 }
 
-function addCandidates(
-  nodesById: Map<string, KitsuSearchNode>,
-  nodes: KitsuSearchNode[],
-): void {
+function addCandidates(nodesById: Map<string, KitsuSearchNode>, nodes: KitsuSearchNode[]): void {
   for (const node of nodes) {
     if (!nodesById.has(node.id)) nodesById.set(node.id, node);
   }
 }
 
-export async function findKitsuMatch(
-  hints: MatchHints,
-): Promise<KitsuSearchNode | null> {
+export async function findKitsuMatch(hints: MatchHints): Promise<KitsuSearchNode | null> {
   const searchTitles = kitsuSearchTitles(hints);
   const nodesById = new Map<string, KitsuSearchNode>();
 
@@ -466,9 +423,7 @@ export async function findKitsuMatch(
 
   // Scoring runs over the whole accumulated candidate set rather than per
   // search, so titles shared across candidates can be recognised and discounted.
-  const primaryMatch = selectKitsuMatch(
-    scoreKitsuCandidates([...nodesById.values()], hints),
-  );
+  const primaryMatch = selectKitsuMatch(scoreKitsuCandidates([...nodesById.values()], hints));
   if (primaryMatch) return primaryMatch;
 
   // Native titles and AniList synonyms are fallback discovery keys only. Bound

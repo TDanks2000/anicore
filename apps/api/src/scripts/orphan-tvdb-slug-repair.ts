@@ -1,13 +1,11 @@
 import {
-  isWeakAutomaticOrphanEpisodeMapping,
   type ExistingProviderIdentity,
+  isWeakAutomaticOrphanEpisodeMapping,
   type OrphanEpisodeMappingRow,
 } from "./orphan-episode-parent-repair";
 
 export interface TvdbSlugEpisodeEvidence {
-  seriesRef:
-    | { kind: "slug"; slug: string }
-    | { kind: "id"; seriesId: number };
+  seriesRef: { kind: "slug"; slug: string } | { kind: "id"; seriesId: number };
   seasonNumber: number;
   providerEpisodeId: number;
   providerEpisodeNumber: number;
@@ -152,12 +150,16 @@ export function buildTvdbSlugResolutionGroups(
 
     const validEvidence = evidence as TvdbSlugEpisodeEvidence[];
     const slugEvidence = validEvidence.filter(
-      (item): item is TvdbSlugEpisodeEvidence & {
+      (
+        item,
+      ): item is TvdbSlugEpisodeEvidence & {
         seriesRef: { kind: "slug"; slug: string };
       } => item.seriesRef.kind === "slug",
     );
     const numericEvidence = validEvidence.filter(
-      (item): item is TvdbSlugEpisodeEvidence & {
+      (
+        item,
+      ): item is TvdbSlugEpisodeEvidence & {
         seriesRef: { kind: "id"; seriesId: number };
       } => item.seriesRef.kind === "id",
     );
@@ -189,9 +191,7 @@ export function buildTvdbSlugResolutionGroups(
       seasonNumber: first.seasonNumber,
       expectedSeriesIds,
       confidence: Math.min(85, ...rows.map((row) => row.confidence)),
-      episodeMappingIds: rows
-        .map((row) => row.episodeMappingId)
-        .sort((a, b) => a - b),
+      episodeMappingIds: rows.map((row) => row.episodeMappingId).sort((a, b) => a - b),
       episodes: validEvidence
         .map((item) => ({
           providerEpisodeId: item.providerEpisodeId,
@@ -249,8 +249,7 @@ export function verifyResolvedTvdbSlugGroup(
 
   if (
     !group.episodes.every(
-      (expected) =>
-        byId.get(expected.providerEpisodeId) === expected.providerEpisodeNumber,
+      (expected) => byId.get(expected.providerEpisodeId) === expected.providerEpisodeNumber,
     )
   ) {
     return null;
@@ -298,9 +297,7 @@ export function filterTvdbSlugCandidateCollisions(
     const key = identityKey(candidate.provider, candidate.providerId);
     const existing = existingOwners.get(key);
     const planned = plannedOwners.get(key);
-    const collides = Boolean(
-      (existing && existing.size > 0) || (planned && planned.size > 1),
-    );
+    const collides = Boolean((existing && existing.size > 0) || (planned && planned.size > 1));
 
     if (collides) {
       skippedCollisionGroups += 1;

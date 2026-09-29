@@ -24,9 +24,7 @@ describe("provider season airdate verification", () => {
       providerFirstAirDate: "2019-01-01",
     });
     expect(inside.ok).toBe(true);
-    expect(inside.startDateDeltaDays).toBeLessThanOrEqual(
-      MAX_PROVIDER_START_DATE_DELTA_DAYS,
-    );
+    expect(inside.startDateDeltaDays).toBeLessThanOrEqual(MAX_PROVIDER_START_DATE_DELTA_DAYS);
 
     const remake = verifyProviderSeasonAirdate({
       targetStartDate: "1966-10-04",
@@ -54,13 +52,7 @@ describe("provider season airdate verification", () => {
 
   test("selects the earliest valid provider episode airdate", () => {
     expect(
-      earliestProviderAirDate([
-        null,
-        "2018-10-20",
-        "invalid",
-        "2018-10-06",
-        "2018-10-13",
-      ]),
+      earliestProviderAirDate([null, "2018-10-20", "invalid", "2018-10-06", "2018-10-13"]),
     ).toBe("2018-10-06");
   });
 });

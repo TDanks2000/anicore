@@ -1,18 +1,17 @@
 import {
-  mkdirSync,
-  existsSync,
-  statSync,
   appendFileSync,
-  readFileSync,
-  writeFileSync,
-  unlinkSync,
+  existsSync,
+  mkdirSync,
   readdirSync,
+  readFileSync,
   renameSync,
+  statSync,
+  unlinkSync,
   utimesSync,
+  writeFileSync,
 } from "node:fs";
-
-import { log } from "./logger";
 import { formatHttpError } from "./http";
+import { log } from "./logger";
 
 const CACHE_DIR = "data/cache";
 const IDS_FILE = `${CACHE_DIR}/anilist_ids.txt`;
@@ -34,7 +33,7 @@ function parseIdText(text: string): number[] {
     .map((l) => l.trim())
     .filter(Boolean)
     .map(Number)
-    .filter((n) => !isNaN(n) && n > 0);
+    .filter((n) => !Number.isNaN(n) && n > 0);
 }
 
 function uniqueSortedIds(ids: number[]): number[] {
@@ -50,9 +49,7 @@ function serializeIds(ids: number[]): string {
 export async function loadIds(forceRefresh = false): Promise<number[]> {
   ensureCacheDir();
 
-  const stale =
-    !existsSync(IDS_FILE) ||
-    Date.now() - statSync(IDS_FILE).mtimeMs > IDS_CACHE_TTL_MS;
+  const stale = !existsSync(IDS_FILE) || Date.now() - statSync(IDS_FILE).mtimeMs > IDS_CACHE_TTL_MS;
 
   if (forceRefresh || stale) {
     log.info("Downloading AniList ID list…");
@@ -107,9 +104,7 @@ export function appendAnilistId(id: number): boolean {
   }
 
   ensureCacheDir();
-  const existingIds = existsSync(IDS_FILE)
-    ? parseIdText(readFileSync(IDS_FILE, "utf-8"))
-    : [];
+  const existingIds = existsSync(IDS_FILE) ? parseIdText(readFileSync(IDS_FILE, "utf-8")) : [];
 
   if (existingIds.includes(id)) return false;
 
@@ -263,8 +258,7 @@ export function loadUnmatched(provider: string, nowMs = Date.now()): Set<number>
 
   const activeEntries = [...latestById.values()]
     .filter(
-      (entry) =>
-        entry.recordedAt <= nowMs && nowMs - entry.recordedAt <= UNMATCHED_CACHE_TTL_MS,
+      (entry) => entry.recordedAt <= nowMs && nowMs - entry.recordedAt <= UNMATCHED_CACHE_TTL_MS,
     )
     .sort((a, b) => a.id - b.id);
 
@@ -277,11 +271,7 @@ export function loadUnmatched(provider: string, nowMs = Date.now()): Set<number>
   return new Set(activeEntries.map((entry) => entry.id));
 }
 
-export function appendUnmatched(
-  provider: string,
-  id: number,
-  recordedAt = Date.now(),
-): void {
+export function appendUnmatched(provider: string, id: number, recordedAt = Date.now()): void {
   if (!Number.isInteger(id) || id <= 0) {
     throw new Error(`Invalid unmatched AniList ID: ${id}`);
   }

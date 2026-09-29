@@ -1,6 +1,6 @@
 export interface DerivedAirdateLanguageAssertion {
-	languageCode: string;
-	mediaType: "audio" | "subtitle";
+  languageCode: string;
+  mediaType: "audio" | "subtitle";
 }
 
 /**
@@ -9,9 +9,9 @@ export interface DerivedAirdateLanguageAssertion {
  * assertion, but it is not evidence that an English subtitle track exists.
  */
 export function derivedAirdateLanguageAssertions(
-	countryOfOrigin: string | null | undefined,
+  countryOfOrigin: string | null | undefined,
 ): DerivedAirdateLanguageAssertion[] {
-	return countryOfOrigin?.trim().toUpperCase() === "JP"
-		? [{ languageCode: "ja", mediaType: "audio" }]
-		: [];
+  return countryOfOrigin?.trim().toUpperCase() === "JP"
+    ? [{ languageCode: "ja", mediaType: "audio" }]
+    : [];
 }

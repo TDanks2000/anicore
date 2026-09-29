@@ -4,9 +4,9 @@ import {
   localSegmentsOverlap,
   mapLocalEpisodeToProvider,
   mapProviderEpisodeToLocal,
+  type ProviderEpisodeSegment,
   providerSegmentsOverlap,
   validateProviderEpisodeSegment,
-  type ProviderEpisodeSegment,
 } from "./provider-segments";
 
 const splitCour: ProviderEpisodeSegment = {

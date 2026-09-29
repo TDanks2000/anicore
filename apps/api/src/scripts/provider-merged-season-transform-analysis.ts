@@ -50,11 +50,7 @@ export function analyzeObservedSegmentTransform(input: {
   metadataEpisodeCount: number | null;
 }): ObservedSegmentTransformAnalysis {
   const metadataCount = input.metadataEpisodeCount;
-  if (
-    typeof metadataCount !== "number" ||
-    !Number.isInteger(metadataCount) ||
-    metadataCount <= 0
-  ) {
+  if (typeof metadataCount !== "number" || !Number.isInteger(metadataCount) || metadataCount <= 0) {
     return { transform: null, reason: "invalid-metadata-count" };
   }
 
@@ -114,9 +110,7 @@ export function analyzeObservedSegmentTransform(input: {
 
   const offset = observedPairs[0]!.providerEpisodeNumber - observedPairs[0]!.localEpisodeNumber;
   if (
-    !observedPairs.every(
-      (pair) => pair.providerEpisodeNumber - pair.localEpisodeNumber === offset,
-    )
+    !observedPairs.every((pair) => pair.providerEpisodeNumber - pair.localEpisodeNumber === offset)
   ) {
     return { transform: null, reason: "non-linear-observed-transform" };
   }

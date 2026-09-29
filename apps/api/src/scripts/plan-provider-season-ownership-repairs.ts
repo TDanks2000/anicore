@@ -1,8 +1,4 @@
-import { TMDB } from "@api-wrappers/tmdb-wrapper";
-import { sql } from "drizzle-orm";
-
 import { closeDb } from "@anicore/db";
-import { queryRows } from "../lib/query-rows";
 import {
   getTvdbSeasonEpisodes,
   getTvdbSeriesBySlug,
@@ -10,11 +6,14 @@ import {
   type TvdbEpisodeBase,
   type TvdbSeriesBaseRecord,
 } from "@anicore/providers/thetvdb/client";
+import { TMDB } from "@api-wrappers/tmdb-wrapper";
+import { sql } from "drizzle-orm";
+import { queryRows } from "../lib/query-rows";
 
 import {
   buildTvdbSlugResolutionGroups,
-  verifyResolvedTvdbSlugGroup,
   type TvdbSlugResolutionGroup,
+  verifyResolvedTvdbSlugGroup,
 } from "./orphan-tvdb-slug-repair";
 import {
   buildTmdbResolvedCollisionGroups,
@@ -22,9 +21,9 @@ import {
   type ResolvedCollisionGroup,
 } from "./provider-collision-segment-plan";
 import {
-  verifyProviderSeasonIdentity,
   type ProviderSeasonIdentityRejectReason,
   type ProviderSeasonIdentityResult,
+  verifyProviderSeasonIdentity,
 } from "./provider-season-identity-verification";
 import {
   planWholeSeasonOwnershipRepair,
@@ -247,9 +246,7 @@ async function mapWithConcurrency<T, R>(
       results[index] = await mapper(items[index]!);
     }
   };
-  await Promise.all(
-    Array.from({ length: Math.min(concurrency, items.length) }, () => worker()),
-  );
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => worker()));
   return results;
 }
 
@@ -258,9 +255,7 @@ function isTvdbNotFoundError(error: unknown): boolean {
   return /TVDB request failed:\s*404(?:\s|:|$)/i.test(message);
 }
 
-function tvdbAuthoritativeEpisodes(
-  episodes: TvdbEpisodeBase[],
-): WholeSeasonAuthoritativeEpisode[] {
+function tvdbAuthoritativeEpisodes(episodes: TvdbEpisodeBase[]): WholeSeasonAuthoritativeEpisode[] {
   return episodes
     .filter(
       (episode) =>
@@ -364,10 +359,7 @@ async function run(): Promise<Record<string, unknown>> {
     throw new Error("TMDB_API_KEY is required for provider ownership repair planning");
   }
 
-  const authoritativeCache = new Map<
-    string,
-    Promise<WholeSeasonAuthoritativeEpisode[]>
-  >();
+  const authoritativeCache = new Map<string, Promise<WholeSeasonAuthoritativeEpisode[]>>();
   const tmdbPlan = buildTmdbResolvedCollisionGroups(orphanRows);
   const tvdbGroups = await resolveTvdbGroups(orphanRows, authoritativeCache);
   const resolvedGroups = [...tmdbPlan.groups, ...tvdbGroups];

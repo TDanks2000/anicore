@@ -1,9 +1,9 @@
 import { db } from "@anicore/db";
 import {
   anime,
-  animeMappings,
   animeLanguageEvidence,
   animeLanguageStatus,
+  animeMappings,
   episodeLanguageStatus,
   episodeMappings,
   episodes,
@@ -109,8 +109,7 @@ const createdEpisodes = await db
       absoluteNumber: 2,
       title: "Stray Dog Strut",
       titleEnglish: "Stray Dog Strut",
-      synopsis:
-        "Spike and Jet chase a thief who has stolen a highly valuable data dog.",
+      synopsis: "Spike and Jet chase a thief who has stolen a highly valuable data dog.",
       airDate: "1998-04-10",
       lengthMinutes: 24,
       kind: "normal",

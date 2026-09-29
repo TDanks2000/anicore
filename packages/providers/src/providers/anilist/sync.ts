@@ -1,7 +1,7 @@
 import { upsertAnimeFromProvider } from "../index";
+import type { ProviderAnimeData, ProviderRelation } from "../types";
 import { anilistClient } from "./client";
 import { mapAnilistAnime } from "./mapper";
-import type { ProviderAnimeData, ProviderRelation } from "../types";
 
 /** Fetch + map an AniList entry without touching the database. */
 export async function fetchAnilistAnime(id: number): Promise<ProviderAnimeData> {

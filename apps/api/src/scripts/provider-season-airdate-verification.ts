@@ -34,9 +34,7 @@ function parseIsoDate(value: string | null | undefined): number | null {
   return timestamp;
 }
 
-export function earliestProviderAirDate(
-  values: Array<string | null | undefined>,
-): string | null {
+export function earliestProviderAirDate(values: Array<string | null | undefined>): string | null {
   let earliest: { value: string; timestamp: number } | null = null;
   for (const value of values) {
     const trimmed = value?.trim();

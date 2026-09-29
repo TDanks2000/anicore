@@ -6,9 +6,7 @@ function authoritative(count: number, start = "2020-01-01") {
   const base = Date.parse(`${start}T00:00:00Z`);
   return Array.from({ length: count }, (_, index) => ({
     providerEpisodeNumber: index + 1,
-    airDate: new Date(base + index * 7 * 24 * 60 * 60 * 1000)
-      .toISOString()
-      .slice(0, 10),
+    airDate: new Date(base + index * 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
   }));
 }
 

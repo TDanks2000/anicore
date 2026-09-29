@@ -7,9 +7,7 @@ import {
   type OrphanEpisodeMappingRow,
 } from "./orphan-episode-parent-repair";
 
-function row(
-  overrides: Partial<OrphanEpisodeMappingRow> = {},
-): OrphanEpisodeMappingRow {
+function row(overrides: Partial<OrphanEpisodeMappingRow> = {}): OrphanEpisodeMappingRow {
   return {
     episodeMappingId: 1,
     animeId: 10,
@@ -28,15 +26,13 @@ function row(
 describe("orphan episode parent evidence", () => {
   test("recognizes only weak automatic provenance", () => {
     expect(isWeakAutomaticOrphanEpisodeMapping(row())).toBe(true);
-    expect(
-      isWeakAutomaticOrphanEpisodeMapping(row({ source: "fuzzy", confidence: 80 })),
-    ).toBe(true);
-    expect(
-      isWeakAutomaticOrphanEpisodeMapping(row({ source: "api", confidence: 90 })),
-    ).toBe(false);
-    expect(
-      isWeakAutomaticOrphanEpisodeMapping(row({ source: "manual", confidence: 85 })),
-    ).toBe(false);
+    expect(isWeakAutomaticOrphanEpisodeMapping(row({ source: "fuzzy", confidence: 80 }))).toBe(
+      true,
+    );
+    expect(isWeakAutomaticOrphanEpisodeMapping(row({ source: "api", confidence: 90 }))).toBe(false);
+    expect(isWeakAutomaticOrphanEpisodeMapping(row({ source: "manual", confidence: 85 }))).toBe(
+      false,
+    );
   });
 
   test("derives TMDB show and season from the stored episode URL", () => {
@@ -47,12 +43,8 @@ describe("orphan episode parent evidence", () => {
   });
 
   test("requires TMDB URL episode number and canonical season to agree", () => {
-    expect(
-      deriveOrphanParentEvidence(row({ providerEpisodeNumber: "4" })),
-    ).toBeNull();
-    expect(
-      deriveOrphanParentEvidence(row({ episodeSeasonNumber: 1 })),
-    ).toBeNull();
+    expect(deriveOrphanParentEvidence(row({ providerEpisodeNumber: "4" }))).toBeNull();
+    expect(deriveOrphanParentEvidence(row({ episodeSeasonNumber: 1 }))).toBeNull();
   });
 
   test("derives numeric TVDB series and canonical season", () => {
@@ -128,10 +120,7 @@ describe("orphan parent repair plan", () => {
   });
 
   test("skips incomplete or conflicting parent evidence", () => {
-    const incomplete = buildOrphanParentRepairPlan(
-      [row({ providerUrl: null })],
-      [],
-    );
+    const incomplete = buildOrphanParentRepairPlan([row({ providerUrl: null })], []);
     expect(incomplete.skipped.incompleteParentEvidence.groups).toBe(1);
 
     const conflicting = buildOrphanParentRepairPlan(
@@ -150,9 +139,10 @@ describe("orphan parent repair plan", () => {
   });
 
   test("skips a provider identity already owned by another anime", () => {
-    const plan = buildOrphanParentRepairPlan([row()], [
-      { animeId: 999, provider: "tmdb", providerId: "123:2" },
-    ]);
+    const plan = buildOrphanParentRepairPlan(
+      [row()],
+      [{ animeId: 999, provider: "tmdb", providerId: "123:2" }],
+    );
 
     expect(plan.candidates).toHaveLength(0);
     expect(plan.skipped.providerIdentityCollision).toEqual({
@@ -175,10 +165,7 @@ describe("orphan parent repair plan", () => {
   });
 
   test("reports unsupported orphan providers without modifying them", () => {
-    const plan = buildOrphanParentRepairPlan(
-      [row({ provider: "kitsu", providerUrl: null })],
-      [],
-    );
+    const plan = buildOrphanParentRepairPlan([row({ provider: "kitsu", providerUrl: null })], []);
 
     expect(plan.candidates).toHaveLength(0);
     expect(plan.skipped.unsupportedProvider).toEqual({

@@ -55,10 +55,7 @@ export function mapProviderEpisodeToLocal(
   ) {
     return null;
   }
-  return (
-    segment.localEpisodeStart +
-    (providerEpisodeNumber - segment.providerEpisodeStart)
-  );
+  return segment.localEpisodeStart + (providerEpisodeNumber - segment.providerEpisodeStart);
 }
 
 export function mapLocalEpisodeToProvider(
@@ -73,20 +70,14 @@ export function mapLocalEpisodeToProvider(
   ) {
     return null;
   }
-  return (
-    segment.providerEpisodeStart +
-    (localEpisodeNumber - segment.localEpisodeStart)
-  );
+  return segment.providerEpisodeStart + (localEpisodeNumber - segment.localEpisodeStart);
 }
 
 export function providerSegmentsOverlap(
   left: ProviderEpisodeSegment,
   right: ProviderEpisodeSegment,
 ): boolean {
-  if (
-    !validateProviderEpisodeSegment(left).ok ||
-    !validateProviderEpisodeSegment(right).ok
-  ) {
+  if (!validateProviderEpisodeSegment(left).ok || !validateProviderEpisodeSegment(right).ok) {
     return false;
   }
   return (
@@ -99,10 +90,7 @@ export function localSegmentsOverlap(
   left: ProviderEpisodeSegment,
   right: ProviderEpisodeSegment,
 ): boolean {
-  if (
-    !validateProviderEpisodeSegment(left).ok ||
-    !validateProviderEpisodeSegment(right).ok
-  ) {
+  if (!validateProviderEpisodeSegment(left).ok || !validateProviderEpisodeSegment(right).ok) {
     return false;
   }
   return (

@@ -40,10 +40,7 @@ export function parseAuditReportOutput(output: string): ValidAuditReport | null 
   return report as ValidAuditReport;
 }
 
-export async function writeAuditReport(
-  outputPath: string,
-  output: string,
-): Promise<boolean> {
+export async function writeAuditReport(outputPath: string, output: string): Promise<boolean> {
   const report = parseAuditReportOutput(output.trim());
   if (!report) return false;
 
@@ -56,10 +53,7 @@ function resolveOutputPath(value: string, repoRoot: string): string {
   return isAbsolute(value) ? value : resolve(repoRoot, value);
 }
 
-export function parseAuditCommandArgs(
-  args: string[],
-  repoRoot = REPO_ROOT,
-): AuditCommandOptions {
+export function parseAuditCommandArgs(args: string[], repoRoot = REPO_ROOT): AuditCommandOptions {
   const auditArgs: string[] = [];
   let writePath: string | null = null;
 
@@ -98,11 +92,7 @@ async function readStream(stream: ReadableStream<Uint8Array>): Promise<string> {
 
 async function main(): Promise<void> {
   const { auditArgs, writePath } = parseAuditCommandArgs(Bun.argv.slice(2));
-  const command = [
-    process.execPath,
-    resolve(import.meta.dir, "audit-mappings.ts"),
-    ...auditArgs,
-  ];
+  const command = [process.execPath, resolve(import.meta.dir, "audit-mappings.ts"), ...auditArgs];
 
   if (!writePath) {
     const child = Bun.spawn(command, {
@@ -142,9 +132,7 @@ async function main(): Promise<void> {
 
   try {
     if (!(await writeAuditReport(writePath, reportOutput))) {
-      console.error(
-        "Mapping audit produced invalid report output; no report file was written.",
-      );
+      console.error("Mapping audit produced invalid report output; no report file was written.");
       process.exitCode = 1;
       return;
     }

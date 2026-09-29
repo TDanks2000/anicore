@@ -5,6 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./enums": "./src/enums.ts",
+    "./errors": "./src/errors.ts",
     "./schema": "./src/schema.ts",
     "./provider-mapping-schema": "./src/provider-mapping-schema.ts",
     "./provider-segments": "./src/provider-segments.ts",

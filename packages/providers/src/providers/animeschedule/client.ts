@@ -100,17 +100,11 @@ export function parseKitsuReference(url: string | undefined): KitsuReference {
     : { kitsuId: null, kitsuSlug: value };
 }
 
-export async function fetchByRoute(
-  route: string,
-): Promise<AnimeScheduleEntry | null> {
-  return fetchJson<AnimeScheduleEntry>(
-    `${BASE}/anime/${encodeURIComponent(route)}`,
-  );
+export async function fetchByRoute(route: string): Promise<AnimeScheduleEntry | null> {
+  return fetchJson<AnimeScheduleEntry>(`${BASE}/anime/${encodeURIComponent(route)}`);
 }
 
-export async function searchByTitle(
-  title: string,
-): Promise<AnimeScheduleEntry[]> {
+export async function searchByTitle(title: string): Promise<AnimeScheduleEntry[]> {
   const data = await fetchJson<AnimeScheduleSearchResult>(
     `${BASE}/anime?q=${encodeURIComponent(title)}`,
   );

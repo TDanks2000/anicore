@@ -1,7 +1,7 @@
 import {
   deriveOrphanParentEvidence,
-  isWeakAutomaticOrphanEpisodeMapping,
   type ExistingProviderIdentity,
+  isWeakAutomaticOrphanEpisodeMapping,
   type OrphanEpisodeMappingRow,
 } from "./orphan-episode-parent-repair";
 
@@ -73,15 +73,11 @@ export interface OrphanParentRepairDiagnostics {
     confidence: number;
     episodeMappings: number;
   }>;
-  incompleteEvidenceReasons: Partial<
-    Record<OrphanEvidenceFailureReason, EvidenceFailureCount>
-  >;
+  incompleteEvidenceReasons: Partial<Record<OrphanEvidenceFailureReason, EvidenceFailureCount>>;
   categories: Record<OrphanDiagnosticCategory, OrphanCategoryDiagnostic>;
 }
 
-type ParentEvidence = NonNullable<
-  ReturnType<typeof deriveOrphanParentEvidence>
->;
+type ParentEvidence = NonNullable<ReturnType<typeof deriveOrphanParentEvidence>>;
 
 function parsePositiveInteger(value: string | number | null): number | null {
   if (value === null) return null;
@@ -92,17 +88,16 @@ function parsePositiveInteger(value: string | number | null): number | null {
 function parseHttpUrl(value: string): URL | null {
   try {
     const parsed = new URL(value);
-    return parsed.protocol === "https:" || parsed.protocol === "http:"
-      ? parsed
-      : null;
+    return parsed.protocol === "https:" || parsed.protocol === "http:" ? parsed : null;
   } catch {
     return null;
   }
 }
 
-export function diagnoseOrphanParentEvidence(
-  row: OrphanEpisodeMappingRow,
-): { evidence: ParentEvidence | null; reason: OrphanEvidenceFailureReason | null } {
+export function diagnoseOrphanParentEvidence(row: OrphanEpisodeMappingRow): {
+  evidence: ParentEvidence | null;
+  reason: OrphanEvidenceFailureReason | null;
+} {
   const seasonNumber = parsePositiveInteger(row.episodeSeasonNumber);
   if (!seasonNumber) {
     return { evidence: null, reason: "missing-season-number" };
@@ -124,12 +119,7 @@ export function diagnoseOrphanParentEvidence(
     if (host !== "themoviedb.org" && host !== "www.themoviedb.org") {
       return { evidence: null, reason: "unsupported-url-host" };
     }
-    if (
-      path.length !== 6 ||
-      path[0] !== "tv" ||
-      path[2] !== "season" ||
-      path[4] !== "episode"
-    ) {
+    if (path.length !== 6 || path[0] !== "tv" || path[2] !== "season" || path[4] !== "episode") {
       return { evidence: null, reason: "unsupported-url-path" };
     }
 
@@ -140,9 +130,7 @@ export function diagnoseOrphanParentEvidence(
       return { evidence: null, reason: "invalid-provider-identity" };
     }
 
-    const providerEpisodeNumber = parsePositiveInteger(
-      row.providerEpisodeNumber,
-    );
+    const providerEpisodeNumber = parsePositiveInteger(row.providerEpisodeNumber);
     if (!providerEpisodeNumber) {
       return { evidence: null, reason: "missing-provider-episode-number" };
     }
@@ -156,11 +144,7 @@ export function diagnoseOrphanParentEvidence(
     if (host !== "thetvdb.com" && host !== "www.thetvdb.com") {
       return { evidence: null, reason: "unsupported-url-host" };
     }
-    if (
-      path.length !== 4 ||
-      path[0] !== "series" ||
-      path[2] !== "episodes"
-    ) {
+    if (path.length !== 4 || path[0] !== "series" || path[2] !== "episodes") {
       return { evidence: null, reason: "unsupported-url-path" };
     }
 
@@ -213,13 +197,11 @@ function recordCategory(
     sourceConfidenceSignatures: [
       ...new Set(rows.map((row) => `${row.source}/${row.confidence}`)),
     ].sort(),
-    seasonNumbers: [
-      ...new Set(rows.map((row) => row.episodeSeasonNumber)),
-    ].sort((a, b) => (a ?? -1) - (b ?? -1)),
+    seasonNumbers: [...new Set(rows.map((row) => row.episodeSeasonNumber))].sort(
+      (a, b) => (a ?? -1) - (b ?? -1),
+    ),
     providerUrlCount: rows.filter((row) => Boolean(row.providerUrl)).length,
-    providerEpisodeNumberCount: rows.filter((row) =>
-      Boolean(row.providerEpisodeNumber),
-    ).length,
+    providerEpisodeNumberCount: rows.filter((row) => Boolean(row.providerEpisodeNumber)).length,
     derivedParentIds: [...new Set(derivedParentIds)].sort(),
     evidenceFailureReasons: [...new Set(evidenceFailureReasons)].sort(),
   });
@@ -288,7 +270,9 @@ export function buildOrphanParentRepairDiagnostics(
 
     const diagnoses = rows.map(diagnoseOrphanParentEvidence);
     const failures = diagnoses.filter(
-      (diagnosis): diagnosis is {
+      (
+        diagnosis,
+      ): diagnosis is {
         evidence: null;
         reason: OrphanEvidenceFailureReason;
       } => diagnosis.evidence === null && diagnosis.reason !== null,
@@ -330,25 +314,12 @@ export function buildOrphanParentRepairDiagnostics(
     const key = identityKey(first.provider, group.parentId);
     const existing = existingOwners.get(key);
     const plannedOwners = candidateOwners.get(key);
-    if (
-      (existing && existing.size > 0) ||
-      (plannedOwners && plannedOwners.size > 1)
-    ) {
-      recordCategory(
-        categories["provider-identity-collision"],
-        group.rows,
-        [group.parentId],
-        [],
-      );
+    if ((existing && existing.size > 0) || (plannedOwners && plannedOwners.size > 1)) {
+      recordCategory(categories["provider-identity-collision"], group.rows, [group.parentId], []);
       continue;
     }
 
-    recordCategory(
-      categories.reconstructable,
-      group.rows,
-      [group.parentId],
-      [],
-    );
+    recordCategory(categories.reconstructable, group.rows, [group.parentId], []);
   }
 
   const providerGroups = new Map<string, Set<string>>();
@@ -361,29 +332,20 @@ export function buildOrphanParentRepairDiagnostics(
     providerRows.set(row.provider, (providerRows.get(row.provider) ?? 0) + 1);
 
     const signature = `${row.source}\u0000${row.confidence}`;
-    sourceConfidenceRows.set(
-      signature,
-      (sourceConfidenceRows.get(signature) ?? 0) + 1,
-    );
+    sourceConfidenceRows.set(signature, (sourceConfidenceRows.get(signature) ?? 0) + 1);
   }
 
   return {
     totalGroups: groups.size,
     totalEpisodeMappings: orphanRows.length,
     coverage: {
-      withSeasonNumber: orphanRows.filter((row) => row.episodeSeasonNumber !== null)
-        .length,
-      withoutSeasonNumber: orphanRows.filter(
-        (row) => row.episodeSeasonNumber === null,
-      ).length,
+      withSeasonNumber: orphanRows.filter((row) => row.episodeSeasonNumber !== null).length,
+      withoutSeasonNumber: orphanRows.filter((row) => row.episodeSeasonNumber === null).length,
       withProviderUrl: orphanRows.filter((row) => Boolean(row.providerUrl)).length,
       withoutProviderUrl: orphanRows.filter((row) => !row.providerUrl).length,
-      withProviderEpisodeNumber: orphanRows.filter((row) =>
-        Boolean(row.providerEpisodeNumber),
-      ).length,
-      withoutProviderEpisodeNumber: orphanRows.filter(
-        (row) => !row.providerEpisodeNumber,
-      ).length,
+      withProviderEpisodeNumber: orphanRows.filter((row) => Boolean(row.providerEpisodeNumber))
+        .length,
+      withoutProviderEpisodeNumber: orphanRows.filter((row) => !row.providerEpisodeNumber).length,
     },
     byProvider: [...providerRows.entries()]
       .map(([provider, episodeMappings]) => ({
@@ -392,9 +354,7 @@ export function buildOrphanParentRepairDiagnostics(
         episodeMappings,
       }))
       .sort(
-        (a, b) =>
-          b.episodeMappings - a.episodeMappings ||
-          a.provider.localeCompare(b.provider),
+        (a, b) => b.episodeMappings - a.episodeMappings || a.provider.localeCompare(b.provider),
       ),
     bySourceConfidence: [...sourceConfidenceRows.entries()]
       .map(([signature, episodeMappings]) => {

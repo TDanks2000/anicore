@@ -119,10 +119,7 @@ export interface KitsuEpisodeNode {
   thumbnail: { original: KitsuImage } | null;
 }
 
-async function gql<T>(
-  query: string,
-  variables: Record<string, unknown>,
-): Promise<T> {
+async function gql<T>(query: string, variables: Record<string, unknown>): Promise<T> {
   const res = await fetch(KITSU_GRAPHQL_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -158,9 +155,7 @@ async function gql<T>(
   return json.data as T;
 }
 
-export async function searchKitsuByTitle(
-  title: string,
-): Promise<KitsuSearchNode[]> {
+export async function searchKitsuByTitle(title: string): Promise<KitsuSearchNode[]> {
   const data = await gql<{
     searchAnimeByTitle: { nodes: KitsuSearchNode[] };
   }>(ANIME_SEARCH_QUERY, { title });
@@ -170,9 +165,7 @@ export async function searchKitsuByTitle(
   );
 }
 
-export async function fetchKitsuEpisodes(
-  kitsuId: string,
-): Promise<KitsuEpisodeNode[]> {
+export async function fetchKitsuEpisodes(kitsuId: string): Promise<KitsuEpisodeNode[]> {
   const data = await gql<{
     findAnimeById: { episodes: { nodes: KitsuEpisodeNode[] } } | null;
   }>(ANIME_EPISODES_QUERY, { id: kitsuId });

@@ -1,5 +1,5 @@
-import type { KitsuEpisodeNode, KitsuSearchNode } from "./client";
 import type { ProviderAnimeData, ProviderEpisodeData } from "../types";
+import type { KitsuEpisodeNode, KitsuSearchNode } from "./client";
 
 function mapStatus(kitsuStatus: string | null): string | null {
   switch (kitsuStatus) {
@@ -16,25 +16,14 @@ function mapStatus(kitsuStatus: string | null): string | null {
   }
 }
 
-function resolvePreferredTitle(
-  titles: KitsuSearchNode["titles"],
-): string | null {
-  return (
-    titles.romanized ??
-    titles.translated ??
-    Object.values(titles.localized ?? {})[0] ??
-    null
-  );
+function resolvePreferredTitle(titles: KitsuSearchNode["titles"]): string | null {
+  return titles.romanized ?? titles.translated ?? Object.values(titles.localized ?? {})[0] ?? null;
 }
 
 export function mapKitsuAnime(node: KitsuSearchNode): ProviderAnimeData {
-  const year = node.startDate
-    ? parseInt(node.startDate.trim().split("-")[0]!, 10)
-    : null;
+  const year = node.startDate ? parseInt(node.startDate.trim().split("-")[0]!, 10) : null;
 
-  const localizedTitles = Object.values(node.titles.localized ?? {}).filter(
-    Boolean,
-  ) as string[];
+  const localizedTitles = Object.values(node.titles.localized ?? {}).filter(Boolean) as string[];
 
   const alternatives = (node.titles.alternatives ?? []).filter(Boolean) as string[];
 
@@ -51,7 +40,7 @@ export function mapKitsuAnime(node: KitsuSearchNode): ProviderAnimeData {
     format: node.subtype ?? null,
     status: mapStatus(node.status),
     season: node.season ?? null,
-    seasonYear: year !== null && !isNaN(year) ? year : null,
+    seasonYear: year !== null && !Number.isNaN(year) ? year : null,
     endDate: node.endDate ?? null,
     episodeCount: node.episodeCount ?? null,
     durationMinutes: node.episodeLength ?? null,
@@ -86,9 +75,7 @@ function mapEpisode(ep: KitsuEpisodeNode & { number: number }): MappedEpisode {
     titleRomaji: ep.titles?.romanized ?? null,
     titleEnglish: ep.titles?.translated ?? null,
     description:
-      ep.description?.en ??
-      (ep.description ? Object.values(ep.description)[0] : null) ??
-      null,
+      ep.description?.en ?? (ep.description ? Object.values(ep.description)[0] : null) ?? null,
     airDate: ep.releasedAt?.slice(0, 10) ?? null,
     lengthMinutes: ep.length ?? null,
     thumbnail: ep.thumbnail?.original?.url ?? null,

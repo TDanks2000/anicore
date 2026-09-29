@@ -1,19 +1,18 @@
-import { TMDB } from "@api-wrappers/tmdb-wrapper";
-import { sql } from "drizzle-orm";
-
 import { closeDb } from "@anicore/db";
-import { queryRows } from "../lib/query-rows";
 import {
   getTvdbSeasonEpisodes,
   getTvdbSeriesBySlug,
   type TvdbEpisodeBase,
   type TvdbSeriesBaseRecord,
 } from "@anicore/providers/thetvdb/client";
+import { TMDB } from "@api-wrappers/tmdb-wrapper";
+import { sql } from "drizzle-orm";
+import { queryRows } from "../lib/query-rows";
 
 import {
   buildTvdbSlugResolutionGroups,
-  verifyResolvedTvdbSlugGroup,
   type TvdbSlugResolutionGroup,
+  verifyResolvedTvdbSlugGroup,
 } from "./orphan-tvdb-slug-repair";
 import {
   buildTmdbResolvedCollisionGroups,
@@ -191,9 +190,7 @@ async function mapWithConcurrency<T, R>(
       results[index] = await mapper(items[index]!);
     }
   };
-  await Promise.all(
-    Array.from({ length: Math.min(concurrency, items.length) }, () => worker()),
-  );
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => worker()));
   return results;
 }
 
@@ -402,8 +399,8 @@ async function run(): Promise<Record<string, unknown>> {
     const entityOwners = mappingsByEntity.get(identity) ?? [];
     if (entityOwners.length !== 1) return null;
     if (
-      (mappingsByAnimeProvider.get(animeProviderKey(group.animeId, group.provider)) ?? [])
-        .length > 0
+      (mappingsByAnimeProvider.get(animeProviderKey(group.animeId, group.provider)) ?? []).length >
+      0
     ) {
       return null;
     }
@@ -414,9 +411,7 @@ async function run(): Promise<Record<string, unknown>> {
     if (!legacy || legacy.animeId !== owner.animeId) return null;
 
     const evidence = await getSeasonEvidence(group.provider, group.providerId);
-    const authoritativeIds = new Set(
-      evidence.episodes.map((episode) => episode.providerEpisodeId),
-    );
+    const authoritativeIds = new Set(evidence.episodes.map((episode) => episode.providerEpisodeId));
     const targetProviderRows =
       episodeRowsByAnimeProvider.get(animeProviderKey(group.animeId, group.provider)) ?? [];
     const ownerProviderRows =
@@ -447,7 +442,9 @@ async function run(): Promise<Record<string, unknown>> {
     };
   });
 
-  const samples = outcomes.filter((outcome): outcome is NonNullable<typeof outcome> => Boolean(outcome));
+  const samples = outcomes.filter((outcome): outcome is NonNullable<typeof outcome> =>
+    Boolean(outcome),
+  );
   samples.sort(
     (a, b) =>
       a.classification.localeCompare(b.classification) ||

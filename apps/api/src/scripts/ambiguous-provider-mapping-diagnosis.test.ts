@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  type AmbiguousMappingAnimeIdentity,
+  type AmbiguousMappingProviderEvidence,
   assessCandidateRepairSafety,
   classifyAmbiguousMappingCandidate,
   diagnoseAmbiguousMappingGroup,
   parseProviderSeasonId,
-  type AmbiguousMappingAnimeIdentity,
-  type AmbiguousMappingProviderEvidence,
 } from "./ambiguous-provider-mapping-diagnosis";
 
 const taikoAnime: AmbiguousMappingAnimeIdentity = {

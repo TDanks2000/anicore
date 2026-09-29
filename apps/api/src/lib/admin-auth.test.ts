@@ -1,92 +1,84 @@
 import { afterEach, describe, expect, test } from "bun:test";
 
-import { authorizeAdminWrite, isAdminAuthenticated } from "./admin-auth";
+import { authorizeAdminRequest, requiresAdmin } from "./admin-auth";
 
-describe("admin write authentication", () => {
-	afterEach(() => {
-		delete process.env.ANICORE_ADMIN_TOKEN;
-	});
+describe("requiresAdmin", () => {
+  test("leaves public reads open", () => {
+    expect(requiresAdmin("GET", "/anime/1")).toBe(false);
+    expect(requiresAdmin("HEAD", "/episodes")).toBe(false);
+  });
 
-	test("allows read-only requests without an admin token", () => {
-		expect(
-			authorizeAdminWrite({
-				method: "GET",
-				pathname: "/anime/1",
-				headers: {},
-			}),
-		).toEqual({ ok: true });
-	});
+  test("protects every write", () => {
+    for (const method of ["POST", "PUT", "PATCH", "DELETE", "post"]) {
+      expect(requiresAdmin(method, "/anime")).toBe(true);
+    }
+  });
 
-	test("leaves sync monitor writes to the monitor access-code guard", () => {
-		expect(
-			authorizeAdminWrite({
-				method: "POST",
-				pathname: "/sync-monitor/control/pause",
-				headers: {},
-			}),
-		).toEqual({ ok: true });
-	});
+  test("protects reads under /admin but not CORS preflight", () => {
+    expect(requiresAdmin("GET", "/admin/language-status/review-queue")).toBe(true);
+    expect(requiresAdmin("GET", "/admin")).toBe(true);
+    expect(requiresAdmin("OPTIONS", "/admin/anime/1/language-override")).toBe(false);
+    expect(requiresAdmin("GET", "/administrator")).toBe(false);
+  });
 
-	test("disables non-monitor writes when no admin token is configured", () => {
-		expect(
-			authorizeAdminWrite({
-				method: "POST",
-				pathname: "/anime/",
-				headers: {},
-			}),
-		).toEqual({
-			ok: false,
-			status: 503,
-			error: "API writes are disabled until ANICORE_ADMIN_TOKEN is configured",
-		});
-	});
+  test("leaves the sync monitor to its own access-code guard", () => {
+    expect(requiresAdmin("POST", "/sync-monitor/control/pause")).toBe(false);
+    expect(requiresAdmin("PATCH", "/sync-monitor/config")).toBe(false);
+  });
+});
 
-	test("accepts bearer and explicit admin-token headers", () => {
-		process.env.ANICORE_ADMIN_TOKEN = "test-admin-token";
+describe("authorizeAdminRequest", () => {
+  afterEach(() => {
+    delete process.env.ANICORE_ADMIN_TOKEN;
+  });
 
-		expect(
-			authorizeAdminWrite({
-				method: "PATCH",
-				pathname: "/admin/anime/1/language-override",
-				headers: { authorization: "Bearer test-admin-token" },
-			}),
-		).toEqual({ ok: true });
+  test("allows public reads without a token", () => {
+    expect(authorizeAdminRequest({ method: "GET", pathname: "/anime/1", headers: {} })).toEqual({
+      ok: true,
+    });
+  });
 
-		expect(
-			authorizeAdminWrite({
-				method: "DELETE",
-				pathname: "/future-admin-route",
-				headers: { "x-anicore-admin-token": "test-admin-token" },
-			}),
-		).toEqual({ ok: true });
-	});
+  test("fails closed when no admin token is configured", () => {
+    expect(authorizeAdminRequest({ method: "POST", pathname: "/anime", headers: {} })).toEqual({
+      ok: false,
+      status: 503,
+      error: "Admin routes are disabled until ANICORE_ADMIN_TOKEN is configured",
+    });
+  });
 
-	test("exposes a boolean admin check without converting public reads into write auth failures", () => {
-		expect(isAdminAuthenticated({})).toBe(false);
+  test("accepts bearer and explicit admin-token headers", () => {
+    process.env.ANICORE_ADMIN_TOKEN = "test-admin-token";
 
-		process.env.ANICORE_ADMIN_TOKEN = "test-admin-token";
-		expect(
-			isAdminAuthenticated({ authorization: "Bearer wrong-token" }),
-		).toBe(false);
-		expect(
-			isAdminAuthenticated({ authorization: "Bearer test-admin-token" }),
-		).toBe(true);
-		expect(
-			isAdminAuthenticated({
-				"x-anicore-admin-token": "test-admin-token",
-			}),
-		).toBe(true);
-	});
+    expect(
+      authorizeAdminRequest({
+        method: "PATCH",
+        pathname: "/admin/anime/1/language-override",
+        headers: { authorization: "Bearer test-admin-token" },
+      }),
+    ).toEqual({ ok: true });
 
-	test("rejects invalid admin tokens", () => {
-		process.env.ANICORE_ADMIN_TOKEN = "test-admin-token";
+    expect(
+      authorizeAdminRequest({
+        method: "DELETE",
+        pathname: "/future-admin-route",
+        headers: { "x-anicore-admin-token": "test-admin-token" },
+      }),
+    ).toEqual({ ok: true });
+  });
 
-		expect(
-			authorizeAdminWrite({
-				method: "POST",
-				pathname: "/episodes/",
-				headers: { authorization: "Bearer wrong-token" },
-			}),
-		).toEqual({ ok: false, status: 401, error: "Invalid admin token" });
-	});
+  test("rejects missing, empty and wrong tokens", () => {
+    process.env.ANICORE_ADMIN_TOKEN = "test-admin-token";
+    const rejected = { ok: false, status: 401, error: "Invalid admin token" } as const;
+
+    for (const headers of [
+      {},
+      { authorization: "Bearer " },
+      { authorization: "Bearer wrong-token" },
+      { authorization: "Basic dGVzdC1hZG1pbi10b2tlbg==" },
+    ]) {
+      expect(authorizeAdminRequest({ method: "POST", pathname: "/episodes", headers })).toEqual(
+        rejected,
+      );
+    }
+  });
 });

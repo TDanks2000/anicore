@@ -1,9 +1,8 @@
+import { closeDb } from "@anicore/db";
+import { getTvdbSeasonEpisodes } from "@anicore/providers/thetvdb/client";
 import { TMDB } from "@api-wrappers/tmdb-wrapper";
 import { sql } from "drizzle-orm";
-
-import { closeDb } from "@anicore/db";
 import { queryRows } from "../lib/query-rows";
-import { getTvdbSeasonEpisodes } from "@anicore/providers/thetvdb/client";
 
 import { analyzeSuffixSegmentEvidence } from "./provider-suffix-segment-evidence";
 
@@ -166,11 +165,7 @@ function directRelationIds(targetAnimeId: number, relations: RelationRow[]): Set
   return result;
 }
 
-function relationTypesBetween(
-  left: number,
-  right: number,
-  relations: RelationRow[],
-): string[] {
+function relationTypesBetween(left: number, right: number, relations: RelationRow[]): string[] {
   return [
     ...new Set(
       relations
@@ -240,10 +235,16 @@ async function run(): Promise<Record<string, unknown>> {
     loadRelations(),
   ]);
 
-  if (strongPrefixes.some((sample) => sample.provider === "thetvdb") && !process.env.TVDB_API_KEY?.trim()) {
+  if (
+    strongPrefixes.some((sample) => sample.provider === "thetvdb") &&
+    !process.env.TVDB_API_KEY?.trim()
+  ) {
     throw new Error("TVDB_API_KEY is required for suffix segment evidence diagnosis");
   }
-  if (strongPrefixes.some((sample) => sample.provider === "tmdb") && !process.env.TMDB_API_KEY?.trim()) {
+  if (
+    strongPrefixes.some((sample) => sample.provider === "tmdb") &&
+    !process.env.TMDB_API_KEY?.trim()
+  ) {
     throw new Error("TMDB_API_KEY is required for suffix segment evidence diagnosis");
   }
 
@@ -366,7 +367,8 @@ async function run(): Promise<Record<string, unknown>> {
 
   const exactMapped = samples.filter(
     (sample) =>
-      (sample.suffix as { exactMappedSuffixAnimeId: number | null }).exactMappedSuffixAnimeId !== null,
+      (sample.suffix as { exactMappedSuffixAnimeId: number | null }).exactMappedSuffixAnimeId !==
+      null,
   );
   const uniqueRelated = samples.filter(
     (sample) =>

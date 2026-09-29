@@ -69,7 +69,9 @@ function groupKey(row: Pick<CollisionEpisodeMappingRow, "animeId" | "provider">)
   return `${row.animeId}\u0000${row.provider}`;
 }
 
-function identityKey(candidate: Pick<CollisionSegmentCandidate, "provider" | "providerId">): string {
+function identityKey(
+  candidate: Pick<CollisionSegmentCandidate, "provider" | "providerId">,
+): string {
   return `${candidate.provider}\u0000${candidate.providerId}`;
 }
 
@@ -140,9 +142,7 @@ export function buildTmdbResolvedCollisionGroups(
   return { groups, rejected };
 }
 
-export function buildLinearCollisionSegment(
-  group: ResolvedCollisionGroup,
-): SegmentPlanOutcome {
+export function buildLinearCollisionSegment(group: ResolvedCollisionGroup): SegmentPlanOutcome {
   if (!group.rows.every(isWeakAutomaticOrphanEpisodeMapping)) {
     return { candidate: null, reason: "stronger-or-manual-evidence" };
   }
@@ -191,10 +191,7 @@ export function buildLinearCollisionSegment(
     if (localNumbers[index] !== index + 1) {
       return { candidate: null, reason: "invalid-local-coverage" };
     }
-    if (
-      index > 0 &&
-      providerNumbers[index] !== providerNumbers[index - 1]! + 1
-    ) {
+    if (index > 0 && providerNumbers[index] !== providerNumbers[index - 1]! + 1) {
       return { candidate: null, reason: "non-linear-numbering" };
     }
   }
@@ -205,11 +202,7 @@ export function buildLinearCollisionSegment(
   const localEpisodeEnd = localNumbers[localNumbers.length - 1]!;
   const offset = providerEpisodeStart - localEpisodeStart;
 
-  if (
-    !byLocal.every(
-      (item) => item.providerNumber - item.localNumber === offset,
-    )
-  ) {
+  if (!byLocal.every((item) => item.providerNumber - item.localNumber === offset)) {
     return { candidate: null, reason: "non-linear-numbering" };
   }
 
@@ -228,9 +221,7 @@ export function buildLinearCollisionSegment(
       localEpisodeEnd,
       offset,
       episodeMappingCount: group.rows.length,
-      episodeMappingIds: group.rows
-        .map((row) => row.episodeMappingId)
-        .sort((a, b) => a - b),
+      episodeMappingIds: group.rows.map((row) => row.episodeMappingId).sort((a, b) => a - b),
     },
     reason: null,
   };
@@ -241,8 +232,7 @@ function rangesOverlap(
   b: Pick<CollisionSegmentCandidate, "providerEpisodeStart" | "providerEpisodeEnd">,
 ): boolean {
   return (
-    a.providerEpisodeStart <= b.providerEpisodeEnd &&
-    b.providerEpisodeStart <= a.providerEpisodeEnd
+    a.providerEpisodeStart <= b.providerEpisodeEnd && b.providerEpisodeStart <= a.providerEpisodeEnd
   );
 }
 

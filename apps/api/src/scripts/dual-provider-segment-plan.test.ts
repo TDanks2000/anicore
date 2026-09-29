@@ -12,16 +12,13 @@ function rows(
   providerEnd: number,
   localStart: number,
 ): ProviderEpisodeAlignmentRow[] {
-  return Array.from(
-    { length: providerEnd - providerStart + 1 },
-    (_, index) => ({
-      animeId,
-      providerEpisodeId: String(10_000 + providerStart + index),
-      providerEpisodeNumber: providerStart + index,
-      localEpisodeNumber: localStart + index,
-      localKind: "normal",
-    }),
-  );
+  return Array.from({ length: providerEnd - providerStart + 1 }, (_, index) => ({
+    animeId,
+    providerEpisodeId: String(10_000 + providerStart + index),
+    providerEpisodeNumber: providerStart + index,
+    localEpisodeNumber: localStart + index,
+    localKind: "normal",
+  }));
 }
 
 describe("aligned provider segments", () => {
@@ -41,17 +38,13 @@ describe("aligned provider segments", () => {
   test("rejects a local numbering gap", () => {
     const input = rows(20, 13, 24, 1);
     input[5]!.localEpisodeNumber = 7;
-    expect(buildAlignedProviderSegment(20, input).reason).toBe(
-      "duplicate-local-episode-number",
-    );
+    expect(buildAlignedProviderSegment(20, input).reason).toBe("duplicate-local-episode-number");
   });
 
   test("rejects non-normal local episodes", () => {
     const input = rows(20, 13, 24, 1);
     input[0]!.localKind = "special";
-    expect(buildAlignedProviderSegment(20, input).reason).toBe(
-      "non-normal-local-episode",
-    );
+    expect(buildAlignedProviderSegment(20, input).reason).toBe("non-normal-local-episode");
   });
 });
 

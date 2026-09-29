@@ -1,33 +1,30 @@
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
-
 import { db } from "@anicore/db";
 import {
   recalculateAnimeLanguageStatus,
   syncAnimeLanguageEvidenceFromEpisodeStatuses,
 } from "@anicore/db/language-status";
 import {
-  anime,
+  type AnimeLanguageEvidence,
   animeLanguageEvidence,
   animeLanguageStatus,
-  episodeLanguageStatus,
-  episodes,
-  type AnimeLanguageEvidence,
-  type AnimeLanguageStatus,
   type Episode,
   type EpisodeLanguageStatus,
+  episodeLanguageStatus,
+  episodes,
 } from "@anicore/db/schema";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import {
+  type AnimeLanguageStatusValue,
   clampConfidence,
   defaultEvidenceConfidence,
-  mapLegacyAudioStatusToEpisodeStatus,
-  normalizeLanguageCode,
-  toLegacyEpisodeAudioResponse,
-  type AnimeLanguageStatusValue,
   type EpisodeLanguageStatusValue,
   type LanguageEvidenceSource,
   type LanguageEvidenceType,
   type LanguageMediaType,
   type LegacyAudioStatusValue,
+  mapLegacyAudioStatusToEpisodeStatus,
+  normalizeLanguageCode,
+  toLegacyEpisodeAudioResponse,
 } from "./language-status.scoring";
 
 export interface AnimeLanguageStatusResult {
@@ -43,30 +40,19 @@ export interface AnimeLanguageStatusResult {
   episodes: EpisodeLanguageStatus[];
 }
 
-export async function getAnimeById(animeId: number) {
-  const [row] = await db
-    .select({ id: anime.id })
-    .from(anime)
-    .where(eq(anime.id, animeId))
-    .limit(1);
-
-  return row ?? null;
-}
-
 export async function getEpisodeById(episodeId: number): Promise<Episode | null> {
-  const [row] = await db
-    .select()
-    .from(episodes)
-    .where(eq(episodes.id, episodeId))
-    .limit(1);
+  const [row] = await db.select().from(episodes).where(eq(episodes.id, episodeId)).limit(1);
 
   return row ?? null;
 }
 
-export async function listAnimeLanguageStatus(animeId: number, filters?: {
-  languageCode?: string;
-  mediaType?: LanguageMediaType;
-}) {
+export async function listAnimeLanguageStatus(
+  animeId: number,
+  filters?: {
+    languageCode?: string;
+    mediaType?: LanguageMediaType;
+  },
+) {
   const conditions = [eq(animeLanguageStatus.animeId, animeId)];
 
   if (filters?.languageCode) {
@@ -292,9 +278,7 @@ export async function upsertEpisodeLanguageStatus(input: {
 }) {
   const languageCode = normalizeLanguageCode(input.languageCode);
   const provider = input.provider?.trim() || "manual";
-  const confidence = clampConfidence(
-    input.confidence ?? (provider === "manual" ? 100 : 75),
-  );
+  const confidence = clampConfidence(input.confidence ?? (provider === "manual" ? 100 : 75));
 
   const [row] = await db
     .insert(episodeLanguageStatus)
@@ -382,7 +366,7 @@ export async function upsertLegacyEpisodeAudioStatus(input: {
   return toLegacyEpisodeAudioResponse(episode, [row])[0] ?? null;
 }
 
-export async function listLanguageStatusReviewQueue(limit: number) {
+export async function listLanguageStatusReviewQueue(page: { limit: number; offset: number }) {
   return db
     .select()
     .from(animeLanguageStatus)
@@ -392,6 +376,11 @@ export async function listLanguageStatusReviewQueue(limit: number) {
         eq(animeLanguageStatus.isManualOverride, false),
       ),
     )
-    .orderBy(asc(animeLanguageStatus.confidence), desc(animeLanguageStatus.updatedAt))
-    .limit(limit);
+    .orderBy(
+      asc(animeLanguageStatus.confidence),
+      desc(animeLanguageStatus.updatedAt),
+      asc(animeLanguageStatus.id),
+    )
+    .limit(page.limit)
+    .offset(page.offset);
 }

@@ -1,19 +1,18 @@
-import { TMDB } from "@api-wrappers/tmdb-wrapper";
-import { sql } from "drizzle-orm";
-
 import { closeDb } from "@anicore/db";
-import { queryRows } from "../lib/query-rows";
 import {
   getTvdbSeasonEpisodes,
   getTvdbSeriesBySlug,
   type TvdbEpisodeBase,
   type TvdbSeriesBaseRecord,
 } from "@anicore/providers/thetvdb/client";
+import { TMDB } from "@api-wrappers/tmdb-wrapper";
+import { sql } from "drizzle-orm";
+import { queryRows } from "../lib/query-rows";
 
 import {
   buildTvdbSlugResolutionGroups,
-  verifyResolvedTvdbSlugGroup,
   type TvdbSlugResolutionGroup,
+  verifyResolvedTvdbSlugGroup,
 } from "./orphan-tvdb-slug-repair";
 import {
   buildTmdbResolvedCollisionGroups,
@@ -214,9 +213,7 @@ async function mapWithConcurrency<T, R>(
       results[index] = await mapper(items[index]!);
     }
   };
-  await Promise.all(
-    Array.from({ length: Math.min(concurrency, items.length) }, () => worker()),
-  );
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => worker()));
   return results;
 }
 
@@ -370,10 +367,7 @@ async function run(): Promise<Record<string, unknown>> {
 
   const episodeOwnerByIdentity = new Map<string, EpisodeMappingRow>();
   for (const row of episodeRows) {
-    episodeOwnerByIdentity.set(
-      episodeIdentityKey(row.provider, row.providerEpisodeId),
-      row,
-    );
+    episodeOwnerByIdentity.set(episodeIdentityKey(row.provider, row.providerEpisodeId), row);
   }
 
   const localNumbersByAnime = new Map<number, number[]>();
@@ -427,8 +421,8 @@ async function run(): Promise<Record<string, unknown>> {
     const entityOwners = mappingsByEntity.get(identity) ?? [];
     if (entityOwners.length !== 1) return null;
     if (
-      (mappingsByAnimeProvider.get(animeProviderKey(group.animeId, group.provider)) ?? [])
-        .length > 0
+      (mappingsByAnimeProvider.get(animeProviderKey(group.animeId, group.provider)) ?? []).length >
+      0
     ) {
       return null;
     }
@@ -448,7 +442,7 @@ async function run(): Promise<Record<string, unknown>> {
       targetLocalNormalEpisodeNumbers: localNumbersByAnime.get(group.animeId) ?? [],
       targetMetadataEpisodeCount: targetMeta?.episodeCount ?? null,
     });
-    if (!mismatch || mismatch.classification !== "local-mismatch-metadata-differs") return null;
+    if (mismatch?.classification !== "local-mismatch-metadata-differs") return null;
 
     const targetAnalysis = analyzeObservedSegmentTransform({
       authoritativeEpisodes: evidence.episodes.map((episode) => ({
@@ -518,7 +512,9 @@ async function run(): Promise<Record<string, unknown>> {
     };
   });
 
-  const samples = outcomes.filter((outcome): outcome is NonNullable<typeof outcome> => Boolean(outcome));
+  const samples = outcomes.filter((outcome): outcome is NonNullable<typeof outcome> =>
+    Boolean(outcome),
+  );
   const strong = samples.filter((sample) => sample.prefix.ok);
   const rejected = samples.filter((sample) => !sample.prefix.ok);
 

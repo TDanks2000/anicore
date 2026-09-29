@@ -1,42 +1,69 @@
-AniCore is a unified anime metadata API for mapping anime, episodes, and dub/sub availability across sources like AniList, Kitsu, and streaming providers.
+# AniCore
 
-## Monorepo
+AniCore is a unified anime metadata API. It maps anime and episodes across AniList, Kitsu, TheTVDB, TMDB and other catalogues, and tracks dub and subtitle availability per language.
 
-AniCore uses Bun workspaces and Turborepo:
+## Quick start
 
-- `apps/api` - Elysia API, database scripts, provider sync runner
-- `apps/web` - Vite + React + Tailwind v4 monitor dashboard
-- `packages/db` - Drizzle schema, database connection, and DB validation helpers
-- `packages/providers` - AniList/Kitsu/provider sync clients, mappers, and sync utilities
-- `packages/sync-monitor` - shared sync monitor response types and browser client
-
-Install dependencies from the repo root:
+Requires [Bun](https://bun.sh) 1.3 and a Postgres database (Supabase works).
 
 ```sh
 bun install
+cp apps/api/.env.example apps/api/.env   # set DATABASE_URL and ANICORE_ADMIN_TOKEN
+bun run db:migrate
+bun run dev                              # API on :3000, dashboard on :5173
 ```
 
-Useful root commands:
+Interactive API docs are served at `http://localhost:3000/docs` (OpenAPI JSON at `/docs/json`).
 
-```sh
-bun run dev:api
-bun run dev:web
-bun run dev
-bun run start
-bun run build
-bun run typecheck
-bun run test
+## Architecture
+
+AniCore is a Bun workspace driven by Turborepo:
+
+| Package | Purpose |
+| --- | --- |
+| `apps/api` | Elysia HTTP API, the sync runner, and database maintenance scripts |
+| `apps/web` | Vite + React + Tailwind v4 dashboard for monitoring and controlling syncs |
+| `packages/db` | Drizzle schema, migrations' source of truth, shared enums, the database client |
+| `packages/providers` | Provider clients, mappers, matching, and the idempotent provider upsert |
+| `packages/sync-monitor` | Sync monitor types and the browser client used by the dashboard |
+
+Inside the API, each module under `src/modules` has routes (validation and HTTP shape only) and a service (queries, transactions and business rules). Services throw `HttpError` for client errors; the global error handler turns those into responses and classifies database constraint violations by SQLSTATE.
+
+The sync pulls every AniList ID, upserts the anime, then runs provider plugins (Kitsu matching, episode title enrichment from TheTVDB/TMDB, and dub/sub status) for it. A database lease in `sync_runs` ensures only one sync process runs at a time; provider upserts are safe to run concurrently with API imports.
+
+## API
+
+Reads are public. Every write, and every route under `/admin`, requires the admin token. `/sync-monitor` uses its own access code (see below).
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/anime` | List anime. `q` searches titles, synonyms and slugs (exact and prefix matches first); filter with `format`, `season`, `seasonYear`, `status`; paginate with `limit` (1–100, default 50) and `offset`. |
+| `GET` | `/anime/:id` | One anime. `/full` adds mappings, episodes, studios, tags, external links and relations. |
+| `GET` | `/anime/:id/{mappings,episodes,studios,tags,external-links,relations}` | Child collections of an anime. |
+| `GET` | `/anime/by/:provider/:providerId` | The anime a provider ID maps to, with that mapping. |
+| `GET` | `/anime/:id/{language-status,dub-status,subtitle-status}` | Resolved language availability with its evidence. |
+| `POST` | `/anime` | Create an anime, optionally with mappings. A slug is generated from the title when omitted. |
+| `POST` | `/anime/import/anilist` | Import or refresh from AniList by `{ "id": 1 }` or `{ "search": "Cowboy Bebop" }`. |
+| `GET` | `/episodes`, `/episodes/:id`, `/episodes/:id/{full,mappings,audio}` | Episodes and their mappings and language status. |
+| `POST` | `/episodes`, `/episodes/:id/audio` | Create an episode, record audio status. |
+| `GET` `POST` `PATCH` `DELETE` | `/mappings/{anime,episode}/...` | Look up, create, update and delete provider mappings. |
+| `POST` | `/admin/anime/:id/language-{evidence,override}` | Record language evidence or a manual override. |
+| `GET` | `/admin/language-status/review-queue` | Low-confidence language statuses to review. |
+| `GET` | `/health`, `/health/ready` | Liveness, and readiness including a database check. |
+
+GET requests never change data or call external providers. Missing records return `404`, conflicts `409`, and invalid input `400` with the failing field paths:
+
+```json
+{ "error": "Validation failed", "issues": [{ "path": "/id", "message": "Property 'id' should be integer" }] }
 ```
 
-Root commands force Turbo's stream UI so Windows shells avoid the interactive UI path that can fail with exit code 56.
+### Mapping rules
 
-`bun run dev` starts the API and Vite dashboard together for development. `bun run start` builds the workspaces, starts the API, enables the automatic sync scheduler, and serves the built dashboard from one command.
+- A provider ID belongs to at most one anime (and one episode).
+- Each anime has at most one primary mapping per provider. A provider's first mapping is primary by default; adding another requires the existing primary to stay, or the new one to be marked primary, which demotes the old one. A primary cannot be cleared or deleted while others exist.
+- Episode mappings for a provider require an anime-level mapping for that provider, and an anime-level mapping cannot be deleted while episode mappings depend on it.
 
-Put API secrets in `apps/api/.env`. The old root `.env` was copied locally to `apps/api/.env` during the migration if it existed.
-
-### API write authentication
-
-Read-only API routes remain public. All non-monitor `POST`, `PUT`, `PATCH`, and `DELETE` requests require `ANICORE_ADMIN_TOKEN`. If the token is not configured, write routes fail closed with `503` instead of allowing unauthenticated database changes.
+### Authentication
 
 Set a long random token in `apps/api/.env`:
 
@@ -44,16 +71,50 @@ Set a long random token in `apps/api/.env`:
 ANICORE_ADMIN_TOKEN=<long-random-token>
 ```
 
-Send it as either a bearer token or the explicit admin-token header:
+Send it as a bearer token or in `X-Anicore-Admin-Token`:
 
 ```sh
-curl -H "Authorization: Bearer <long-random-token>" \
-  -H "Content-Type: application/json" \
-  -d '{"titleRomaji":"Example"}' \
-  http://localhost:3000/anime/
+curl -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  -d '{"id": 1}' http://localhost:3000/anime/import/anilist
 ```
 
-`/sync-monitor` keeps its separate monitor access-code authentication and does not require the admin token.
+When no token is configured, admin routes fail closed with `503`. Authentication runs before request bodies are parsed.
+
+## Development
+
+```sh
+bun run dev          # API and dashboard with reload
+bun run lint         # Biome lint and format check (bun run lint:fix to apply)
+bun run typecheck
+bun run test
+bun run build
+bun run start        # build, then serve the API with the automatic sync scheduler
+```
+
+Root commands force Turbo's stream UI so Windows shells avoid the interactive UI path that can fail with exit code 56.
+
+### Integration tests
+
+API integration tests run against a real Postgres when `TEST_DATABASE_URL` is set, and are skipped otherwise. The harness applies migrations and truncates every table between tests, so it refuses any database whose name does not contain `test`.
+
+```sh
+createdb anicore_test
+TEST_DATABASE_URL=postgresql://localhost/anicore_test ANICORE_DATABASE_SSL=disable bun run test
+```
+
+CI runs lint, typecheck, and the full test suite, including integration tests, on every push and pull request.
+
+### Schema changes
+
+Edit `packages/db/src/schema.ts` (or `provider-mapping-schema.ts`), then generate and apply a migration:
+
+```sh
+bun run db:generate
+bun run db:migrate
+bun run db:check-shape
+```
+
+Closed value sets such as providers and mapping sources live in `packages/db/src/enums.ts`; the schema, request validators and provider types all derive from it.
 
 ## Sync
 

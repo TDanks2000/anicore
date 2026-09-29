@@ -22,10 +22,9 @@ function episode(number: number): MappedEpisode {
 describe("Kitsu canonical episode count", () => {
   test("drops provider extras beyond AniList's known episode count", () => {
     expect(
-      limitKitsuEpisodesToCanonicalCount(
-        [episode(1), episode(2), episode(3), episode(13)],
-        12,
-      ).map((item) => item.number),
+      limitKitsuEpisodesToCanonicalCount([episode(1), episode(2), episode(3), episode(13)], 12).map(
+        (item) => item.number,
+      ),
     ).toEqual([1, 2, 3]);
   });
 

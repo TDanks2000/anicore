@@ -1,468 +1,166 @@
-import { and, eq, ilike, or } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 
-import { db } from "@anicore/db";
+import { notFound } from "../../lib/errors";
 import {
-  anime,
-  animeExternalLinks,
-  animeMappings,
-  animeRelationLinks,
-  episodes,
-  type AnimeMapping,
-} from "@anicore/db/schema";
-import { withAnilistRetry } from "@anicore/providers/lib/anilist-rate-limit";
-import { appendAnilistId } from "@anicore/providers/lib/cache";
-import { toJsonArray } from "@anicore/providers/lib/json";
-import { parseId, parseLimit } from "../../lib/params";
-import {
-	confidenceValue,
-	nonNegativeInteger,
-	positiveInteger,
-	providerEnum,
-	sourceEnum,
+  confidenceValue,
+  idParams,
+  nonNegativeInteger,
+  paginationQuery,
+  positiveInteger,
+  providerEnum,
+  providerIdValue,
+  providerMappingParams,
+  sourceEnum,
 } from "../../lib/validators";
-import { anilistClient } from "@anicore/providers/anilist/client";
-import { syncAnilistAnime } from "@anicore/providers/anilist/sync";
-import { formatAnime, getStudiosForAnime, getTagsForAnime } from "./anime.service";
-
-type AnimeProvider = AnimeMapping["provider"];
-
-async function findAnimeByProviderMapping(
-	provider: AnimeProvider,
-	providerId: string,
-) {
-	const rows = await db
-		.select({
-			anime,
-			mapping: animeMappings,
-		})
-		.from(animeMappings)
-		.innerJoin(anime, eq(animeMappings.animeId, anime.id))
-		.where(
-			and(
-				eq(animeMappings.provider, provider),
-				eq(animeMappings.providerId, providerId),
-			),
-		)
-		.limit(1);
-
-	return rows[0] ?? null;
-}
-
-async function getAnimeRowById(id: number) {
-	const [row] = await db.select().from(anime).where(eq(anime.id, id)).limit(1);
-	return row ?? null;
-}
-
-function parseAnilistId(providerId: string): number | null {
-	const id = Number(providerId);
-	return Number.isInteger(id) && id > 0 ? id : null;
-}
-
-function isUniqueConstraintError(err: unknown): boolean {
-	const message = err instanceof Error ? err.message : String(err);
-	return message.includes("unique") || message.includes("duplicate key");
-}
-
-const activeAnilistSyncs = new Map<
-	number,
-	Promise<Awaited<ReturnType<typeof getAnimeRowById>>>
->();
-
-async function runAnilistSync(id: number) {
-	try {
-		const result = await withAnilistRetry(() => syncAnilistAnime(id));
-		return getAnimeRowById(result.animeId);
-	} catch (err) {
-		if (isUniqueConstraintError(err)) {
-			const existing = await findAnimeByProviderMapping("anilist", String(id));
-			if (existing) return existing.anime;
-		}
-
-		throw err;
-	}
-}
-
-async function syncMissingAnilistAnime(id: number) {
-	appendAnilistId(id);
-
-	const active = activeAnilistSyncs.get(id);
-	if (active) return active;
-
-	const sync = runAnilistSync(id).finally(() => {
-		activeAnilistSyncs.delete(id);
-	});
-	activeAnilistSyncs.set(id, sync);
-	return sync;
-}
-
-export const animeRoutes = new Elysia({ prefix: "/anime" })
-	.get(
-		"/",
-		async ({ query, set }) => {
-			const limit = parseLimit(query.limit);
-			const search = query.q?.trim();
-
-			if (!search) {
-				const rows = await db.select().from(anime).limit(limit);
-				return rows.map(formatAnime);
-			}
-
-			const pattern = `%${search}%`;
-
-			const rows = await db
-				.select()
-				.from(anime)
-				.where(
-					or(
-						ilike(anime.titleRomaji, pattern),
-						ilike(anime.titleEnglish, pattern),
-						ilike(anime.titleNative, pattern),
-						ilike(anime.slug, pattern),
-					),
-				)
-				.limit(limit);
-
-			if (rows.length > 0) {
-				return rows.map(formatAnime);
-			}
-
-			try {
-				const result = await withAnilistRetry(() =>
-					anilistClient.anime.getAnimeBySearch(search, 1, 1),
-				);
-				const match = result.Page?.media?.[0];
-				if (!match?.id) return [];
-
-				const synced = await syncMissingAnilistAnime(match.id);
-				return synced ? [formatAnime(synced)] : [];
-			} catch (err) {
-				console.error("Failed to sync missing anime from AniList", err);
-				set.status = 502;
-				return { error: "Failed to sync missing anime from AniList" };
-			}
-		},
-		{
-			query: t.Object({
-				q: t.Optional(t.String()),
-				limit: t.Optional(t.String()),
-			}),
-		},
-	)
-
-	.post(
-		"/",
-		async ({ body, set }) => {
-			try {
-				const created = await db.transaction(async (tx) => {
-					const [row] = await tx
-						.insert(anime)
-						.values({
-							slug: body.slug,
-							titleRomaji: body.titleRomaji,
-							titleEnglish: body.titleEnglish,
-							titleNative: body.titleNative,
-							titleUserPreferred: body.titleUserPreferred,
-							description: body.description,
-							format: body.format,
-							status: body.status,
-							source: body.source,
-							season: body.season,
-							seasonYear: body.seasonYear,
-							startDate: body.startDate,
-							endDate: body.endDate,
-							episodeCount: body.episodeCount,
-							durationMinutes: body.durationMinutes,
-							countryOfOrigin: body.countryOfOrigin,
-							isAdult: body.isAdult ?? false,
-							genresJson: toJsonArray(body.genres),
-							synonymsJson: toJsonArray(body.synonyms),
-							averageScore: body.averageScore,
-							meanScore: body.meanScore,
-							popularity: body.popularity,
-							favourites: body.favourites,
-							trending: body.trending,
-							coverImage: body.coverImage,
-							coverImageColor: body.coverImageColor,
-							bannerImage: body.bannerImage,
-							trailerVideoId: body.trailerVideoId,
-							trailerSite: body.trailerSite,
-							trailerThumbnail: body.trailerThumbnail,
-							nextEpisodeNumber: body.nextEpisodeNumber,
-							nextEpisodeAirsAt: body.nextEpisodeAirsAt,
-							hashtag: body.hashtag,
-						})
-						.returning();
-
-					if (!row) throw new Error("insert returned no row");
-
-					if (body.mappings?.length) {
-						await tx.insert(animeMappings).values(
-							body.mappings.map((mapping) => ({
-								animeId: row.id,
-								provider: mapping.provider,
-								providerId: mapping.providerId,
-								providerSlug: mapping.providerSlug,
-								providerUrl: mapping.providerUrl,
-								confidence: mapping.confidence ?? 100,
-								source: mapping.source ?? "manual",
-								isPrimary: mapping.isPrimary ?? false,
-							})),
-						);
-					}
-
-					return row;
-				});
-
-				return formatAnime(created);
-			} catch (err: unknown) {
-				const msg = err instanceof Error ? err.message : String(err);
-				if (msg.includes("anime_slug_idx") || msg.includes("unique")) {
-					set.status = 409;
-					return { error: "Slug or mapping already exists" };
-				}
-				set.status = 500;
-				return { error: "Failed to create anime" };
-			}
-		},
-		{
-			body: t.Object({
-				slug: t.Optional(t.String()),
-
-				titleRomaji: t.String(),
-				titleEnglish: t.Optional(t.String()),
-				titleNative: t.Optional(t.String()),
-				titleUserPreferred: t.Optional(t.String()),
-
-				description: t.Optional(t.String()),
-
-				format: t.Optional(t.String()),
-				status: t.Optional(t.String()),
-				source: t.Optional(t.String()),
-
-				season: t.Optional(t.String()),
-				seasonYear: t.Optional(nonNegativeInteger),
-				startDate: t.Optional(t.String()),
-				endDate: t.Optional(t.String()),
-
-				episodeCount: t.Optional(nonNegativeInteger),
-				durationMinutes: t.Optional(nonNegativeInteger),
-
-				countryOfOrigin: t.Optional(t.String()),
-				isAdult: t.Optional(t.Boolean()),
-
-				genres: t.Optional(t.Array(t.String())),
-				synonyms: t.Optional(t.Array(t.String())),
-
-				averageScore: t.Optional(confidenceValue),
-				meanScore: t.Optional(confidenceValue),
-				popularity: t.Optional(nonNegativeInteger),
-				favourites: t.Optional(nonNegativeInteger),
-				trending: t.Optional(nonNegativeInteger),
-
-				coverImage: t.Optional(t.String()),
-				coverImageColor: t.Optional(t.String()),
-				bannerImage: t.Optional(t.String()),
-
-				trailerVideoId: t.Optional(t.String()),
-				trailerSite: t.Optional(t.String()),
-				trailerThumbnail: t.Optional(t.String()),
-
-				nextEpisodeNumber: t.Optional(positiveInteger),
-				nextEpisodeAirsAt: t.Optional(nonNegativeInteger),
-
-				hashtag: t.Optional(t.String()),
-
-				mappings: t.Optional(
-					t.Array(
-						t.Object({
-							provider: providerEnum,
-							providerId: t.String({ minLength: 1 }),
-							providerSlug: t.Optional(t.String()),
-							providerUrl: t.Optional(t.String()),
-							confidence: t.Optional(confidenceValue),
-							source: t.Optional(sourceEnum),
-							isPrimary: t.Optional(t.Boolean()),
-						}),
-					),
-				),
-			}),
-		},
-	)
-
-	.get(
-		"/by/:provider/:providerId",
-		async ({ params, set }) => {
-			const existing = await findAnimeByProviderMapping(
-				params.provider,
-				params.providerId,
-			);
-
-			let row = existing;
-			if (!row && params.provider === "anilist") {
-				const anilistId = parseAnilistId(params.providerId);
-				if (!anilistId) return null;
-
-				try {
-					await syncMissingAnilistAnime(anilistId);
-					row = await findAnimeByProviderMapping(
-						params.provider,
-						params.providerId,
-					);
-				} catch (err) {
-					console.error("Failed to sync missing anime from AniList", err);
-					set.status = 502;
-					return { error: "Failed to sync missing anime from AniList" };
-				}
-			}
-
-			if (!row) return null;
-			const { anime: animeRow, mapping } = row;
-			return { ...formatAnime(animeRow), mapping };
-		},
-		{
-			params: t.Object({
-				provider: providerEnum,
-				providerId: t.String(),
-			}),
-		},
-	)
-
-	.get("/:id/full", async ({ params, set }) => {
-		const id = parseId(params.id);
-
-		if (!id) {
-			set.status = 400;
-			return { error: "Invalid anime id" };
-		}
-
-		const [row] = await db
-			.select()
-			.from(anime)
-			.where(eq(anime.id, id))
-			.limit(1);
-
-		if (!row) {
-			set.status = 404;
-			return { error: "Anime not found" };
-		}
-
-		const [mappings, episodeRows, studios, tags, externalLinks, relations] =
-			await Promise.all([
-				db.select().from(animeMappings).where(eq(animeMappings.animeId, id)),
-				db.select().from(episodes).where(eq(episodes.animeId, id)),
-				getStudiosForAnime(id),
-				getTagsForAnime(id),
-				db
-					.select()
-					.from(animeExternalLinks)
-					.where(eq(animeExternalLinks.animeId, id)),
-				db
-					.select()
-					.from(animeRelationLinks)
-					.where(eq(animeRelationLinks.animeId, id)),
-			]);
-
-		return {
-			...formatAnime(row),
-			mappings,
-			episodes: episodeRows,
-			studios,
-			tags,
-			externalLinks,
-			relations,
-		};
-	})
-
-	.get("/:id", async ({ params, set }) => {
-		const id = parseId(params.id);
-
-		if (!id) {
-			set.status = 400;
-			return { error: "Invalid anime id" };
-		}
-
-		const [row] = await db.select().from(anime).where(eq(anime.id, id)).limit(1);
-
-		if (!row) {
-			set.status = 404;
-			return { error: "Anime not found" };
-		}
-
-		return formatAnime(row);
-	})
-
-	.get("/:id/mappings", async ({ params, set }) => {
-		const animeId = parseId(params.id);
-
-		if (!animeId) {
-			set.status = 400;
-			return { error: "Invalid anime id" };
-		}
-
-		return db
-			.select()
-			.from(animeMappings)
-			.where(eq(animeMappings.animeId, animeId));
-	})
-
-	.get("/:id/episodes", async ({ params, set }) => {
-		const animeId = parseId(params.id);
-
-		if (!animeId) {
-			set.status = 400;
-			return { error: "Invalid anime id" };
-		}
-
-		return db.select().from(episodes).where(eq(episodes.animeId, animeId));
-	})
-
-	.get("/:id/studios", async ({ params, set }) => {
-		const animeId = parseId(params.id);
-
-		if (!animeId) {
-			set.status = 400;
-			return { error: "Invalid anime id" };
-		}
-
-		return getStudiosForAnime(animeId);
-	})
-
-	.get("/:id/tags", async ({ params, set }) => {
-		const animeId = parseId(params.id);
-
-		if (!animeId) {
-			set.status = 400;
-			return { error: "Invalid anime id" };
-		}
-
-		return getTagsForAnime(animeId);
-	})
-
-	.get("/:id/external-links", async ({ params, set }) => {
-		const animeId = parseId(params.id);
-
-		if (!animeId) {
-			set.status = 400;
-			return { error: "Invalid anime id" };
-		}
-
-		return db
-			.select()
-			.from(animeExternalLinks)
-			.where(eq(animeExternalLinks.animeId, animeId));
-	})
-
-	.get("/:id/relations", async ({ params, set }) => {
-		const animeId = parseId(params.id);
-
-		if (!animeId) {
-			set.status = 400;
-			return { error: "Invalid anime id" };
-		}
-
-		return db
-			.select()
-			.from(animeRelationLinks)
-			.where(eq(animeRelationLinks.animeId, animeId));
-	});
+import { findAnimeByMapping, listAnimeMappings } from "../mappings/mappings.service";
+import { importAnilistAnime, importAnilistAnimeBySearch } from "./anime.import";
+import {
+  assertAnimeExists,
+  createAnime,
+  getAnime,
+  getAnimeFull,
+  getStudiosForAnime,
+  getTagsForAnime,
+  listAnime,
+  listAnimeEpisodes,
+  listAnimeExternalLinks,
+  listAnimeRelations,
+} from "./anime.service";
+
+const optionalString = t.Optional(t.String());
+
+const createAnimeBody = t.Object({
+  slug: optionalString,
+  titleRomaji: t.String({ minLength: 1, pattern: ".*\\S.*" }),
+  titleEnglish: optionalString,
+  titleNative: optionalString,
+  titleUserPreferred: optionalString,
+  description: optionalString,
+  format: optionalString,
+  status: optionalString,
+  source: optionalString,
+  season: optionalString,
+  seasonYear: t.Optional(nonNegativeInteger),
+  startDate: optionalString,
+  endDate: optionalString,
+  episodeCount: t.Optional(nonNegativeInteger),
+  durationMinutes: t.Optional(nonNegativeInteger),
+  countryOfOrigin: optionalString,
+  isAdult: t.Optional(t.Boolean()),
+  genres: t.Optional(t.Array(t.String())),
+  synonyms: t.Optional(t.Array(t.String())),
+  averageScore: t.Optional(confidenceValue),
+  meanScore: t.Optional(confidenceValue),
+  popularity: t.Optional(nonNegativeInteger),
+  favourites: t.Optional(nonNegativeInteger),
+  trending: t.Optional(nonNegativeInteger),
+  coverImage: optionalString,
+  coverImageColor: optionalString,
+  bannerImage: optionalString,
+  trailerVideoId: optionalString,
+  trailerSite: optionalString,
+  trailerThumbnail: optionalString,
+  nextEpisodeNumber: t.Optional(positiveInteger),
+  nextEpisodeAirsAt: t.Optional(nonNegativeInteger),
+  hashtag: optionalString,
+  mappings: t.Optional(
+    t.Array(
+      t.Object({
+        provider: providerEnum,
+        providerId: providerIdValue,
+        providerSlug: optionalString,
+        providerUrl: optionalString,
+        confidence: t.Optional(confidenceValue),
+        source: t.Optional(sourceEnum),
+        isPrimary: t.Optional(t.Boolean()),
+      }),
+    ),
+  ),
+});
+
+export const animeRoutes = new Elysia({ prefix: "/anime", detail: { tags: ["Anime"] } })
+  .get("/", ({ query }) => listAnime(query), {
+    query: t.Object({
+      ...paginationQuery,
+      q: t.Optional(t.String({ maxLength: 200 })),
+      format: optionalString,
+      season: optionalString,
+      seasonYear: t.Optional(nonNegativeInteger),
+      status: optionalString,
+    }),
+  })
+  .post("/", ({ body }) => createAnime(body), { body: createAnimeBody })
+  .post(
+    "/import/anilist",
+    // Must stay async: Elysia does not route a rejection from this non-async
+    // arrow shape to onError, so an import failure would escape as a crash.
+    async ({ body }) => {
+      if ("id" in body) return importAnilistAnime(body.id);
+      return importAnilistAnimeBySearch(body.search.trim());
+    },
+    {
+      body: t.Union([
+        t.Object({ id: positiveInteger }),
+        t.Object({ search: t.String({ minLength: 1, maxLength: 200, pattern: ".*\\S.*" }) }),
+      ]),
+    },
+  )
+  .get(
+    "/by/:provider/:providerId",
+    async ({ params }) => {
+      const found = await findAnimeByMapping(params);
+      if (!found) throw notFound("Anime not found");
+      return { ...found.anime, mapping: found.mapping };
+    },
+    { params: providerMappingParams },
+  )
+  .get("/:id", ({ params }) => getAnime(params.id), { params: idParams })
+  .get("/:id/full", ({ params }) => getAnimeFull(params.id), { params: idParams })
+  .get(
+    "/:id/mappings",
+    async ({ params }) => {
+      await assertAnimeExists(params.id);
+      return listAnimeMappings(params.id);
+    },
+    { params: idParams },
+  )
+  .get(
+    "/:id/episodes",
+    async ({ params }) => {
+      await assertAnimeExists(params.id);
+      return listAnimeEpisodes(params.id);
+    },
+    { params: idParams },
+  )
+  .get(
+    "/:id/studios",
+    async ({ params }) => {
+      await assertAnimeExists(params.id);
+      return getStudiosForAnime(params.id);
+    },
+    { params: idParams },
+  )
+  .get(
+    "/:id/tags",
+    async ({ params }) => {
+      await assertAnimeExists(params.id);
+      return getTagsForAnime(params.id);
+    },
+    { params: idParams },
+  )
+  .get(
+    "/:id/external-links",
+    async ({ params }) => {
+      await assertAnimeExists(params.id);
+      return listAnimeExternalLinks(params.id);
+    },
+    { params: idParams },
+  )
+  .get(
+    "/:id/relations",
+    async ({ params }) => {
+      await assertAnimeExists(params.id);
+      return listAnimeRelations(params.id);
+    },
+    { params: idParams },
+  );

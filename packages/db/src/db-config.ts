@@ -16,9 +16,7 @@ function readSslMode(env: Env): DatabaseSslMode {
     return "disable";
   }
 
-  throw new Error(
-    "Invalid ANICORE_DATABASE_SSL. Use 'require' or 'disable'.",
-  );
+  throw new Error("Invalid ANICORE_DATABASE_SSL. Use 'require' or 'disable'.");
 }
 
 export function getDatabaseConfig(env: Env = process.env): DatabaseConfig {
