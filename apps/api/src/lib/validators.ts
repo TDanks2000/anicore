@@ -36,3 +36,23 @@ export const animeLanguageStatusEnum = t.UnionEnum(animeLanguageStatuses);
 export const episodeLanguageStatusEnum = t.UnionEnum(episodeLanguageStatuses);
 export const languageEvidenceSourceEnum = t.UnionEnum(languageEvidenceSources);
 export const languageEvidenceTypeEnum = t.UnionEnum(languageEvidenceTypes);
+
+export const MAX_PAGE_SIZE = 100;
+
+/** `:id` path parameter, coerced to a positive integer. */
+export const idParams = t.Object({ id: positiveInteger });
+
+export const paginationQuery = {
+  limit: t.Integer({ minimum: 1, maximum: MAX_PAGE_SIZE, default: 50 }),
+  offset: t.Integer({ minimum: 0, default: 0 }),
+};
+
+export const providerMappingParams = t.Object({
+  provider: providerEnum,
+  providerId: providerIdValue,
+});
+
+/** Trims optional free text, treating blank strings as absent. */
+export function optionalText(value: string | null | undefined): string | null {
+  return value?.trim() || null;
+}

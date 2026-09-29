@@ -45,6 +45,7 @@
     "@api-wrappers/anilist-wrapper": "catalog:",
     "@api-wrappers/tmdb-wrapper": "catalog:",
     "@elysia/cors": "catalog:",
+    "@elysia/openapi": "catalog:",
     "drizzle-orm": "catalog:",
     "elysia": "catalog:",
     "postgres": "catalog:"

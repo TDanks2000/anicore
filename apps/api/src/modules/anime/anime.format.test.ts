@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Anime } from "@anicore/db/schema";
-import { formatAnime } from "./anime.service";
+import { formatAnime } from "./anime.format";
 
 describe("formatAnime", () => {
   test("exposes genres and synonyms arrays instead of json storage fields", () => {

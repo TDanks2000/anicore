@@ -10,12 +10,18 @@ async function json(response: Response): Promise<unknown> {
   return response.json();
 }
 
+const adminJson = {
+  Authorization: "Bearer test-admin-token",
+  "Content-Type": "application/json",
+};
+
 describe("app contract", () => {
   afterAll(async () => {
     await closeDb();
   });
 
   afterEach(() => {
+    delete process.env.ANICORE_ADMIN_TOKEN;
     delete process.env.ANICORE_SYNC_MONITOR_CODE;
     delete process.env.ANICORE_SYNC_MONITOR_DIR;
   });
@@ -31,17 +37,24 @@ describe("app contract", () => {
     const response = await app.handle(new Request("http://localhost/anime/nope"));
 
     expect(response.status).toBe(400);
-    expect(await json(response)).toEqual({ error: "Invalid anime id" });
+    expect(await json(response)).toMatchObject({
+      error: "Validation failed",
+      issues: [{ path: "/id" }],
+    });
   });
 
   test("returns 400 for invalid episode ids", async () => {
     const response = await app.handle(new Request("http://localhost/episodes/nope"));
 
     expect(response.status).toBe(400);
-    expect(await json(response)).toEqual({ error: "Invalid episode id" });
+    expect(await json(response)).toMatchObject({
+      error: "Validation failed",
+      issues: [{ path: "/id" }],
+    });
   });
 
   test("returns safe global errors for unknown routes and invalid bodies", async () => {
+    process.env.ANICORE_ADMIN_TOKEN = "test-admin-token";
     const notFound = await app.handle(new Request("http://localhost/does-not-exist"));
     expect(notFound.status).toBe(404);
     expect(await json(notFound)).toEqual({ error: "Not found" });
@@ -49,29 +62,35 @@ describe("app contract", () => {
     const invalidBody = await app.handle(
       new Request("http://localhost/anime/", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: adminJson,
         body: JSON.stringify({ titleRomaji: 42, secret: "must-not-leak" }),
       }),
     );
     expect(invalidBody.status).toBe(400);
-    expect(await json(invalidBody)).toEqual({ error: "Validation failed" });
+    const invalidPayload = await json(invalidBody);
+    expect(invalidPayload).toMatchObject({
+      error: "Validation failed",
+      issues: [{ path: "/titleRomaji" }],
+    });
+    expect(JSON.stringify(invalidPayload)).not.toContain("must-not-leak");
   });
 
   test("rejects values that cannot be represented by the database schema", async () => {
+    process.env.ANICORE_ADMIN_TOKEN = "test-admin-token";
     const fractionalEpisode = await app.handle(
       new Request("http://localhost/episodes/", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: adminJson,
         body: JSON.stringify({ animeId: 1.5, number: 1.5 }),
       }),
     );
     expect(fractionalEpisode.status).toBe(400);
-    expect(await json(fractionalEpisode)).toEqual({ error: "Validation failed" });
+    expect(await json(fractionalEpisode)).toMatchObject({ error: "Validation failed" });
 
     const invalidMappingConfidence = await app.handle(
       new Request("http://localhost/mappings/anime", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: adminJson,
         body: JSON.stringify({
           animeId: 1,
           provider: "kitsu",
@@ -85,7 +104,7 @@ describe("app contract", () => {
     const emptyLanguage = await app.handle(
       new Request("http://localhost/admin/anime/1/language-evidence", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: adminJson,
         body: JSON.stringify({
           languageCode: "   ",
           mediaType: "audio",

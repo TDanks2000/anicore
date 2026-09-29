@@ -1,171 +1,92 @@
 import { Elysia, t } from "elysia";
 
-import { parseId, parseLimit } from "../../lib/params";
 import {
   animeLanguageStatusEnum,
   confidenceValue,
+  idParams,
   languageCodeValue,
   languageEvidenceSourceEnum,
   languageEvidenceTypeEnum,
   languageMediaTypeEnum,
+  paginationQuery,
 } from "../../lib/validators";
+import { assertAnimeExists } from "../anime/anime.service";
 import {
   addAnimeLanguageEvidence,
   applyAnimeLanguageOverride,
-  getAnimeById,
   getResolvedAnimeLanguageStatus,
   listAnimeLanguageStatus,
   listLanguageStatusReviewQueue,
 } from "./language-status.service";
 
-async function animeExists(animeId: number) {
-  return Boolean(await getAnimeById(animeId));
-}
+const languageQuery = t.Object({ languageCode: t.Optional(languageCodeValue) });
 
-export const languageStatusRoutes = new Elysia()
+export const languageStatusRoutes = new Elysia({ detail: { tags: ["Language status"] } })
   .get(
     "/anime/:id/language-status",
-    async ({ params, query, set }) => {
-      const animeId = parseId(params.id);
-      if (!animeId) {
-        set.status = 400;
-        return { error: "Invalid anime id" };
-      }
-
-      if (!(await animeExists(animeId))) {
-        set.status = 404;
-        return { error: "Anime not found" };
-      }
-
-      return listAnimeLanguageStatus(animeId, {
-        languageCode: query.languageCode,
-        mediaType: query.mediaType,
-      });
+    async ({ params, query }) => {
+      await assertAnimeExists(params.id);
+      return listAnimeLanguageStatus(params.id, query);
     },
     {
+      params: idParams,
       query: t.Object({
         languageCode: t.Optional(languageCodeValue),
         mediaType: t.Optional(languageMediaTypeEnum),
       }),
     },
   )
-
   .get(
     "/anime/:id/dub-status",
-    async ({ params, query, set }) => {
-      const animeId = parseId(params.id);
-      if (!animeId) {
-        set.status = 400;
-        return { error: "Invalid anime id" };
-      }
-
-      if (!(await animeExists(animeId))) {
-        set.status = 404;
-        return { error: "Anime not found" };
-      }
-
+    async ({ params, query }) => {
+      await assertAnimeExists(params.id);
       return getResolvedAnimeLanguageStatus({
-        animeId,
+        animeId: params.id,
         languageCode: query.languageCode ?? "en",
         mediaType: "audio",
       });
     },
-    {
-      query: t.Object({
-        languageCode: t.Optional(languageCodeValue),
-      }),
-    },
+    { params: idParams, query: languageQuery },
   )
-
   .get(
     "/anime/:id/subtitle-status",
-    async ({ params, query, set }) => {
-      const animeId = parseId(params.id);
-      if (!animeId) {
-        set.status = 400;
-        return { error: "Invalid anime id" };
-      }
-
-      if (!(await animeExists(animeId))) {
-        set.status = 404;
-        return { error: "Anime not found" };
-      }
-
+    async ({ params, query }) => {
+      await assertAnimeExists(params.id);
       return getResolvedAnimeLanguageStatus({
-        animeId,
+        animeId: params.id,
         languageCode: query.languageCode ?? "en",
         mediaType: "subtitle",
       });
     },
-    {
-      query: t.Object({
-        languageCode: t.Optional(languageCodeValue),
-      }),
-    },
+    { params: idParams, query: languageQuery },
   )
-
   .post(
-    "/admin/anime/:animeId/language-evidence",
-    async ({ params, body, set }) => {
-      const animeId = parseId(params.animeId);
-      if (!animeId) {
-        set.status = 400;
-        return { error: "Invalid anime id" };
-      }
-
-      if (!(await animeExists(animeId))) {
-        set.status = 404;
-        return { error: "Anime not found" };
-      }
-
-      return addAnimeLanguageEvidence({
-        animeId,
-        languageCode: body.languageCode,
-        mediaType: body.mediaType,
-        source: body.source,
-        sourceUrl: body.sourceUrl,
-        evidenceType: body.evidenceType,
-        value: body.value,
-        confidence: body.confidence,
-      });
+    "/admin/anime/:id/language-evidence",
+    async ({ params, body }) => {
+      await assertAnimeExists(params.id);
+      return addAnimeLanguageEvidence({ animeId: params.id, ...body });
     },
     {
+      params: idParams,
       body: t.Object({
         languageCode: languageCodeValue,
         mediaType: languageMediaTypeEnum,
         source: languageEvidenceSourceEnum,
         sourceUrl: t.Optional(t.String()),
         evidenceType: languageEvidenceTypeEnum,
-        value: t.String(),
+        value: t.String({ minLength: 1 }),
         confidence: t.Optional(confidenceValue),
       }),
     },
   )
-
   .post(
-    "/admin/anime/:animeId/language-override",
-    async ({ params, body, set }) => {
-      const animeId = parseId(params.animeId);
-      if (!animeId) {
-        set.status = 400;
-        return { error: "Invalid anime id" };
-      }
-
-      if (!(await animeExists(animeId))) {
-        set.status = 404;
-        return { error: "Anime not found" };
-      }
-
-      return applyAnimeLanguageOverride({
-        animeId,
-        languageCode: body.languageCode,
-        mediaType: body.mediaType,
-        status: body.status,
-        confidence: body.confidence,
-        notes: body.notes,
-      });
+    "/admin/anime/:id/language-override",
+    async ({ params, body }) => {
+      await assertAnimeExists(params.id);
+      return applyAnimeLanguageOverride({ animeId: params.id, ...body });
     },
     {
+      params: idParams,
       body: t.Object({
         languageCode: languageCodeValue,
         mediaType: languageMediaTypeEnum,
@@ -175,15 +96,6 @@ export const languageStatusRoutes = new Elysia()
       }),
     },
   )
-
-  .get(
-    "/admin/language-status/review-queue",
-    ({ query }) => {
-      return listLanguageStatusReviewQueue(parseLimit(query.limit));
-    },
-    {
-      query: t.Object({
-        limit: t.Optional(t.String()),
-      }),
-    },
-  );
+  .get("/admin/language-status/review-queue", ({ query }) => listLanguageStatusReviewQueue(query), {
+    query: t.Object(paginationQuery),
+  });

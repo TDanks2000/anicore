@@ -1,9 +1,9 @@
 import { cors } from "@elysia/cors";
+import { openapi } from "@elysia/openapi";
 import { Elysia } from "elysia";
 
-import { authorizeAdminWrite } from "./lib/admin-auth";
-import { enforceMappingWriteInvariants } from "./lib/mapping-write-invariants";
-import { handlePublicAnimeRead } from "./lib/public-anime-read";
+import { authorizeAdminRequest } from "./lib/admin-auth";
+import { HttpError, isForeignKeyViolation, isUniqueViolation } from "./lib/errors";
 import { animeRoutes } from "./modules/anime/anime.routes";
 import { episodeRoutes } from "./modules/episodes/episodes.routes";
 import { healthRoutes } from "./modules/health/health.routes";
@@ -11,59 +11,35 @@ import { languageStatusRoutes } from "./modules/language-status/language-status.
 import { mappingRoutes } from "./modules/mappings/mappings.routes";
 import { syncMonitorRoutes } from "./modules/sync-monitor/sync-monitor.routes";
 
+const DEFAULT_CORS_ORIGINS = ["http://localhost:5173", "http://localhost:4173"];
+
+function corsOrigins(): string[] {
+  const configured = process.env.CORS_ORIGIN?.split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  return configured?.length ? configured : DEFAULT_CORS_ORIGINS;
+}
+
+interface ValidationIssue {
+  path: string;
+  message: string;
+}
+
+/** Field paths and messages only: echoing values could leak submitted secrets. */
+function validationIssues(error: unknown): ValidationIssue[] {
+  const all = (error as { all?: Array<{ path?: string; summary?: string; message?: string }> }).all;
+  if (!Array.isArray(all)) return [];
+  return all.map((issue) => ({
+    path: issue.path || "/",
+    message: issue.summary ?? issue.message ?? "Invalid value",
+  }));
+}
+
 export const app = new Elysia()
-  .onError({ as: "global" }, ({ code, error, set }) => {
-    if (code === "VALIDATION" || code === "PARSE") {
-      set.status = 400;
-      return { error: "Validation failed" };
-    }
-
-    if (code === "NOT_FOUND") {
-      set.status = 404;
-      return { error: "Not found" };
-    }
-
-    console.error(error);
-    set.status = 500;
-    return { error: "Internal server error" };
-  })
-  .onBeforeHandle({ as: "global" }, async ({ request, headers, set }) => {
-    const auth = authorizeAdminWrite({
-      method: request.method,
-      pathname: new URL(request.url).pathname,
-      headers,
-    });
-    if (!auth.ok) {
-      set.status = auth.status;
-      if (auth.status === 401) {
-        set.headers["WWW-Authenticate"] = 'Bearer realm="AniCore Admin"';
-      }
-      return { error: auth.error };
-    }
-
-    const publicAnimeRead = await handlePublicAnimeRead({
-      method: request.method,
-      requestUrl: request.url,
-      headers,
-    });
-    if (publicAnimeRead.handled) return publicAnimeRead.value;
-  })
-  .onBeforeHandle({ as: "global" }, async ({ request, body, set }) => {
-    const result = await enforceMappingWriteInvariants({
-      method: request.method,
-      pathname: new URL(request.url).pathname,
-      body,
-    });
-    if (result.ok) return;
-
-    set.status = result.status;
-    return { error: result.error };
-  })
+  // CORS must run first so that early rejections still carry CORS headers.
   .use(
     cors({
-      origin: process.env.CORS_ORIGIN
-        ? process.env.CORS_ORIGIN.split(",").map((origin) => origin.trim())
-        : ["http://localhost:5173", "http://localhost:4173"],
+      origin: corsOrigins(),
       allowedHeaders: [
         "Content-Type",
         "Authorization",
@@ -75,9 +51,84 @@ export const app = new Elysia()
       preflight: true,
     }),
   )
+  // Authorize before the body is parsed or validated, so unauthenticated
+  // callers learn nothing about the shape of admin routes.
+  .onRequest(({ request, set }) => {
+    const auth = authorizeAdminRequest({
+      method: request.method,
+      pathname: new URL(request.url).pathname,
+      headers: {
+        authorization: request.headers.get("authorization") ?? undefined,
+        "x-anicore-admin-token": request.headers.get("x-anicore-admin-token") ?? undefined,
+      },
+    });
+    if (auth.ok) return;
+
+    set.status = auth.status;
+    if (auth.status === 401) set.headers["WWW-Authenticate"] = 'Bearer realm="AniCore Admin"';
+    return { error: auth.error };
+  })
+  .onError({ as: "global" }, ({ code, error, set }) => {
+    if (error instanceof HttpError) {
+      set.status = error.status;
+      return { error: error.message };
+    }
+
+    switch (code) {
+      case "VALIDATION":
+        set.status = 400;
+        return { error: "Validation failed", issues: validationIssues(error) };
+      case "PARSE":
+        set.status = 400;
+        return { error: "Malformed request body" };
+      case "NOT_FOUND":
+        set.status = 404;
+        return { error: "Not found" };
+    }
+
+    if (isUniqueViolation(error)) {
+      set.status = 409;
+      return { error: "Conflicts with an existing record" };
+    }
+    if (isForeignKeyViolation(error)) {
+      set.status = 409;
+      return { error: "A referenced record does not exist" };
+    }
+
+    console.error(error);
+    set.status = 500;
+    return { error: "Internal server error" };
+  })
+  .use(
+    openapi({
+      path: "/docs",
+      exclude: { paths: [/^\/docs/] },
+      documentation: {
+        info: {
+          title: "AniCore API",
+          version: "0.1.0",
+          description:
+            "Unified anime metadata: anime, episodes, cross-provider mappings and dub/sub availability. " +
+            "Reads are public. Writes and every /admin route need the admin token; /sync-monitor uses its own access code.",
+        },
+        components: {
+          securitySchemes: {
+            adminToken: { type: "http", scheme: "bearer", description: "ANICORE_ADMIN_TOKEN" },
+            monitorCode: {
+              type: "http",
+              scheme: "bearer",
+              description: "Sync monitor access code",
+            },
+          },
+        },
+      },
+    }),
+  )
   .use(healthRoutes)
   .use(syncMonitorRoutes)
   .use(languageStatusRoutes)
   .use(animeRoutes)
   .use(episodeRoutes)
   .use(mappingRoutes);
+
+export type App = typeof app;

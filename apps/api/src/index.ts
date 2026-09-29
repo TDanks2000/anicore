@@ -1,4 +1,4 @@
-import { assertDatabaseConfigured } from "@anicore/db";
+import { assertDatabaseConfigured, closeDb } from "@anicore/db";
 import { installProxyFetch } from "@anicore/providers/lib/proxy";
 import { app } from "./app";
 import { startAutomaticSyncScheduler } from "./lib/automatic-sync";
@@ -31,6 +31,7 @@ async function shutdown(signal: "SIGINT" | "SIGTERM"): Promise<void> {
   try {
     await app.stop();
     await stopApiStartedSyncProcess();
+    await closeDb();
     process.exit(0);
   } catch (error) {
     console.error("AniCore API shutdown failed", error);
@@ -42,4 +43,4 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.once(signal, () => void shutdown(signal));
 }
 
-console.log(`AniCore API running at http://${hostname}:${port}`);
+console.log(`AniCore API running at http://${hostname}:${port} (docs at /docs)`);

@@ -5,7 +5,6 @@ import {
 } from "@anicore/db/language-status";
 import {
   type AnimeLanguageEvidence,
-  anime,
   animeLanguageEvidence,
   animeLanguageStatus,
   type Episode,
@@ -39,12 +38,6 @@ export interface AnimeLanguageStatusResult {
   checkedAt: Date | null;
   evidence: AnimeLanguageEvidence[];
   episodes: EpisodeLanguageStatus[];
-}
-
-export async function getAnimeById(animeId: number) {
-  const [row] = await db.select({ id: anime.id }).from(anime).where(eq(anime.id, animeId)).limit(1);
-
-  return row ?? null;
 }
 
 export async function getEpisodeById(episodeId: number): Promise<Episode | null> {
@@ -373,7 +366,7 @@ export async function upsertLegacyEpisodeAudioStatus(input: {
   return toLegacyEpisodeAudioResponse(episode, [row])[0] ?? null;
 }
 
-export async function listLanguageStatusReviewQueue(limit: number) {
+export async function listLanguageStatusReviewQueue(page: { limit: number; offset: number }) {
   return db
     .select()
     .from(animeLanguageStatus)
@@ -383,6 +376,11 @@ export async function listLanguageStatusReviewQueue(limit: number) {
         eq(animeLanguageStatus.isManualOverride, false),
       ),
     )
-    .orderBy(asc(animeLanguageStatus.confidence), desc(animeLanguageStatus.updatedAt))
-    .limit(limit);
+    .orderBy(
+      asc(animeLanguageStatus.confidence),
+      desc(animeLanguageStatus.updatedAt),
+      asc(animeLanguageStatus.id),
+    )
+    .limit(page.limit)
+    .offset(page.offset);
 }
