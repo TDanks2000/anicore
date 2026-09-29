@@ -2,6 +2,21 @@
 
 All notable changes to this project, newest first.
 
+- ⚠️ GET requests no longer import from AniList. Use `POST /anime/import/anilist` with `{ "id": … }` or `{ "search": "…" }` and the admin token; this replaces the admin-token-on-GET behavior.
+- ⚠️ Lookups of missing records return `404` instead of `200` with `null` (`/anime/by/…`, `/mappings/anime/…`, `/mappings/episode/…`), and child lists of a missing anime return `404` instead of `[]`.
+- ⚠️ `GET /admin/language-status/review-queue` now requires the admin token, like every other `/admin` route.
+- ⚠️ Validation errors include the failing field paths, `limit` above 100 is rejected rather than clamped, and the "not configured" admin error reads "Admin routes are disabled until ANICORE_ADMIN_TOKEN is configured".
+- ✨ Serve OpenAPI docs at `/docs`, and add `GET /health/ready`, which checks the database.
+- ✨ Search matches synonyms, ranks exact and prefix title matches first, and accepts `format`, `season`, `seasonYear` and `status` filters. Lists take `offset` and have a stable order.
+- ✨ Generate a slug from the title for manually created anime.
+- ✨ Add a Postgres integration test suite, Biome lint and formatting, and CI.
+- 🐛 Treat `%` and `_` in search queries literally instead of as wildcards.
+- 🐛 Stop failing an anime when the sync and an API import create it, its slug, or its studios and tags at the same time.
+- 🐛 Stop failing an anime whose provider lists the same external link twice.
+- 🐛 Make a provider's only anime mapping primary by default, and lock rows while changing primaries.
+- 🐛 Run the admin check before parsing request bodies, and keep CORS headers on rejected requests.
+- 🐛 Fix `bun run db:repair-ambiguous-mapping-primaries` at the repository root, expose `db:diagnose-ambiguous-provider-mappings`, and pass `--parallel` through to the sync.
+- 🧹 Remove the applied JoJo segment migration and AIR recap repair scripts.
 - ✨ Accept MyAnimeList cross-references as proof of Kitsu identity, not just AniList ones. Kitsu publishes them far more often, and both already arrive in the search payload.
 - ✨ Record the Kitsu and MyAnimeList links AnimeSchedule publishes, once its own AniList link is confirmed to resolve to the same anime.
 - ✨ Add a matching evaluator that grades the fuzzy matcher against Kitsu's authoritative cross-references and reports precision, recall and abstentions. Held-out accuracy is 100% precision at 98% recall, up from 91% recall.

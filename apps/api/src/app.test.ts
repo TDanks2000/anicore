@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { closeDb } from "@anicore/db";
-import { app } from "./app";
+import { app, readableValidationMessage } from "./app";
 import { SyncMonitor } from "./lib/sync-monitor";
 
 async function json(response: Response): Promise<unknown> {
@@ -14,6 +14,18 @@ const adminJson = {
   Authorization: "Bearer test-admin-token",
   "Content-Type": "application/json",
 };
+
+describe("readableValidationMessage", () => {
+  test("collapses duplicated union alternatives", () => {
+    expect(readableValidationMessage("Property 'id' should be one of: 'integer', 'integer'")).toBe(
+      "Property 'id' should be integer",
+    );
+    expect(readableValidationMessage("Property 'x' should be one of: 'a', 'b', 'a'")).toBe(
+      "Property 'x' should be one of: 'a', 'b'",
+    );
+    expect(readableValidationMessage("Expected string")).toBe("Expected string");
+  });
+});
 
 describe("app contract", () => {
   afterAll(async () => {

@@ -25,13 +25,27 @@ interface ValidationIssue {
   message: string;
 }
 
+/**
+ * Elysia coerces numeric params through a union of "numeric string" and
+ * "integer", so its summaries read "should be one of: 'integer', 'integer'".
+ * Collapse repeated alternatives into a readable sentence.
+ */
+export function readableValidationMessage(message: string): string {
+  const match = message.match(/^(.*) should be one of: (.+)$/);
+  if (!match) return message;
+  const options = [...new Set(match[2]!.split(/,\s*/))];
+  return options.length === 1
+    ? `${match[1]} should be ${options[0]!.replace(/'/g, "")}`
+    : `${match[1]} should be one of: ${options.join(", ")}`;
+}
+
 /** Field paths and messages only: echoing values could leak submitted secrets. */
 function validationIssues(error: unknown): ValidationIssue[] {
   const all = (error as { all?: Array<{ path?: string; summary?: string; message?: string }> }).all;
   if (!Array.isArray(all)) return [];
   return all.map((issue) => ({
     path: issue.path || "/",
-    message: issue.summary ?? issue.message ?? "Invalid value",
+    message: readableValidationMessage(issue.summary ?? issue.message ?? "Invalid value"),
   }));
 }
 
