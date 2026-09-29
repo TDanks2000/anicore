@@ -21,9 +21,7 @@ export function assertUniqueMappingIdentities(
 
     const key = `${mapping.provider}\u0000${providerId}`;
     if (seen.has(key)) {
-      throw new MappingInputError(
-        `Duplicate ${mapping.provider} mapping ${providerId} in request`,
-      );
+      throw new MappingInputError(`Duplicate ${mapping.provider} mapping ${providerId} in request`);
     }
     seen.add(key);
   }
@@ -38,7 +36,7 @@ export function assertUnambiguousAnimeMappingPrimaries(
 ): void {
   assertUniqueMappingIdentities(mappings);
 
-  const byProvider = new Map<string, typeof mappings[number][]>();
+  const byProvider = new Map<string, (typeof mappings)[number][]>();
   for (const mapping of mappings) {
     const group = byProvider.get(mapping.provider) ?? [];
     group.push(mapping);

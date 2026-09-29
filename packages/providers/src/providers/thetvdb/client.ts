@@ -7,262 +7,246 @@ const TVDB_RETRY_BASE_DELAY_MS = 300;
 const TVDB_RETRIABLE_STATUS_CODES = new Set([429, 502, 503, 504]);
 
 interface TvdbEnvelope<T> {
-	data: T;
-	status: string;
-	links?: {
-		next?: string | null;
-		prev?: string | null;
-		self?: string | null;
-	};
+  data: T;
+  status: string;
+  links?: {
+    next?: string | null;
+    prev?: string | null;
+    self?: string | null;
+  };
 }
 
 interface TvdbSearchResult {
-	tvdb_id?: string;
-	name?: string;
-	title?: string;
-	slug?: string;
-	aliases?: string[];
-	year?: string;
-	type?: string;
+  tvdb_id?: string;
+  name?: string;
+  title?: string;
+  slug?: string;
+  aliases?: string[];
+  year?: string;
+  type?: string;
 }
 
 interface TvdbSeasonRecord {
-	number?: number;
+  number?: number;
 }
 
 export interface TvdbSeriesBaseRecord {
-	id: number;
-	name: string;
-	slug?: string;
-	firstAired?: string;
+  id: number;
+  name: string;
+  slug?: string;
+  firstAired?: string;
 }
 
 interface TvdbSeriesExtended extends TvdbSeriesBaseRecord {
-	seasons?: TvdbSeasonRecord[];
+  seasons?: TvdbSeasonRecord[];
 }
 
 export interface TvdbEpisodeBase {
-	id: number;
-	name?: string;
-	number?: number;
-	seasonNumber?: number;
-	overview?: string;
-	aired?: string;
+  id: number;
+  name?: string;
+  number?: number;
+  seasonNumber?: number;
+  overview?: string;
+  aired?: string;
 }
 
 let tokenCache: { token: string; expiresAt: number } | null = null;
 
 function getCredentials(): { apiKey: string; pin?: string } | null {
-	const apiKey = process.env.TVDB_API_KEY?.trim();
-	if (!apiKey) return null;
+  const apiKey = process.env.TVDB_API_KEY?.trim();
+  if (!apiKey) return null;
 
-	const pin = process.env.TVDB_PIN?.trim();
-	return pin ? { apiKey, pin } : { apiKey };
+  const pin = process.env.TVDB_PIN?.trim();
+  return pin ? { apiKey, pin } : { apiKey };
 }
 
 function sleep(ms: number): Promise<void> {
-	return new Promise((resolve) => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function retryDelayMs(response: Response | null, attempt: number): number {
-	const retryAfter = response?.headers.get("retry-after")?.trim();
-	if (retryAfter) {
-		const seconds = Number(retryAfter);
-		if (Number.isFinite(seconds) && seconds >= 0) {
-			return Math.min(seconds * 1000, 10_000);
-		}
-		const dateMs = Date.parse(retryAfter);
-		if (Number.isFinite(dateMs)) {
-			return Math.min(Math.max(0, dateMs - Date.now()), 10_000);
-		}
-	}
-	return TVDB_RETRY_BASE_DELAY_MS * 2 ** (attempt - 1);
+  const retryAfter = response?.headers.get("retry-after")?.trim();
+  if (retryAfter) {
+    const seconds = Number(retryAfter);
+    if (Number.isFinite(seconds) && seconds >= 0) {
+      return Math.min(seconds * 1000, 10_000);
+    }
+    const dateMs = Date.parse(retryAfter);
+    if (Number.isFinite(dateMs)) {
+      return Math.min(Math.max(0, dateMs - Date.now()), 10_000);
+    }
+  }
+  return TVDB_RETRY_BASE_DELAY_MS * 2 ** (attempt - 1);
 }
 
 function isRetriableNetworkError(error: unknown): boolean {
-	if (error instanceof DOMException) {
-		if (error.name === "AbortError" || error.name === "TimeoutError") return true;
-	}
-	const message = error instanceof Error ? error.message : String(error);
-	return /timed?\s*out|timeout|fetch failed|network|socket|connection|econnreset|etimedout/i.test(
-		message,
-	);
+  if (error instanceof DOMException) {
+    if (error.name === "AbortError" || error.name === "TimeoutError") return true;
+  }
+  const message = error instanceof Error ? error.message : String(error);
+  return /timed?\s*out|timeout|fetch failed|network|socket|connection|econnreset|etimedout/i.test(
+    message,
+  );
 }
 
 async function tvdbFetch(input: string | URL, init: RequestInit): Promise<Response> {
-	let lastError: unknown = null;
+  let lastError: unknown = null;
 
-	for (let attempt = 1; attempt <= TVDB_MAX_ATTEMPTS; attempt += 1) {
-		let response: Response | null = null;
-		try {
-			response = await fetch(input, {
-				...init,
-				signal: AbortSignal.timeout(TVDB_REQUEST_TIMEOUT_MS),
-			});
-		} catch (error) {
-			lastError = error;
-			if (attempt >= TVDB_MAX_ATTEMPTS || !isRetriableNetworkError(error)) {
-				throw error;
-			}
-			await sleep(retryDelayMs(null, attempt));
-			continue;
-		}
+  for (let attempt = 1; attempt <= TVDB_MAX_ATTEMPTS; attempt += 1) {
+    let response: Response | null = null;
+    try {
+      response = await fetch(input, {
+        ...init,
+        signal: AbortSignal.timeout(TVDB_REQUEST_TIMEOUT_MS),
+      });
+    } catch (error) {
+      lastError = error;
+      if (attempt >= TVDB_MAX_ATTEMPTS || !isRetriableNetworkError(error)) {
+        throw error;
+      }
+      await sleep(retryDelayMs(null, attempt));
+      continue;
+    }
 
-		if (
-			TVDB_RETRIABLE_STATUS_CODES.has(response.status) &&
-			attempt < TVDB_MAX_ATTEMPTS
-		) {
-			await sleep(retryDelayMs(response, attempt));
-			continue;
-		}
+    if (TVDB_RETRIABLE_STATUS_CODES.has(response.status) && attempt < TVDB_MAX_ATTEMPTS) {
+      await sleep(retryDelayMs(response, attempt));
+      continue;
+    }
 
-		return response;
-	}
+    return response;
+  }
 
-	throw lastError instanceof Error
-		? lastError
-		: new Error("TVDB request failed after retries");
+  throw lastError instanceof Error ? lastError : new Error("TVDB request failed after retries");
 }
 
 async function getToken(): Promise<string | null> {
-	if (tokenCache && tokenCache.expiresAt > Date.now()) {
-		return tokenCache.token;
-	}
+  if (tokenCache && tokenCache.expiresAt > Date.now()) {
+    return tokenCache.token;
+  }
 
-	const credentials = getCredentials();
-	if (!credentials) return null;
+  const credentials = getCredentials();
+  if (!credentials) return null;
 
-	const res = await tvdbFetch(`${TVDB_API_BASE}/login`, {
-		method: "POST",
-		headers: {
-			"Content-Type": "application/json",
-			Accept: "application/json",
-		},
-		body: JSON.stringify(
-			credentials.pin
-				? { apikey: credentials.apiKey, pin: credentials.pin }
-				: { apikey: credentials.apiKey },
-		),
-	});
+  const res = await tvdbFetch(`${TVDB_API_BASE}/login`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(
+      credentials.pin
+        ? { apikey: credentials.apiKey, pin: credentials.pin }
+        : { apikey: credentials.apiKey },
+    ),
+  });
 
-	if (!res.ok) {
-		throw new Error(await formatHttpError("TVDB login failed", res));
-	}
+  if (!res.ok) {
+    throw new Error(await formatHttpError("TVDB login failed", res));
+  }
 
-	const json = (await res.json()) as TvdbEnvelope<{ token: string }>;
-	const token = json.data?.token;
-	if (!token) {
-		throw new Error("TVDB login did not return a token");
-	}
+  const json = (await res.json()) as TvdbEnvelope<{ token: string }>;
+  const token = json.data?.token;
+  if (!token) {
+    throw new Error("TVDB login did not return a token");
+  }
 
-	tokenCache = {
-		token,
-		expiresAt: Date.now() + 25 * 24 * 60 * 60 * 1000,
-	};
-	return token;
+  tokenCache = {
+    token,
+    expiresAt: Date.now() + 25 * 24 * 60 * 60 * 1000,
+  };
+  return token;
 }
 
 async function tvdbGetEnvelope<T>(
-	path: string,
-	query?: Record<string, string | number | undefined>,
+  path: string,
+  query?: Record<string, string | number | undefined>,
 ): Promise<TvdbEnvelope<T> | null> {
-	const token = await getToken();
-	if (!token) return null;
+  const token = await getToken();
+  if (!token) return null;
 
-	const url = new URL(`${TVDB_API_BASE}${path}`);
-	for (const [key, value] of Object.entries(query ?? {})) {
-		if (value !== undefined && value !== "") {
-			url.searchParams.set(key, String(value));
-		}
-	}
+  const url = new URL(`${TVDB_API_BASE}${path}`);
+  for (const [key, value] of Object.entries(query ?? {})) {
+    if (value !== undefined && value !== "") {
+      url.searchParams.set(key, String(value));
+    }
+  }
 
-	const res = await tvdbFetch(url, {
-		headers: {
-			Accept: "application/json",
-			Authorization: `Bearer ${token}`,
-		},
-	});
+  const res = await tvdbFetch(url, {
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+  });
 
-	if (!res.ok) {
-		throw new Error(await formatHttpError("TVDB request failed", res));
-	}
+  if (!res.ok) {
+    throw new Error(await formatHttpError("TVDB request failed", res));
+  }
 
-	return (await res.json()) as TvdbEnvelope<T>;
+  return (await res.json()) as TvdbEnvelope<T>;
 }
 
 async function tvdbGet<T>(
-	path: string,
-	query?: Record<string, string | number | undefined>,
+  path: string,
+  query?: Record<string, string | number | undefined>,
 ): Promise<T | null> {
-	const envelope = await tvdbGetEnvelope<T>(path, query);
-	return envelope?.data ?? null;
+  const envelope = await tvdbGetEnvelope<T>(path, query);
+  return envelope?.data ?? null;
 }
 
 export async function searchTvdbSeries(
-	query: string,
-	year?: number | null,
+  query: string,
+  year?: number | null,
 ): Promise<TvdbSearchResult[]> {
-	const data = await tvdbGet<TvdbSearchResult[]>("/search", {
-		query,
-		type: "series",
-		year: year ?? undefined,
-		limit: 5,
-	});
-	return data ?? [];
+  const data = await tvdbGet<TvdbSearchResult[]>("/search", {
+    query,
+    type: "series",
+    year: year ?? undefined,
+    limit: 5,
+  });
+  return data ?? [];
 }
 
-export async function getTvdbSeriesBySlug(
-	slug: string,
-): Promise<TvdbSeriesBaseRecord | null> {
-	return tvdbGet<TvdbSeriesBaseRecord>(
-		`/series/slug/${encodeURIComponent(slug)}`,
-	);
+export async function getTvdbSeriesBySlug(slug: string): Promise<TvdbSeriesBaseRecord | null> {
+  return tvdbGet<TvdbSeriesBaseRecord>(`/series/slug/${encodeURIComponent(slug)}`);
 }
 
-export async function getTvdbSeriesExtended(
-	id: number,
-): Promise<TvdbSeriesExtended | null> {
-	return tvdbGet<TvdbSeriesExtended>(`/series/${id}/extended`, {
-		short: "true",
-	});
+export async function getTvdbSeriesExtended(id: number): Promise<TvdbSeriesExtended | null> {
+  return tvdbGet<TvdbSeriesExtended>(`/series/${id}/extended`, {
+    short: "true",
+  });
 }
 
 async function fetchTvdbEpisodePages(
-	seriesId: number,
-	options: { lang?: string; seasonNumber?: number } = {},
+  seriesId: number,
+  options: { lang?: string; seasonNumber?: number } = {},
 ): Promise<TvdbEpisodeBase[]> {
-	const episodes: TvdbEpisodeBase[] = [];
-	let page = 0;
+  const episodes: TvdbEpisodeBase[] = [];
+  let page = 0;
 
-	while (true) {
-		const path = options.lang
-			? `/series/${seriesId}/episodes/official/${options.lang}`
-			: `/series/${seriesId}/episodes/official`;
-		const query = options.lang
-			? { page }
-			: { page, season: options.seasonNumber };
+  while (true) {
+    const path = options.lang
+      ? `/series/${seriesId}/episodes/official/${options.lang}`
+      : `/series/${seriesId}/episodes/official`;
+    const query = options.lang ? { page } : { page, season: options.seasonNumber };
 
-		const envelope = await tvdbGetEnvelope<{ episodes?: TvdbEpisodeBase[] }>(
-			path,
-			query,
-		);
-		const rawBatch = envelope?.data?.episodes ?? [];
-		if (!rawBatch.length) break;
+    const envelope = await tvdbGetEnvelope<{ episodes?: TvdbEpisodeBase[] }>(path, query);
+    const rawBatch = envelope?.data?.episodes ?? [];
+    if (!rawBatch.length) break;
 
-		episodes.push(...rawBatch);
+    episodes.push(...rawBatch);
 
-		// Prefer TVDB's pagination links when present. Keep the old page-size
-		// fallback for responses that omit links so older/self-hosted responses do
-		// not accidentally loop forever.
-		if (envelope?.links) {
-			if (!envelope.links.next) break;
-		} else if (rawBatch.length < 100) {
-			break;
-		}
-		page++;
-	}
+    // Prefer TVDB's pagination links when present. Keep the old page-size
+    // fallback for responses that omit links so older/self-hosted responses do
+    // not accidentally loop forever.
+    if (envelope?.links) {
+      if (!envelope.links.next) break;
+    } else if (rawBatch.length < 100) {
+      break;
+    }
+    page++;
+  }
 
-	return episodes;
+  return episodes;
 }
 
 /**
@@ -272,21 +256,21 @@ async function fetchTvdbEpisodePages(
  * the same full-series request for each season candidate.
  */
 export async function getTvdbOfficialEpisodes(
-	seriesId: number,
-	lang?: string,
+  seriesId: number,
+  lang?: string,
 ): Promise<TvdbEpisodeBase[]> {
-	return fetchTvdbEpisodePages(seriesId, { lang });
+  return fetchTvdbEpisodePages(seriesId, { lang });
 }
 
 export async function getTvdbSeasonEpisodes(
-	seriesId: number,
-	seasonNumber: number,
-	lang?: string,
+  seriesId: number,
+  seasonNumber: number,
+  lang?: string,
 ): Promise<TvdbEpisodeBase[]> {
-	if (lang) {
-		const allEpisodes = await getTvdbOfficialEpisodes(seriesId, lang);
-		return allEpisodes.filter((episode) => episode.seasonNumber === seasonNumber);
-	}
+  if (lang) {
+    const allEpisodes = await getTvdbOfficialEpisodes(seriesId, lang);
+    return allEpisodes.filter((episode) => episode.seasonNumber === seasonNumber);
+  }
 
-	return fetchTvdbEpisodePages(seriesId, { seasonNumber });
+  return fetchTvdbEpisodePages(seriesId, { seasonNumber });
 }

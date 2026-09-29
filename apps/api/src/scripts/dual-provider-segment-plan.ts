@@ -38,11 +38,7 @@ export interface AlignmentOutcome {
 export interface DualSegmentPlanOutcome {
   ownerSegment: AlignedProviderSegment | null;
   orphanSegment: AlignedProviderSegment | null;
-  reason:
-    | AlignmentRejectReason
-    | "not-adjacent-ownership"
-    | "segment-order-mismatch"
-    | null;
+  reason: AlignmentRejectReason | "not-adjacent-ownership" | "segment-order-mismatch" | null;
 }
 
 function positiveInteger(value: number): boolean {
@@ -94,11 +90,7 @@ export function buildAlignedProviderSegment(
   }
 
   const offset = providerNumbers[0]! - localNumbers[0]!;
-  if (
-    sorted.some(
-      (row) => row.providerEpisodeNumber - row.localEpisodeNumber !== offset,
-    )
-  ) {
+  if (sorted.some((row) => row.providerEpisodeNumber - row.localEpisodeNumber !== offset)) {
     return { segment: null, reason: "non-linear-local-alignment" };
   }
 
@@ -152,11 +144,9 @@ export function buildDualProviderSegmentPlan(
   }
 
   const ownerBeforeOrphan =
-    owner.segment.providerEpisodeEnd + 1 ===
-    orphan.segment.providerEpisodeStart;
+    owner.segment.providerEpisodeEnd + 1 === orphan.segment.providerEpisodeStart;
   const orphanBeforeOwner =
-    orphan.segment.providerEpisodeEnd + 1 ===
-    owner.segment.providerEpisodeStart;
+    orphan.segment.providerEpisodeEnd + 1 === owner.segment.providerEpisodeStart;
   if (
     (classification === "owner-then-orphan-adjacent" && !ownerBeforeOrphan) ||
     (classification === "orphan-then-owner-adjacent" && !orphanBeforeOwner)

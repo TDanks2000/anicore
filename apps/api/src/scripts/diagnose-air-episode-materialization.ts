@@ -1,10 +1,9 @@
-import { sql } from "drizzle-orm";
-
 import { closeDb } from "@anicore/db";
-import { queryRows } from "../lib/query-rows";
 import { fetchAnilistAnime } from "@anicore/providers/anilist/sync";
 import { fetchKitsuEpisodeData } from "@anicore/providers/kitsu/sync";
 import { getTvdbSeasonEpisodes } from "@anicore/providers/thetvdb/client";
+import { sql } from "drizzle-orm";
+import { queryRows } from "../lib/query-rows";
 
 const ANIME_ID = 223;
 const TVDB_SERIES_ID = 79101;
@@ -69,8 +68,9 @@ function fail(message: string): never {
 }
 
 function exactRange(numbers: number[]): { contiguousFromOne: boolean; missing: number[] } {
-  const positive = [...new Set(numbers.filter((value) => Number.isInteger(value) && value > 0))]
-    .sort((a, b) => a - b);
+  const positive = [
+    ...new Set(numbers.filter((value) => Number.isInteger(value) && value > 0)),
+  ].sort((a, b) => a - b);
   const max = positive.at(-1) ?? 0;
   const missing: number[] = [];
   for (let number = 1; number <= max; number += 1) {
@@ -149,7 +149,9 @@ async function run(): Promise<Record<string, unknown>> {
 
   const anilistMappings = mappings.filter((mapping) => mapping.provider === "anilist");
   if (anilistMappings.length !== 1) {
-    fail(`Expected exactly one AniList mapping for anime ${ANIME_ID}; got ${anilistMappings.length}`);
+    fail(
+      `Expected exactly one AniList mapping for anime ${ANIME_ID}; got ${anilistMappings.length}`,
+    );
   }
   const anilistId = Number(anilistMappings[0]!.providerId);
   if (!Number.isInteger(anilistId) || anilistId <= 0) {
@@ -203,9 +205,7 @@ async function run(): Promise<Record<string, unknown>> {
         order by em.id
       `)
     : [];
-  const ownerByProviderId = new Map(
-    tvdbOwnership.map((owner) => [owner.providerEpisodeId, owner]),
-  );
+  const ownerByProviderId = new Map(tvdbOwnership.map((owner) => [owner.providerEpisodeId, owner]));
 
   const tvdbWithOwnership = authoritativeTvdb.map((episode) => ({
     ...episode,
@@ -276,9 +276,7 @@ async function run(): Promise<Record<string, unknown>> {
       tvdb: {
         providerId: TVDB_PROVIDER_ID,
         authoritativeEpisodeCount: authoritativeTvdb.length,
-        numbering: exactRange(
-          authoritativeTvdb.map((episode) => episode.providerEpisodeNumber),
-        ),
+        numbering: exactRange(authoritativeTvdb.map((episode) => episode.providerEpisodeNumber)),
         providerAssociations,
         episodes: tvdbWithOwnership,
       },

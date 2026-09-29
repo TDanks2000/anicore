@@ -120,7 +120,12 @@ export function analyzeSuffixSegmentEvidence(
   const contiguous =
     authoritative.length > 0 &&
     authoritative.every((episode, index) => episode.providerEpisodeNumber === index + 1);
-  if (!contiguous || !Number.isInteger(input.prefixEnd) || input.prefixEnd <= 0 || input.prefixEnd >= authoritative.length) {
+  if (
+    !contiguous ||
+    !Number.isInteger(input.prefixEnd) ||
+    input.prefixEnd <= 0 ||
+    input.prefixEnd >= authoritative.length
+  ) {
     return {
       suffixStart: null,
       suffixEnd: null,
@@ -143,8 +148,7 @@ export function analyzeSuffixSegmentEvidence(
   const lastAirDate = authoritative[suffixEnd - 1]?.airDate?.trim() || null;
   const suffixMappings = input.mappedEpisodes.filter(
     (mapping) =>
-      mapping.providerEpisodeNumber >= suffixStart &&
-      mapping.providerEpisodeNumber <= suffixEnd,
+      mapping.providerEpisodeNumber >= suffixStart && mapping.providerEpisodeNumber <= suffixEnd,
   );
   const mappedAnimeIds = [...new Set(suffixMappings.map((mapping) => mapping.animeId))].sort(
     (a, b) => a - b,

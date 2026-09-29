@@ -68,9 +68,7 @@ describe("analyzeObservedSegmentTransform", () => {
       analyzeObservedSegmentTransform({
         authoritativeEpisodes: authoritative,
         metadataEpisodeCount: 12,
-        observedMappings: [
-          { providerEpisodeId: "provider-20", localEpisodeNumber: 1 },
-        ],
+        observedMappings: [{ providerEpisodeId: "provider-20", localEpisodeNumber: 1 }],
       }),
     ).toEqual({
       transform: null,

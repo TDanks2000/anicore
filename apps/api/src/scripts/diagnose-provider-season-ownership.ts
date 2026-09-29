@@ -1,19 +1,18 @@
-import { TMDB } from "@api-wrappers/tmdb-wrapper";
-import { sql } from "drizzle-orm";
-
 import { closeDb } from "@anicore/db";
-import { queryRows } from "../lib/query-rows";
 import {
   getTvdbSeasonEpisodes,
   getTvdbSeriesBySlug,
   type TvdbEpisodeBase,
   type TvdbSeriesBaseRecord,
 } from "@anicore/providers/thetvdb/client";
+import { TMDB } from "@api-wrappers/tmdb-wrapper";
+import { sql } from "drizzle-orm";
+import { queryRows } from "../lib/query-rows";
 
 import {
   buildTvdbSlugResolutionGroups,
-  verifyResolvedTvdbSlugGroup,
   type TvdbSlugResolutionGroup,
+  verifyResolvedTvdbSlugGroup,
 } from "./orphan-tvdb-slug-repair";
 import {
   buildTmdbResolvedCollisionGroups,
@@ -171,9 +170,7 @@ async function mapWithConcurrency<T, R>(
       results[index] = await mapper(items[index]!);
     }
   };
-  await Promise.all(
-    Array.from({ length: Math.min(concurrency, items.length) }, () => worker()),
-  );
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => worker()));
   return results;
 }
 
@@ -182,9 +179,7 @@ function isTvdbNotFoundError(error: unknown): boolean {
   return /TVDB request failed:\s*404(?:\s|:|$)/i.test(message);
 }
 
-function tvdbAuthoritativeEpisodes(
-  episodes: TvdbEpisodeBase[],
-): AuthoritativeEpisode[] {
+function tvdbAuthoritativeEpisodes(episodes: TvdbEpisodeBase[]): AuthoritativeEpisode[] {
   return episodes
     .filter(
       (episode) =>
@@ -226,10 +221,7 @@ async function resolveTvdbGroups(
     return promise;
   };
 
-  const getSeason = (
-    seriesId: number,
-    seasonNumber: number,
-  ): Promise<TvdbEpisodeBase[]> => {
+  const getSeason = (seriesId: number, seasonNumber: number): Promise<TvdbEpisodeBase[]> => {
     const cacheKey = `${seriesId}:${seasonNumber}`;
     let promise = seasonCache.get(cacheKey);
     if (!promise) {
@@ -257,10 +249,7 @@ async function resolveTvdbGroups(
       if (!verified) return null;
 
       const identity = identityKey("thetvdb", verified.providerId);
-      authoritativeCache.set(
-        identity,
-        Promise.resolve(tvdbAuthoritativeEpisodes(season)),
-      );
+      authoritativeCache.set(identity, Promise.resolve(tvdbAuthoritativeEpisodes(season)));
 
       return {
         animeId: verified.animeId,
@@ -307,10 +296,7 @@ async function run(): Promise<Record<string, unknown>> {
   const tvdbGroups = await resolveTvdbGroups(rows, authoritativeCache);
   const resolvedGroups = [...tmdbPlan.groups, ...tvdbGroups];
 
-  const providerOwners = new Map<
-    string,
-    { providerEntityId: number; animeIds: Set<number> }
-  >();
+  const providerOwners = new Map<string, { providerEntityId: number; animeIds: Set<number> }>();
   for (const row of providerOwnerRows) {
     const identity = identityKey(row.provider, row.providerId);
     const current = providerOwners.get(identity) ?? {
@@ -347,11 +333,9 @@ async function run(): Promise<Record<string, unknown>> {
       );
     } else {
       cached = tmdb.tvSeasons
-        .details(
-          { tvShowID: parsed.entityId, seasonNumber: parsed.seasonNumber },
-          undefined,
-          { language: "en-US" },
-        )
+        .details({ tvShowID: parsed.entityId, seasonNumber: parsed.seasonNumber }, undefined, {
+          language: "en-US",
+        })
         .then((season) =>
           (season.episodes ?? [])
             .filter(
@@ -392,9 +376,7 @@ async function run(): Promise<Record<string, unknown>> {
     const ownership: ProviderSeasonEpisodeOwnership[] = authoritative.map((episode) => ({
       ...episode,
       animeId:
-        episodeOwners.get(
-          episodeIdentityKey(group.provider, episode.providerEpisodeId),
-        ) ?? null,
+        episodeOwners.get(episodeIdentityKey(group.provider, episode.providerEpisodeId)) ?? null,
     }));
     const diagnostic = classifyProviderSeasonOwnership(
       ownership,

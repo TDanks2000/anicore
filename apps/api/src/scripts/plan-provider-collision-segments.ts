@@ -1,5 +1,3 @@
-import { sql } from "drizzle-orm";
-
 import { closeDb } from "@anicore/db";
 import {
   getTvdbSeasonEpisodes,
@@ -7,19 +5,20 @@ import {
   type TvdbEpisodeBase,
   type TvdbSeriesBaseRecord,
 } from "@anicore/providers/thetvdb/client";
+import { sql } from "drizzle-orm";
 
 import { queryRows } from "../lib/query-rows";
 import {
   buildTvdbSlugResolutionGroups,
-  verifyResolvedTvdbSlugGroup,
   type TvdbSlugResolutionGroup,
+  verifyResolvedTvdbSlugGroup,
 } from "./orphan-tvdb-slug-repair";
 import {
   buildLinearCollisionSegment,
   buildTmdbResolvedCollisionGroups,
-  filterOverlappingCollisionSegments,
   type CollisionEpisodeMappingRow,
   type CollisionSegmentCandidate,
+  filterOverlappingCollisionSegments,
   type ResolvedCollisionGroup,
   type SegmentRejectReason,
 } from "./provider-collision-segment-plan";
@@ -183,9 +182,7 @@ async function mapWithConcurrency<T, R>(
       results[index] = await mapper(items[index]!);
     }
   };
-  await Promise.all(
-    Array.from({ length: Math.min(concurrency, items.length) }, () => worker()),
-  );
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => worker()));
   return results;
 }
 
@@ -194,9 +191,7 @@ function isTvdbNotFoundError(error: unknown): boolean {
   return /TVDB request failed:\s*404(?:\s|:|$)/i.test(message);
 }
 
-async function resolveTvdbGroups(
-  rows: CollisionEpisodeMappingRow[],
-): Promise<{
+async function resolveTvdbGroups(rows: CollisionEpisodeMappingRow[]): Promise<{
   groups: ResolvedCollisionGroup[];
   rejected: RejectedSample[];
 }> {
@@ -222,10 +217,7 @@ async function resolveTvdbGroups(
     return promise;
   };
 
-  const getSeason = (
-    seriesId: number,
-    seasonNumber: number,
-  ): Promise<TvdbEpisodeBase[]> => {
+  const getSeason = (seriesId: number, seasonNumber: number): Promise<TvdbEpisodeBase[]> => {
     const cacheKey = `${seriesId}:${seasonNumber}`;
     let promise = seasonCache.get(cacheKey);
     if (!promise) {
@@ -308,9 +300,7 @@ async function resolveTvdbGroups(
   }
 
   return {
-    groups: outcomes
-      .map((outcome) => outcome.group)
-      .filter((group) => group !== null),
+    groups: outcomes.map((outcome) => outcome.group).filter((group) => group !== null),
     rejected,
   };
 }
@@ -394,10 +384,7 @@ async function run(): Promise<PlanReport> {
     byProvider[group.provider].linearSegmentGroups += 1;
   }
 
-  const ownerMap = new Map<
-    string,
-    { providerEntityId: number; ownerAnimeIds: Set<number> }
-  >();
+  const ownerMap = new Map<string, { providerEntityId: number; ownerAnimeIds: Set<number> }>();
   for (const owner of ownerRows) {
     const identity = key(owner.provider, owner.providerId);
     const current = ownerMap.get(identity) ?? {
@@ -463,10 +450,7 @@ async function run(): Promise<PlanReport> {
       candidate.episodeMappingCount;
   }
 
-  const rejectedByReason = new Map<
-    string,
-    { groups: number; episodeMappings: number }
-  >();
+  const rejectedByReason = new Map<string, { groups: number; episodeMappings: number }>();
   for (const item of rejected) {
     incrementReject(rejectedByReason, item.reason, item.episodeMappingCount);
   }

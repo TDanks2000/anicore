@@ -20,17 +20,17 @@
       "@vitejs/plugin-react": "^4.6.0",
       "class-variance-authority": "^0.7.1",
       "clsx": "^2.1.1",
-      "drizzle-kit": "latest",
-      "drizzle-orm": "latest",
-      "elysia": "latest",
+      "drizzle-kit": "^0.31.10",
+      "drizzle-orm": "^0.45.2",
+      "elysia": "^1.4.29",
       "lucide-react": "^0.468.0",
       "postgres": "^3.4.5",
       "react": "^19.0.0",
       "react-dom": "^19.0.0",
       "tailwind-merge": "^2.6.0",
       "tailwindcss": "^4.1.11",
-      "bun-types": "latest",
-      "typescript": "latest",
+      "bun-types": "^1.3.14",
+      "typescript": "^7.0.2",
       "vite": "^6.0.0"
     }
   },
@@ -42,6 +42,9 @@
     "build": "turbo run build --ui=stream",
     "typecheck": "turbo run typecheck --ui=stream",
     "test": "turbo run test --ui=stream",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
     "db:audit-mappings": "turbo run db:audit-mappings --filter=@anicore/api --ui=stream --",
     "db:backfill-provider-mappings": "turbo run db:backfill-provider-mappings --filter=@anicore/api --ui=stream --",
     "db:diagnose-provider-collision-coverage": "turbo run db:diagnose-provider-collision-coverage --filter=@anicore/api --ui=stream --",
@@ -70,6 +73,7 @@
     "sync:audio": "turbo run sync:audio --filter=@anicore/api --ui=stream --"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.14",
     "bun-types": "^1.3.14",
     "turbo": "^2.10.4",
     "typescript": "^7.0.2"

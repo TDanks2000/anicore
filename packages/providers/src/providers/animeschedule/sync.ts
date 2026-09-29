@@ -1,18 +1,13 @@
-import { and, eq, sql } from "drizzle-orm";
-
 import { db } from "@anicore/db";
 import { syncAnimeLanguageEvidenceFromEpisodeStatuses } from "@anicore/db/language-status";
-import {
-  animeMappings,
-  episodeLanguageStatus,
-  episodes,
-} from "@anicore/db/schema";
+import { animeMappings, episodeLanguageStatus, episodes } from "@anicore/db/schema";
+import { and, eq, sql } from "drizzle-orm";
+import { log } from "../../lib/logger";
+import { syncAuthoritativeCrossMappings } from "../authoritative-cross-mappings";
 import { titleSimilarity } from "../title-similarity";
+import type { ProviderAuthoritativeMapping } from "../types";
 import {
-  assertAnimeScheduleRouteCompatible,
-  assertSingleAnimeScheduleIdentity,
-} from "./identity";
-import {
+  type AnimeScheduleEntry,
   fetchByRoute,
   hasDub,
   isFinished,
@@ -20,11 +15,8 @@ import {
   parseKitsuReference,
   parseMalId,
   searchByTitle,
-  type AnimeScheduleEntry,
 } from "./client";
-import type { ProviderAuthoritativeMapping } from "../types";
-import { syncAuthoritativeCrossMappings } from "../authoritative-cross-mappings";
-import { log } from "../../lib/logger";
+import { assertAnimeScheduleRouteCompatible, assertSingleAnimeScheduleIdentity } from "./identity";
 
 export type DubSyncStatus =
   | "matched-fully-dubbed"
@@ -48,9 +40,7 @@ export function isAnimeScheduleEntryForAnilist(
   entry: AnimeScheduleEntry | null,
   anilistId: string,
 ): boolean {
-  return Boolean(
-    entry?.websites && parseAnilistId(entry.websites.aniList) === anilistId,
-  );
+  return Boolean(entry?.websites && parseAnilistId(entry.websites.aniList) === anilistId);
 }
 
 /**
@@ -66,9 +56,10 @@ export function isAnimeScheduleEntryForAnilist(
  * a provider id must be an id. They are reported by the caller so the remaining
  * gap stays visible.
  */
-export function animeScheduleCrossMappings(
-  entry: AnimeScheduleEntry,
-): { mappings: ProviderAuthoritativeMapping[]; skippedKitsuSlug: string | null } {
+export function animeScheduleCrossMappings(entry: AnimeScheduleEntry): {
+  mappings: ProviderAuthoritativeMapping[];
+  skippedKitsuSlug: string | null;
+} {
   const mappings: ProviderAuthoritativeMapping[] = [];
 
   const malId = parseMalId(entry.websites?.mal);
@@ -158,12 +149,7 @@ async function loadAnimeScheduleIdentities(animeId: number) {
       confidence: animeMappings.confidence,
     })
     .from(animeMappings)
-    .where(
-      and(
-        eq(animeMappings.animeId, animeId),
-        eq(animeMappings.provider, "animeschedule"),
-      ),
-    );
+    .where(and(eq(animeMappings.animeId, animeId), eq(animeMappings.provider, "animeschedule")));
 }
 
 async function storeRoute(animeId: number, route: string): Promise<void> {
@@ -201,9 +187,7 @@ async function storeRoute(animeId: number, route: string): Promise<void> {
     .returning({ animeId: animeMappings.animeId });
 
   if (!mapping) {
-    throw new Error(
-      `AnimeSchedule route ${route} already belongs to another anime`,
-    );
+    throw new Error(`AnimeSchedule route ${route} already belongs to another anime`);
   }
 }
 
@@ -220,10 +204,7 @@ async function loadVerifiedCachedEntry(opts: {
     })
     .from(animeMappings)
     .where(
-      and(
-        eq(animeMappings.animeId, opts.animeId),
-        eq(animeMappings.provider, "animeschedule"),
-      ),
+      and(eq(animeMappings.animeId, opts.animeId), eq(animeMappings.provider, "animeschedule")),
     );
 
   const identity = assertSingleAnimeScheduleIdentity(mappings);
@@ -250,10 +231,7 @@ function animeScheduleEvidenceSourceUrl(route: string): string {
   return `https://animeschedule.net/anime/${route}`;
 }
 
-async function clearDubStatus(
-  animeId: number,
-  sourceUrl: string,
-): Promise<void> {
+async function clearDubStatus(animeId: number, sourceUrl: string): Promise<void> {
   await db
     .delete(episodeLanguageStatus)
     .where(
@@ -348,10 +326,7 @@ async function upsertDubStatus(
  * function exists to perform. The conflict stays visible in the log and in
  * `db:audit-mappings`.
  */
-async function persistCrossMappings(
-  animeId: number,
-  entry: AnimeScheduleEntry,
-): Promise<void> {
+async function persistCrossMappings(animeId: number, entry: AnimeScheduleEntry): Promise<void> {
   const { mappings, skippedKitsuSlug } = animeScheduleCrossMappings(entry);
 
   if (skippedKitsuSlug) {
@@ -394,9 +369,7 @@ export async function syncDubStatus(opts: {
   if (!entry) return { status: "unmatched" };
 
   if (!isAnimeScheduleEntryForAnilist(entry, opts.anilistId)) {
-    throw new Error(
-      `AnimeSchedule route ${entry.route} does not match AniList ${opts.anilistId}`,
-    );
+    throw new Error(`AnimeSchedule route ${entry.route} does not match AniList ${opts.anilistId}`);
   }
 
   await persistCrossMappings(opts.animeId, entry);

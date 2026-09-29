@@ -5,11 +5,11 @@ import {
   hasKitsuStructuralConflict,
   isAuthoritativeAnilistMatch,
   kitsuSearchTitles,
+  type MatchHints,
   scoreKitsuCandidate,
   scoreKitsuCandidates,
   selectKitsuMatch,
   sharedCandidateTitles,
-  type MatchHints,
 } from "./matching";
 
 function candidate(anilistId: string): KitsuSearchNode {
@@ -362,7 +362,11 @@ describe("catalogue-type agreement", () => {
     // Same premiere date, same episode count, near-identical titles: only the
     // catalogue type tells the series apart from its mini-anime companion.
     const series = build("47099", "TV", "Kage no Jitsuryokusha ni Naritakute! 2nd Season");
-    const mini = build("48198", "ONA", "Kage no Jitsuryokusha ni Naritakute! 2nd Season Mini Anime");
+    const mini = build(
+      "48198",
+      "ONA",
+      "Kage no Jitsuryokusha ni Naritakute! 2nd Season Mini Anime",
+    );
 
     const target: MatchHints = {
       titleRomaji: "Kage no Jitsuryokusha ni Naritakute! 2nd season",
@@ -372,9 +376,7 @@ describe("catalogue-type agreement", () => {
       episodeCount: 12,
     };
 
-    expect(selectKitsuMatch(scoreKitsuCandidates([series, mini], target))?.id).toBe(
-      "47099",
-    );
+    expect(selectKitsuMatch(scoreKitsuCandidates([series, mini], target))?.id).toBe("47099");
   });
 
   test("TV_SHORT agrees with Kitsu's TV, which has no short subtype", () => {
@@ -469,9 +471,7 @@ describe("titles shared across candidates", () => {
     };
 
     expect(sharedCandidateTitles([series, special]).has("soul link")).toBe(false);
-    expect(selectKitsuMatch(scoreKitsuCandidates([series, special], soulLink))?.id).toBe(
-      "756",
-    );
+    expect(selectKitsuMatch(scoreKitsuCandidates([series, special], soulLink))?.id).toBe("756");
   });
 
   test("a title only one candidate carries is left alone", () => {

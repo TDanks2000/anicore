@@ -1,9 +1,9 @@
 import { closeDb } from "@anicore/db";
-import { loadIds } from "@anicore/providers/lib/cache";
+import { syncAnilistAnime } from "@anicore/providers/anilist/sync";
 import { ANILIST_RATE_MS, withAnilistRetry } from "@anicore/providers/lib/anilist-rate-limit";
+import { loadIds } from "@anicore/providers/lib/cache";
 import { log } from "@anicore/providers/lib/logger";
 import { installProxyFetch } from "@anicore/providers/lib/proxy";
-import { syncAnilistAnime } from "@anicore/providers/anilist/sync";
 
 installProxyFetch();
 

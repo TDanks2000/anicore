@@ -72,9 +72,7 @@ function parseProviderUrl(value: string | null): URL | null {
   if (!value) return null;
   try {
     const parsed = new URL(value);
-    return parsed.protocol === "https:" || parsed.protocol === "http:"
-      ? parsed
-      : null;
+    return parsed.protocol === "https:" || parsed.protocol === "http:" ? parsed : null;
   } catch {
     return null;
   }
@@ -88,9 +86,7 @@ export function isWeakAutomaticOrphanEpisodeMapping(
   return row.source === "api" && row.confidence <= 85;
 }
 
-export function deriveOrphanParentEvidence(
-  row: OrphanEpisodeMappingRow,
-): ParentEvidence | null {
+export function deriveOrphanParentEvidence(row: OrphanEpisodeMappingRow): ParentEvidence | null {
   const seasonNumber = parsePositiveInteger(row.episodeSeasonNumber);
   if (!seasonNumber) return null;
 
@@ -103,21 +99,14 @@ export function deriveOrphanParentEvidence(
     if (host !== "themoviedb.org" && host !== "www.themoviedb.org") {
       return null;
     }
-    if (
-      path.length !== 6 ||
-      path[0] !== "tv" ||
-      path[2] !== "season" ||
-      path[4] !== "episode"
-    ) {
+    if (path.length !== 6 || path[0] !== "tv" || path[2] !== "season" || path[4] !== "episode") {
       return null;
     }
 
     const showId = parsePositiveInteger(path[1] ?? null);
     const urlSeasonNumber = parsePositiveInteger(path[3] ?? null);
     const urlEpisodeNumber = parsePositiveInteger(path[5] ?? null);
-    const providerEpisodeNumber = parsePositiveInteger(
-      row.providerEpisodeNumber,
-    );
+    const providerEpisodeNumber = parsePositiveInteger(row.providerEpisodeNumber);
     if (
       !showId ||
       !urlSeasonNumber ||
@@ -137,11 +126,7 @@ export function deriveOrphanParentEvidence(
 
   if (row.provider === "thetvdb") {
     if (host !== "thetvdb.com" && host !== "www.thetvdb.com") return null;
-    if (
-      path.length !== 4 ||
-      path[0] !== "series" ||
-      path[2] !== "episodes"
-    ) {
+    if (path.length !== 4 || path[0] !== "series" || path[2] !== "episodes") {
       return null;
     }
 
@@ -225,9 +210,7 @@ export function buildOrphanParentRepairPlan(
       source: "fuzzy",
       confidence: Math.min(85, ...rows.map((row) => row.confidence)),
       episodeMappingCount: rows.length,
-      episodeMappingIds: rows
-        .map((row) => row.episodeMappingId)
-        .sort((a, b) => a - b),
+      episodeMappingIds: rows.map((row) => row.episodeMappingId).sort((a, b) => a - b),
     });
   }
 
@@ -254,15 +237,11 @@ export function buildOrphanParentRepairPlan(
     const plannedOwners = candidateOwners.get(key);
     const collidesWithExisting = Boolean(existing && existing.size > 0);
     const collidesWithAnotherAnime = Boolean(
-      plannedOwners &&
-        (plannedOwners.size > 1 || !plannedOwners.has(candidate.animeId)),
+      plannedOwners && (plannedOwners.size > 1 || !plannedOwners.has(candidate.animeId)),
     );
 
     if (collidesWithExisting || collidesWithAnotherAnime) {
-      recordSkip(
-        skipped.providerIdentityCollision,
-        candidate.episodeMappingCount,
-      );
+      recordSkip(skipped.providerIdentityCollision, candidate.episodeMappingCount);
       continue;
     }
 

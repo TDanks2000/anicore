@@ -9,11 +9,11 @@ import {
   collectWrongCases,
   computeFormatBreakdown,
   computeMetrics,
-  gradeCase,
-  passesMinPrecision,
   type GradedCase,
+  gradeCase,
   type KitsuMatchingCorpus,
   type KitsuMatchingCorpusCase,
+  passesMinPrecision,
 } from "./evaluate-kitsu-matching";
 
 interface NodeOptions {
@@ -270,11 +270,7 @@ describe("computeMetrics", () => {
   });
 
   test("aggregates per format", () => {
-    const cases = [
-      graded("correct", "TV"),
-      graded("wrong", "TV"),
-      graded("correct", "MOVIE"),
-    ];
+    const cases = [graded("correct", "TV"), graded("wrong", "TV"), graded("correct", "MOVIE")];
 
     const breakdown = computeFormatBreakdown(cases);
 

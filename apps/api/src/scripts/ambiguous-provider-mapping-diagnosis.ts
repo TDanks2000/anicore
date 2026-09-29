@@ -19,11 +19,7 @@ export interface AmbiguousMappingAnimeIdentity {
   seasonYear: number | null;
 }
 
-export type ProviderEvidenceStatus =
-  | "ok"
-  | "not-found"
-  | "fetch-failed"
-  | "malformed";
+export type ProviderEvidenceStatus = "ok" | "not-found" | "fetch-failed" | "malformed";
 
 export interface AmbiguousMappingProviderEvidence {
   status: ProviderEvidenceStatus;
@@ -47,10 +43,7 @@ export type AmbiguousMappingGroupVerdict =
   | "no-strong-match"
   | "no-candidates";
 
-export type AmbiguousMappingRepairStatus =
-  | "verified-keep"
-  | "verified-retire"
-  | "not-repair-safe";
+export type AmbiguousMappingRepairStatus = "verified-keep" | "verified-retire" | "not-repair-safe";
 
 export type AmbiguousMappingProofScope = "season" | "show";
 
@@ -123,7 +116,9 @@ export interface AmbiguousMappingDiagnosisInput {
  * positive integer components ("<showId>:<seasonNumber>"); any additional
  * colon component or non-numeric part is rejected.
  */
-export function parseProviderSeasonId(providerId: string): { showId: number; seasonNumber: number } | null {
+export function parseProviderSeasonId(
+  providerId: string,
+): { showId: number; seasonNumber: number } | null {
   const parts = providerId.split(":");
   if (parts.length !== 2) return null;
   const showId = Number(parts[0]);
@@ -198,8 +193,11 @@ function distance(a: number, b: number): number {
 export function classifyAmbiguousMappingCandidate(
   anime: AmbiguousMappingAnimeIdentity,
   evidence: AmbiguousMappingProviderEvidence | null,
-): { classification: AmbiguousMappingCandidateClassification; signal: AmbiguousMappingCandidateSignal | null } {
-  if (!evidence || evidence.status !== "ok") {
+): {
+  classification: AmbiguousMappingCandidateClassification;
+  signal: AmbiguousMappingCandidateSignal | null;
+} {
+  if (evidence?.status !== "ok") {
     return { classification: "indeterminate", signal: null };
   }
 
@@ -226,8 +224,7 @@ export function classifyAmbiguousMappingCandidate(
   const animeStartYear = parseYear(anime.startDate) ?? anime.seasonYear;
   const animeStartDate = anime.startDate?.trim() || null;
   const showDateExact =
-    Boolean(evidence.providerFirstAired?.trim()) &&
-    evidence.providerFirstAired === animeStartDate;
+    Boolean(evidence.providerFirstAired?.trim()) && evidence.providerFirstAired === animeStartDate;
   const seasonDateExact =
     Boolean(evidence.providerSeasonFirstAired?.trim()) &&
     evidence.providerSeasonFirstAired === animeStartDate;
@@ -239,8 +236,7 @@ export function classifyAmbiguousMappingCandidate(
     yearCandidates.length > 0 && animeStartYear !== null
       ? Math.min(...yearCandidates.map((year) => distance(year, animeStartYear)))
       : null;
-  const yearMatch =
-    yearDistance !== null && yearDistance <= MAX_AMBIGUOUS_MAPPING_YEAR_DISTANCE;
+  const yearMatch = yearDistance !== null && yearDistance <= MAX_AMBIGUOUS_MAPPING_YEAR_DISTANCE;
 
   const animeCount = parseCount(anime.episodeCount);
   const seasonCount = parseCount(evidence.providerSeasonEpisodeCount);
@@ -248,13 +244,11 @@ export function classifyAmbiguousMappingCandidate(
   const seasonCountDistance =
     seasonCount !== null && animeCount !== null ? distance(seasonCount, animeCount) : null;
   const seasonCountMatch =
-    seasonCountDistance !== null &&
-    seasonCountDistance <= MAX_AMBIGUOUS_MAPPING_COUNT_DISTANCE;
+    seasonCountDistance !== null && seasonCountDistance <= MAX_AMBIGUOUS_MAPPING_COUNT_DISTANCE;
   const showCountDistance =
     showCount !== null && animeCount !== null ? distance(showCount, animeCount) : null;
   const showCountMatch =
-    showCountDistance !== null &&
-    showCountDistance <= MAX_AMBIGUOUS_MAPPING_COUNT_DISTANCE;
+    showCountDistance !== null && showCountDistance <= MAX_AMBIGUOUS_MAPPING_COUNT_DISTANCE;
 
   const signal: AmbiguousMappingCandidateSignal = {
     bestTitleSimilarity,
@@ -383,10 +377,9 @@ export function assessCandidateRepairSafety(
         blockReason: "title-contradiction-with-substantially-wrong-year",
       };
     }
-    const closestCountDistance = [
-      signal.seasonCountDistance,
-      signal.showCountDistance,
-    ].filter((value): value is number => value !== null);
+    const closestCountDistance = [signal.seasonCountDistance, signal.showCountDistance].filter(
+      (value): value is number => value !== null,
+    );
     if (
       closestCountDistance.length > 0 &&
       Math.min(...closestCountDistance) >= MIN_AMBIGUOUS_RETIRE_COUNT_DISTANCE
@@ -409,27 +402,25 @@ export function assessCandidateRepairSafety(
 export function diagnoseAmbiguousMappingGroup(
   input: AmbiguousMappingDiagnosisInput,
 ): AmbiguousMappingGroupDiagnosis {
-  const candidates = input.candidates.map<AmbiguousMappingCandidateDiagnosis>(
-    (candidate) => {
-      const { classification, signal } = classifyAmbiguousMappingCandidate(
-        input.anime,
-        candidate.evidence,
-      );
-      const repair = assessCandidateRepairSafety(input.anime, candidate.evidence, signal);
-      return {
-        provider: candidate.provider,
-        providerId: candidate.providerId,
-        providerUrl: candidate.providerUrl,
-        source: candidate.source,
-        confidence: candidate.confidence,
-        isPrimary: candidate.isPrimary,
-        classification,
-        evidence: candidate.evidence,
-        signal,
-        repair,
-      };
-    },
-  );
+  const candidates = input.candidates.map<AmbiguousMappingCandidateDiagnosis>((candidate) => {
+    const { classification, signal } = classifyAmbiguousMappingCandidate(
+      input.anime,
+      candidate.evidence,
+    );
+    const repair = assessCandidateRepairSafety(input.anime, candidate.evidence, signal);
+    return {
+      provider: candidate.provider,
+      providerId: candidate.providerId,
+      providerUrl: candidate.providerUrl,
+      source: candidate.source,
+      confidence: candidate.confidence,
+      isPrimary: candidate.isPrimary,
+      classification,
+      evidence: candidate.evidence,
+      signal,
+      repair,
+    };
+  });
 
   const strongMatchCount = candidates.filter(
     (candidate) => candidate.classification === "strong-match",
@@ -493,9 +484,7 @@ export function diagnoseAmbiguousMappingGroup(
   }
 
   candidates.sort(
-    (a, b) =>
-      a.provider.localeCompare(b.provider) ||
-      a.providerId.localeCompare(b.providerId),
+    (a, b) => a.provider.localeCompare(b.provider) || a.providerId.localeCompare(b.providerId),
   );
 
   return {

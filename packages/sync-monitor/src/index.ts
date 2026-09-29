@@ -204,9 +204,7 @@ export class SyncMonitorClient {
     return this.getJson<SyncMonitorConfigResponse>("/sync-monitor/config");
   }
 
-  async updateConfig(
-    patch: SyncMonitorRuntimeConfigPatch,
-  ): Promise<SyncMonitorConfigResponse> {
+  async updateConfig(patch: SyncMonitorRuntimeConfigPatch): Promise<SyncMonitorConfigResponse> {
     return this.requestJson<SyncMonitorConfigResponse>("/sync-monitor/config", {
       method: "PATCH",
       body: JSON.stringify(patch),
@@ -225,13 +223,8 @@ export class SyncMonitorClient {
     return this.postJson<SyncMonitorControlResponse>("/sync-monitor/control/stop");
   }
 
-  async start(
-    options: SyncMonitorStartOptions = {},
-  ): Promise<SyncMonitorStartResponse> {
-    return this.postJson<SyncMonitorStartResponse>(
-      "/sync-monitor/control/start",
-      options,
-    );
+  async start(options: SyncMonitorStartOptions = {}): Promise<SyncMonitorStartResponse> {
+    return this.postJson<SyncMonitorStartResponse>("/sync-monitor/control/start", options);
   }
 
   private async getJson<T>(path: string): Promise<T> {
@@ -245,10 +238,7 @@ export class SyncMonitorClient {
     });
   }
 
-  private async requestJson<T>(
-    path: string,
-    init: Omit<RequestInit, "headers"> = {},
-  ): Promise<T> {
+  private async requestJson<T>(path: string, init: Omit<RequestInit, "headers"> = {}): Promise<T> {
     const response = await this.fetcher(`${this.baseUrl}${path}`, {
       ...init,
       signal: init.signal ?? AbortSignal.timeout(this.timeoutMs),
@@ -276,9 +266,7 @@ function hasErrorMessage(value: unknown): value is { error: string } {
 }
 
 async function formatErrorResponse(response: Response): Promise<string> {
-  const status = `${response.status}${
-    response.statusText ? ` ${response.statusText}` : ""
-  }`;
+  const status = `${response.status}${response.statusText ? ` ${response.statusText}` : ""}`;
   const detail = await readErrorDetail(response);
   return detail
     ? `Sync monitor request failed (${status}): ${detail}`

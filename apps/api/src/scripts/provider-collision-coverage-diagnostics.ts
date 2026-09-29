@@ -54,9 +54,7 @@ export function analyzeCollisionCoverageGroup(
   }
 
   const first = rows[0]!;
-  const expectedCounts = new Set(
-    rows.map((row) => positiveInteger(row.localNormalEpisodeCount)),
-  );
+  const expectedCounts = new Set(rows.map((row) => positiveInteger(row.localNormalEpisodeCount)));
   if (expectedCounts.has(null) || expectedCounts.size !== 1) {
     return invalid(first, rows.length, "invalid-expected-count");
   }
@@ -67,20 +65,10 @@ export function analyzeCollisionCoverageGroup(
     provider: positiveInteger(row.providerEpisodeNumber),
   }));
   if (normalized.some((row) => row.local === null)) {
-    return invalid(
-      first,
-      rows.length,
-      "invalid-local-number",
-      expectedLocalEpisodeCount,
-    );
+    return invalid(first, rows.length, "invalid-local-number", expectedLocalEpisodeCount);
   }
   if (normalized.some((row) => row.provider === null)) {
-    return invalid(
-      first,
-      rows.length,
-      "invalid-provider-number",
-      expectedLocalEpisodeCount,
-    );
+    return invalid(first, rows.length, "invalid-provider-number", expectedLocalEpisodeCount);
   }
 
   const ordered = normalized
@@ -90,20 +78,10 @@ export function analyzeCollisionCoverageGroup(
   const providerNumbers = ordered.map((row) => row.provider);
 
   if (new Set(localNumbers).size !== localNumbers.length) {
-    return invalid(
-      first,
-      rows.length,
-      "duplicate-local-number",
-      expectedLocalEpisodeCount,
-    );
+    return invalid(first, rows.length, "duplicate-local-number", expectedLocalEpisodeCount);
   }
   if (new Set(providerNumbers).size !== providerNumbers.length) {
-    return invalid(
-      first,
-      rows.length,
-      "duplicate-provider-number",
-      expectedLocalEpisodeCount,
-    );
+    return invalid(first, rows.length, "duplicate-provider-number", expectedLocalEpisodeCount);
   }
 
   const mappedLocalSet = new Set(localNumbers);
@@ -121,18 +99,15 @@ export function analyzeCollisionCoverageGroup(
     (number, index) => index === 0 || number === localNumbers[index - 1]! + 1,
   );
   const providerContiguous = providerNumbers.every(
-    (number, index) =>
-      index === 0 || number === providerNumbers[index - 1]! + 1,
+    (number, index) => index === 0 || number === providerNumbers[index - 1]! + 1,
   );
   const offset =
     localEpisodeStart !== null && providerEpisodeStart !== null
       ? providerEpisodeStart - localEpisodeStart
       : null;
   const constantOffset =
-    offset !== null &&
-    ordered.every((row) => row.provider - row.local === offset);
-  const evidenceBackedLinear =
-    localContiguous && providerContiguous && constantOffset;
+    offset !== null && ordered.every((row) => row.provider - row.local === offset);
+  const evidenceBackedLinear = localContiguous && providerContiguous && constantOffset;
 
   const completeCoverage =
     missingLocalEpisodeNumbers.length === 0 &&
@@ -145,15 +120,9 @@ export function analyzeCollisionCoverageGroup(
   } else if (evidenceBackedLinear && localEpisodeStart !== null && localEpisodeEnd !== null) {
     if (localEpisodeStart === 1 && localEpisodeEnd < expectedLocalEpisodeCount) {
       gapPosition = "trailing";
-    } else if (
-      localEpisodeStart > 1 &&
-      localEpisodeEnd === expectedLocalEpisodeCount
-    ) {
+    } else if (localEpisodeStart > 1 && localEpisodeEnd === expectedLocalEpisodeCount) {
       gapPosition = "leading";
-    } else if (
-      localEpisodeStart > 1 &&
-      localEpisodeEnd < expectedLocalEpisodeCount
-    ) {
+    } else if (localEpisodeStart > 1 && localEpisodeEnd < expectedLocalEpisodeCount) {
       gapPosition = "both-ends";
     }
   }

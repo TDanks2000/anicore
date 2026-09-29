@@ -1,7 +1,6 @@
-import { and, eq } from "drizzle-orm";
-
 import { db } from "@anicore/db";
 import { animeMappings, episodeMappings, episodes } from "@anicore/db/schema";
+import { and, eq } from "drizzle-orm";
 import { log } from "../lib/logger";
 
 type MappingSource = "manual" | "api" | "import" | "fuzzy" | "system";
@@ -16,10 +15,7 @@ export interface StoredEpisodeSourceMapping {
 export function isRetirableAutomaticSourceMapping(
   mapping: Pick<StoredEpisodeSourceMapping, "source" | "confidence">,
 ): boolean {
-  return (
-    mapping.source === "fuzzy" ||
-    (mapping.source === "api" && mapping.confidence <= 85)
-  );
+  return mapping.source === "fuzzy" || (mapping.source === "api" && mapping.confidence <= 85);
 }
 
 /**
@@ -48,16 +44,10 @@ export async function retireInvalidAutomaticSourceMapping(input: {
       .select({ id: animeMappings.id })
       .from(animeMappings)
       .where(
-        and(
-          eq(animeMappings.animeId, input.animeId),
-          eq(animeMappings.provider, input.provider),
-        ),
+        and(eq(animeMappings.animeId, input.animeId), eq(animeMappings.provider, input.provider)),
       );
 
-    if (
-      providerMappings.length !== 1 ||
-      providerMappings[0]?.id !== input.mapping.id
-    ) {
+    if (providerMappings.length !== 1 || providerMappings[0]?.id !== input.mapping.id) {
       throw new Error(
         `Stored ${input.provider} mapping group is ambiguous; refusing automatic retirement`,
       );
@@ -67,12 +57,7 @@ export async function retireInvalidAutomaticSourceMapping(input: {
       .select({ id: episodeMappings.id })
       .from(episodeMappings)
       .innerJoin(episodes, eq(episodeMappings.episodeId, episodes.id))
-      .where(
-        and(
-          eq(episodes.animeId, input.animeId),
-          eq(episodeMappings.provider, input.provider),
-        ),
-      )
+      .where(and(eq(episodes.animeId, input.animeId), eq(episodeMappings.provider, input.provider)))
       .limit(1);
 
     if (episodeDependency) {
@@ -81,9 +66,7 @@ export async function retireInvalidAutomaticSourceMapping(input: {
       );
     }
 
-    await tx
-      .delete(animeMappings)
-      .where(eq(animeMappings.id, input.mapping.id));
+    await tx.delete(animeMappings).where(eq(animeMappings.id, input.mapping.id));
   });
 
   log.warn(

@@ -1,6 +1,5 @@
-import { sql, type SQL } from "drizzle-orm";
-
 import { closeDb } from "@anicore/db";
+import { type SQL, sql } from "drizzle-orm";
 import { queryRows } from "../lib/query-rows";
 
 type Severity = "error" | "warning" | "info";
@@ -72,8 +71,7 @@ async function auditMappings(): Promise<MappingAuditReport> {
   await addFinding(findings, {
     code: "episode-provider-id-not-canonical",
     severity: "error",
-    description:
-      "Episode mappings contain blank or leading/trailing-whitespace provider IDs.",
+    description: "Episode mappings contain blank or leading/trailing-whitespace provider IDs.",
     countQuery: sql`
       select count(*)::int as count
       from episode_mappings
@@ -91,8 +89,7 @@ async function auditMappings(): Promise<MappingAuditReport> {
   await addFinding(findings, {
     code: "multiple-primary-anime-mappings",
     severity: "error",
-    description:
-      "More than one mapping is marked primary for the same anime/provider pair.",
+    description: "More than one mapping is marked primary for the same anime/provider pair.",
     countQuery: sql`
       select count(*)::int as count
       from (

@@ -1,22 +1,16 @@
-import { and, eq, isNotNull, lte, sql } from "drizzle-orm";
-
-import {
-  closeDb,
-  db,
-  tryAcquireSyncLease,
-  type SyncLease,
-} from "@anicore/db";
+import { closeDb, db, type SyncLease, tryAcquireSyncLease } from "@anicore/db";
 import { syncAnimeLanguageEvidenceFromEpisodeStatuses } from "@anicore/db/language-status";
 import { anime, animeMappings, episodeLanguageStatus, episodes } from "@anicore/db/schema";
+import { syncDubStatus } from "@anicore/providers/animeschedule/sync";
 import { log } from "@anicore/providers/lib/logger";
 import { installProxyFetch } from "@anicore/providers/lib/proxy";
-import { syncDubStatus, sleep } from "@anicore/providers/animeschedule/sync";
+import { and, eq, isNotNull, lte, sql } from "drizzle-orm";
 import { derivedAirdateLanguageAssertions } from "../lib/derived-airdate-language";
 import { parseIntegerFlag } from "../lib/sync-cli";
 
-const args      = process.argv.slice(2);
-const SUB_ONLY  = args.includes("--sub-only");
-const DUB_ONLY  = args.includes("--dub-only");
+const args = process.argv.slice(2);
+const SUB_ONLY = args.includes("--sub-only");
+const DUB_ONLY = args.includes("--dub-only");
 
 const RUN_SUB = !DUB_ONLY;
 const RUN_DUB = !SUB_ONLY;
@@ -56,11 +50,7 @@ export async function syncSubStatusForAnime(animeId: number): Promise<number> {
     .select({ number: episodes.number })
     .from(episodes)
     .where(
-      and(
-        eq(episodes.animeId, animeId),
-        isNotNull(episodes.airDate),
-        lte(episodes.airDate, today),
-      ),
+      and(eq(episodes.animeId, animeId), isNotNull(episodes.airDate), lte(episodes.airDate, today)),
     );
   const assertions = derivedAirdateLanguageAssertions(animeRow.countryOfOrigin);
   const checkedAt = new Date();
@@ -110,12 +100,7 @@ export async function syncDubStatusForAnime(animeId: number): Promise<void> {
     })
     .from(animeMappings)
     .innerJoin(anime, eq(animeMappings.animeId, anime.id))
-    .where(
-      and(
-        eq(animeMappings.provider, "anilist"),
-        eq(animeMappings.animeId, animeId),
-      ),
-    )
+    .where(and(eq(animeMappings.provider, "anilist"), eq(animeMappings.animeId, animeId)))
     .limit(1);
 
   if (!row) {
@@ -135,15 +120,13 @@ export async function syncDubStatusForAnime(animeId: number): Promise<void> {
 
 export async function runSubPass(): Promise<void> {
   log.divider();
-  log.info(
-    "Derived air-date pass — rebuilding conservative original-audio evidence…",
-  );
+  log.info("Derived air-date pass — rebuilding conservative original-audio evidence…");
 
-  const today    = new Date().toISOString().split("T")[0]!;
-  const BATCH    = 5_000;
-  const CHUNK    = 1_000;
-  let offset     = 0;
-  let processed  = 0;
+  const today = new Date().toISOString().split("T")[0]!;
+  const BATCH = 5_000;
+  const CHUNK = 1_000;
+  let offset = 0;
+  let processed = 0;
 
   const existingDerivedAnime = await db
     .selectDistinct({ animeId: episodeLanguageStatus.animeId })
@@ -217,9 +200,7 @@ export async function runSubPass(): Promise<void> {
     await recalculateDerivedAirdateEvidence(animeId);
   }
 
-  log.success(
-    `Derived air-date pass complete — ${processed.toLocaleString()} episodes processed.`,
-  );
+  log.success(`Derived air-date pass complete — ${processed.toLocaleString()} episodes processed.`);
 }
 
 // ── Pass 2: Dub ───────────────────────────────────────────────────────────────
@@ -230,10 +211,10 @@ export async function runDubPass(fromIndex = readFromIndex()): Promise<void> {
 
   const rows = await db
     .select({
-      animeId:      animeMappings.animeId,
-      anilistId:    animeMappings.providerId,
-      slug:         anime.slug,
-      titleRomaji:  anime.titleRomaji,
+      animeId: animeMappings.animeId,
+      anilistId: animeMappings.providerId,
+      slug: anime.slug,
+      titleRomaji: anime.titleRomaji,
       titleEnglish: anime.titleEnglish,
     })
     .from(animeMappings)
@@ -244,11 +225,11 @@ export async function runDubPass(fromIndex = readFromIndex()): Promise<void> {
   log.info(`${total.toLocaleString()} anime to process (starting at index ${fromIndex})`);
 
   let fullyDubbed = 0;
-  let noDub       = 0;
-  let ongoingDub  = 0;
-  let unmatched   = 0;
-  let errors      = 0;
-  let noEpisodes  = 0;
+  let noDub = 0;
+  let ongoingDub = 0;
+  let unmatched = 0;
+  let errors = 0;
+  let noEpisodes = 0;
 
   const bar = log.progress(Math.max(0, total - fromIndex), "Dub");
 
@@ -259,23 +240,35 @@ export async function runDubPass(fromIndex = readFromIndex()): Promise<void> {
 
     try {
       const result = await syncDubStatus({
-        animeId:      row.animeId,
-        anilistId:    row.anilistId,
-        slug:         row.slug,
-        titleRomaji:  row.titleRomaji,
+        animeId: row.animeId,
+        anilistId: row.anilistId,
+        slug: row.slug,
+        titleRomaji: row.titleRomaji,
         titleEnglish: row.titleEnglish ?? null,
       });
 
       switch (result.status) {
-        case "matched-fully-dubbed":  fullyDubbed++; break;
-        case "matched-no-dub":        noDub++;       break;
-        case "matched-ongoing-dub":   ongoingDub++;  break;
-        case "unmatched":             unmatched++;   break;
-        case "no-episodes":           noEpisodes++;  break;
+        case "matched-fully-dubbed":
+          fullyDubbed++;
+          break;
+        case "matched-no-dub":
+          noDub++;
+          break;
+        case "matched-ongoing-dub":
+          ongoingDub++;
+          break;
+        case "unmatched":
+          unmatched++;
+          break;
+        case "no-episodes":
+          noEpisodes++;
+          break;
       }
     } catch (err) {
       errors++;
-      log.error(`animeId=${row.animeId} anilist=${row.anilistId}: ${err instanceof Error ? err.message : String(err)}`);
+      log.error(
+        `animeId=${row.animeId} anilist=${row.anilistId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
 
     bar.tick().setStats({ dubbed: fullyDubbed, noDub, ongoing: ongoingDub, errors });
@@ -302,9 +295,7 @@ if (import.meta.main) {
   try {
     syncLease = await tryAcquireSyncLease();
     if (!syncLease) {
-      throw new Error(
-        "Another AniCore sync process already holds the database lease",
-      );
+      throw new Error("Another AniCore sync process already holds the database lease");
     }
     log.info(JSON.stringify({ event: "sync.audio.lease.acquired" }));
 

@@ -1,8 +1,4 @@
-import { TMDB } from "@api-wrappers/tmdb-wrapper";
-import { sql } from "drizzle-orm";
-
 import { closeDb } from "@anicore/db";
-import { queryRows } from "../lib/query-rows";
 import {
   getTvdbSeasonEpisodes,
   getTvdbSeriesBySlug,
@@ -10,11 +6,14 @@ import {
   type TvdbEpisodeBase,
   type TvdbSeriesBaseRecord,
 } from "@anicore/providers/thetvdb/client";
+import { TMDB } from "@api-wrappers/tmdb-wrapper";
+import { sql } from "drizzle-orm";
+import { queryRows } from "../lib/query-rows";
 
 import {
   buildTvdbSlugResolutionGroups,
-  verifyResolvedTvdbSlugGroup,
   type TvdbSlugResolutionGroup,
+  verifyResolvedTvdbSlugGroup,
 } from "./orphan-tvdb-slug-repair";
 import {
   buildTmdbResolvedCollisionGroups,
@@ -23,14 +22,14 @@ import {
 } from "./provider-collision-segment-plan";
 import {
   earliestProviderAirDate,
-  verifyProviderSeasonAirdate,
   type ProviderSeasonAirdateRejectReason,
   type ProviderSeasonAirdateResult,
+  verifyProviderSeasonAirdate,
 } from "./provider-season-airdate-verification";
 import {
-  verifyProviderSeasonIdentity,
   type ProviderSeasonIdentityRejectReason,
   type ProviderSeasonIdentityResult,
+  verifyProviderSeasonIdentity,
 } from "./provider-season-identity-verification";
 import {
   planWholeSeasonOwnershipRepair,
@@ -266,9 +265,7 @@ async function mapWithConcurrency<T, R>(
       results[index] = await mapper(items[index]!);
     }
   };
-  await Promise.all(
-    Array.from({ length: Math.min(concurrency, items.length) }, () => worker()),
-  );
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => worker()));
   return results;
 }
 

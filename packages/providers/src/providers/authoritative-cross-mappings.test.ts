@@ -29,8 +29,8 @@ describe("authoritative cross mappings", () => {
   });
 
   test("rejects blank authoritative IDs", () => {
-    expect(() =>
-      normalizeAuthoritativeMappings([{ provider: "mal", providerId: "   " }]),
-    ).toThrow("blank provider ID");
+    expect(() => normalizeAuthoritativeMappings([{ provider: "mal", providerId: "   " }])).toThrow(
+      "blank provider ID",
+    );
   });
 });

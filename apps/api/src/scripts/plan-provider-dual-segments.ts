@@ -1,24 +1,23 @@
-import { TMDB } from "@api-wrappers/tmdb-wrapper";
-import { sql } from "drizzle-orm";
-
 import { closeDb } from "@anicore/db";
-import { queryRows } from "../lib/query-rows";
 import {
   getTvdbSeasonEpisodes,
   getTvdbSeriesBySlug,
   type TvdbEpisodeBase,
   type TvdbSeriesBaseRecord,
 } from "@anicore/providers/thetvdb/client";
+import { TMDB } from "@api-wrappers/tmdb-wrapper";
+import { sql } from "drizzle-orm";
+import { queryRows } from "../lib/query-rows";
 
 import {
-  buildDualProviderSegmentPlan,
   type AlignedProviderSegment,
+  buildDualProviderSegmentPlan,
   type ProviderEpisodeAlignmentRow,
 } from "./dual-provider-segment-plan";
 import {
   buildTvdbSlugResolutionGroups,
-  verifyResolvedTvdbSlugGroup,
   type TvdbSlugResolutionGroup,
+  verifyResolvedTvdbSlugGroup,
 } from "./orphan-tvdb-slug-repair";
 import {
   buildTmdbResolvedCollisionGroups,
@@ -31,9 +30,7 @@ import {
 } from "./provider-season-ownership-diagnostics";
 
 type Provider = "thetvdb" | "tmdb";
-type AdjacentClassification =
-  | "owner-then-orphan-adjacent"
-  | "orphan-then-owner-adjacent";
+type AdjacentClassification = "owner-then-orphan-adjacent" | "orphan-then-owner-adjacent";
 
 type RejectReason =
   | "not-adjacent-ownership"
@@ -222,9 +219,7 @@ async function mapWithConcurrency<T, R>(
       results[index] = await mapper(items[index]!);
     }
   };
-  await Promise.all(
-    Array.from({ length: Math.min(concurrency, items.length) }, () => worker()),
-  );
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => worker()));
   return results;
 }
 
@@ -317,10 +312,7 @@ async function resolveTvdbGroups(
   return outcomes.filter((group): group is ResolvedCollisionGroup => Boolean(group));
 }
 
-function increment(
-  map: Map<string, { groups: number }>,
-  reason: string,
-): void {
+function increment(map: Map<string, { groups: number }>, reason: string): void {
   const current = map.get(reason) ?? { groups: 0 };
   current.groups += 1;
   map.set(reason, current);
@@ -384,11 +376,9 @@ async function run(): Promise<Record<string, unknown>> {
     } else {
       if (!tmdb) throw new Error("TMDB_API_KEY is required for TMDB dual segment planning");
       promise = tmdb.tvSeasons
-        .details(
-          { tvShowID: parsed.entityId, seasonNumber: parsed.seasonNumber },
-          undefined,
-          { language: "en-US" },
-        )
+        .details({ tvShowID: parsed.entityId, seasonNumber: parsed.seasonNumber }, undefined, {
+          language: "en-US",
+        })
         .then((season) =>
           (season.episodes ?? [])
             .filter(
@@ -459,15 +449,10 @@ async function run(): Promise<Record<string, unknown>> {
       const ownership: ProviderSeasonEpisodeOwnership[] = authoritative.map((episode) => ({
         ...episode,
         animeId:
-          episodeMap.get(
-            episodeIdentityKey(group.provider, episode.providerEpisodeId),
-          )?.animeId ?? null,
+          episodeMap.get(episodeIdentityKey(group.provider, episode.providerEpisodeId))?.animeId ??
+          null,
       }));
-      const diagnostic = classifyProviderSeasonOwnership(
-        ownership,
-        group.animeId,
-        [owner.animeId],
-      );
+      const diagnostic = classifyProviderSeasonOwnership(ownership, group.animeId, [owner.animeId]);
       if (
         diagnostic.classification !== "owner-then-orphan-adjacent" &&
         diagnostic.classification !== "orphan-then-owner-adjacent"
@@ -483,9 +468,7 @@ async function run(): Promise<Record<string, unknown>> {
       const ownerRows: ProviderEpisodeAlignmentRow[] = [];
       const orphanAlignmentRows: ProviderEpisodeAlignmentRow[] = [];
       for (const episode of authoritative) {
-        const row = episodeMap.get(
-          episodeIdentityKey(group.provider, episode.providerEpisodeId),
-        );
+        const row = episodeMap.get(episodeIdentityKey(group.provider, episode.providerEpisodeId));
         if (!row) continue;
         const aligned: ProviderEpisodeAlignmentRow = {
           animeId: row.animeId,

@@ -4,54 +4,54 @@ import { findKitsuMatch } from "./matching";
 import { fetchKitsuEpisodeData, syncKitsuFromAnilist } from "./sync";
 
 function malIdOf(data: ProviderAnimeData): string | undefined {
-	return data.authoritativeMappings?.find((m) => m.provider === "mal")?.providerId;
+  return data.authoritativeMappings?.find((m) => m.provider === "mal")?.providerId;
 }
 
 function toHints(data: ProviderAnimeData) {
-	return {
-		anilistId:    data.provider === "anilist" ? data.providerId : undefined,
-		malId:        malIdOf(data),
-		titleRomaji:  data.titleRomaji,
-		titleEnglish: data.titleEnglish,
-		titleNative:  data.titleNative,
-		synonyms:     data.synonyms,
-		season:       data.season,
-		seasonYear:   data.seasonYear,
-		startDate:    data.startDate,
-		episodeCount: data.episodeCount,
-		format:       data.format,
-	};
+  return {
+    anilistId: data.provider === "anilist" ? data.providerId : undefined,
+    malId: malIdOf(data),
+    titleRomaji: data.titleRomaji,
+    titleEnglish: data.titleEnglish,
+    titleNative: data.titleNative,
+    synonyms: data.synonyms,
+    season: data.season,
+    seasonYear: data.seasonYear,
+    startDate: data.startDate,
+    episodeCount: data.episodeCount,
+    format: data.format,
+  };
 }
 
 export const kitsuPlugin: ProviderPlugin = {
-	name: "kitsu",
+  name: "kitsu",
 
-	async sync(anilistId: string, data: ProviderAnimeData): Promise<PluginResult> {
-		try {
-			const result = await syncKitsuFromAnilist(anilistId, toHints(data));
-			if (result.matched) {
-				return { status: "matched", providerId: result.kitsuId, providerSlug: result.kitsuSlug };
-			}
-			return { status: "unmatched" };
-		} catch (err) {
-			return { status: "error", message: err instanceof Error ? err.message : String(err) };
-		}
-	},
+  async sync(anilistId: string, data: ProviderAnimeData): Promise<PluginResult> {
+    try {
+      const result = await syncKitsuFromAnilist(anilistId, toHints(data));
+      if (result.matched) {
+        return { status: "matched", providerId: result.kitsuId, providerSlug: result.kitsuSlug };
+      }
+      return { status: "unmatched" };
+    } catch (err) {
+      return { status: "error", message: err instanceof Error ? err.message : String(err) };
+    }
+  },
 
-	async dryMatch(data: ProviderAnimeData): Promise<DryPluginResult> {
-		try {
-			const node = await findKitsuMatch(toHints(data));
-			if (!node) return { status: "unmatched" };
-			return {
-				status:       "matched",
-				providerId:   node.id,
-				providerSlug: node.slug ?? null,
-				data:         mapKitsuAnime(node),
-				episodes:     await fetchKitsuEpisodeData(node.id),
-				episodeCount: node.episodeCount ?? undefined,
-			};
-		} catch (err) {
-			return { status: "error", message: err instanceof Error ? err.message : String(err) };
-		}
-	},
+  async dryMatch(data: ProviderAnimeData): Promise<DryPluginResult> {
+    try {
+      const node = await findKitsuMatch(toHints(data));
+      if (!node) return { status: "unmatched" };
+      return {
+        status: "matched",
+        providerId: node.id,
+        providerSlug: node.slug ?? null,
+        data: mapKitsuAnime(node),
+        episodes: await fetchKitsuEpisodeData(node.id),
+        episodeCount: node.episodeCount ?? undefined,
+      };
+    } catch (err) {
+      return { status: "error", message: err instanceof Error ? err.message : String(err) };
+    }
+  },
 };

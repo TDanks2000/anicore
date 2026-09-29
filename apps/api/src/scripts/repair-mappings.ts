@@ -1,11 +1,5 @@
+import { closeDb, db, type SyncLease, tryAcquireSyncLease } from "@anicore/db";
 import { sql } from "drizzle-orm";
-
-import {
-  closeDb,
-  db,
-  tryAcquireSyncLease,
-  type SyncLease,
-} from "@anicore/db";
 import { queryRows } from "../lib/query-rows";
 
 import {
@@ -129,9 +123,7 @@ async function countSkippedAmbiguousKitsuAnime(): Promise<number> {
   return Number(row?.count ?? 0);
 }
 
-async function sampleLegacyKitsuEpisodeProvenance(): Promise<
-  LegacyKitsuEpisodeSample[]
-> {
+async function sampleLegacyKitsuEpisodeProvenance(): Promise<LegacyKitsuEpisodeSample[]> {
   return queryRows<LegacyKitsuEpisodeSample>(sql`
     select
       em.id as "episodeMappingId",
@@ -188,9 +180,7 @@ async function applyLegacyKitsuEpisodeProvenanceRepair(): Promise<number> {
   return rows.length;
 }
 
-async function loadOrphanEpisodeMappingRows(): Promise<
-  OrphanEpisodeMappingRow[]
-> {
+async function loadOrphanEpisodeMappingRows(): Promise<OrphanEpisodeMappingRow[]> {
   return queryRows<OrphanEpisodeMappingRow>(sql`
     select
       em.id as "episodeMappingId",
@@ -215,9 +205,7 @@ async function loadOrphanEpisodeMappingRows(): Promise<
   `);
 }
 
-async function loadExistingProviderIdentities(): Promise<
-  ExistingProviderIdentity[]
-> {
+async function loadExistingProviderIdentities(): Promise<ExistingProviderIdentity[]> {
   return queryRows<ExistingProviderIdentity>(sql`
     select anime_id as "animeId", provider, provider_id as "providerId"
     from anime_mappings
@@ -325,9 +313,7 @@ async function runRepair(mode: RepairMode): Promise<RepairReport> {
     (total, candidate) => total + candidate.episodeMappingCount,
     0,
   );
-  const orphanSamples = sampleOrphanParentCandidates(
-    orphanBefore.plan.candidates,
-  );
+  const orphanSamples = sampleOrphanParentCandidates(orphanBefore.plan.candidates);
 
   let kitsuAppliedCount = 0;
   let appliedParentCount = 0;
@@ -336,16 +322,12 @@ async function runRepair(mode: RepairMode): Promise<RepairReport> {
       kitsuAppliedCount = await applyLegacyKitsuEpisodeProvenanceRepair();
     }
     if (plannedParentCount > 0) {
-      appliedParentCount = await applyOrphanParentCandidates(
-        orphanBefore.plan.candidates,
-      );
+      appliedParentCount = await applyOrphanParentCandidates(orphanBefore.plan.candidates);
     }
   }
 
   const kitsuRemainingEligibleCount =
-    mode === "apply"
-      ? await countLegacyKitsuEpisodeProvenance()
-      : kitsuPlannedCount;
+    mode === "apply" ? await countLegacyKitsuEpisodeProvenance() : kitsuPlannedCount;
 
   if (mode === "apply" && kitsuRemainingEligibleCount !== 0) {
     throw new Error(
@@ -353,12 +335,9 @@ async function runRepair(mode: RepairMode): Promise<RepairReport> {
     );
   }
 
-  const orphanAfter =
-    mode === "apply" ? await buildCurrentOrphanParentPlan() : orphanBefore;
+  const orphanAfter = mode === "apply" ? await buildCurrentOrphanParentPlan() : orphanBefore;
   const resolvedEpisodeMappingCount =
-    mode === "apply"
-      ? orphanBefore.rows.length - orphanAfter.rows.length
-      : 0;
+    mode === "apply" ? orphanBefore.rows.length - orphanAfter.rows.length : 0;
   const remainingEligibleParentCount = orphanAfter.plan.candidates.length;
 
   if (mode === "apply") {
@@ -399,14 +378,12 @@ async function runRepair(mode: RepairMode): Promise<RepairReport> {
         description:
           "Reconstruct missing TVDB/TMDB anime-level parent mappings only when every orphan episode mapping in the anime/provider group is weak automatic evidence and its stored provider URL independently identifies the same provider season. Reconstructed parents are fuzzy, capped at 85 confidence, non-primary, and are skipped on incomplete, conflicting, strong/manual, unsupported, or colliding evidence.",
         totalOrphanGroups: orphanBefore.plan.totalOrphanGroups,
-        totalOrphanEpisodeMappings:
-          orphanBefore.plan.totalOrphanEpisodeMappings,
+        totalOrphanEpisodeMappings: orphanBefore.plan.totalOrphanEpisodeMappings,
         plannedParentCount,
         plannedEpisodeMappingCount,
         appliedParentCount,
         resolvedEpisodeMappingCount,
-        remainingOrphanEpisodeMappingCount:
-          orphanAfter.plan.totalOrphanEpisodeMappings,
+        remainingOrphanEpisodeMappingCount: orphanAfter.plan.totalOrphanEpisodeMappings,
         remainingEligibleParentCount,
         skipped: orphanBefore.plan.skipped,
         diagnostics: orphanBefore.diagnostics,

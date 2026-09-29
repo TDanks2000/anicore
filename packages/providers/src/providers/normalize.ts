@@ -4,9 +4,7 @@ export function normalizeEntityName(name: string): string {
   return name.trim().toLowerCase();
 }
 
-export function dedupeProviderStudios(
-  studios: ProviderStudio[],
-): ProviderStudio[] {
+export function dedupeProviderStudios(studios: ProviderStudio[]): ProviderStudio[] {
   const byName = new Map<string, ProviderStudio>();
 
   for (const studio of studios) {
@@ -21,8 +19,7 @@ export function dedupeProviderStudios(
     }
 
     existing.isMain = existing.isMain || studio.isMain;
-    existing.isAnimationStudio =
-      existing.isAnimationStudio || studio.isAnimationStudio;
+    existing.isAnimationStudio = existing.isAnimationStudio || studio.isAnimationStudio;
     existing.anilistStudioId ??= studio.anilistStudioId ?? null;
   }
 
@@ -51,8 +48,7 @@ export function dedupeProviderTags(tags: ProviderTag[]): ProviderTag[] {
     if (existing.rank === Number.MAX_SAFE_INTEGER) existing.rank = null;
     existing.isGeneralSpoiler =
       (existing.isGeneralSpoiler ?? false) || (tag.isGeneralSpoiler ?? false);
-    existing.isMediaSpoiler =
-      (existing.isMediaSpoiler ?? false) || (tag.isMediaSpoiler ?? false);
+    existing.isMediaSpoiler = (existing.isMediaSpoiler ?? false) || (tag.isMediaSpoiler ?? false);
     existing.isAdult = (existing.isAdult ?? false) || (tag.isAdult ?? false);
   }
 

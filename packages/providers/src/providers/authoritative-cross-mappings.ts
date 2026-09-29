@@ -1,7 +1,6 @@
-import { and, eq, sql } from "drizzle-orm";
-
 import { db } from "@anicore/db";
 import { animeMappings } from "@anicore/db/schema";
+import { and, eq, sql } from "drizzle-orm";
 import type { ProviderAuthoritativeMapping } from "./types";
 
 export function normalizeAuthoritativeMappings(
@@ -53,10 +52,7 @@ export async function syncAuthoritativeCrossMappings(
         })
         .from(animeMappings)
         .where(
-          and(
-            eq(animeMappings.animeId, animeId),
-            eq(animeMappings.provider, mapping.provider),
-          ),
+          and(eq(animeMappings.animeId, animeId), eq(animeMappings.provider, mapping.provider)),
         );
 
       const conflicting = existingForAnime.filter(
@@ -64,10 +60,7 @@ export async function syncAuthoritativeCrossMappings(
       );
       if (conflicting.length) {
         const identities = conflicting
-          .map(
-            (existing) =>
-              `${existing.providerId} (${existing.source}/${existing.confidence})`,
-          )
+          .map((existing) => `${existing.providerId} (${existing.source}/${existing.confidence})`)
           .join(", ");
         throw new Error(
           `Authoritative ${mapping.provider} identity ${mapping.providerId} conflicts with existing mapping(s) on anime ${animeId}: ${identities}`,

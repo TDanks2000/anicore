@@ -1,12 +1,6 @@
-import { sql, type SQL } from "drizzle-orm";
-
-import {
-  closeDb,
-  db,
-  tryAcquireSyncLease,
-  type SyncLease,
-} from "@anicore/db";
-import { type DbTransaction } from "../lib/query-rows";
+import { closeDb, db, type SyncLease, tryAcquireSyncLease } from "@anicore/db";
+import { type SQL, sql } from "drizzle-orm";
+import type { DbTransaction } from "../lib/query-rows";
 
 import { parseRepairMappingsArgs } from "./repair-mappings-cli";
 
@@ -203,9 +197,7 @@ function validatePlan(plan: JojoPlannerOperation): void {
     fail("Planner ownership state no longer matches the proven JoJo split");
   }
 
-  const associations = [...plan.plan.createV2Associations].sort(
-    (a, b) => a.animeId - b.animeId,
-  );
+  const associations = [...plan.plan.createV2Associations].sort((a, b) => a.animeId - b.animeId);
   if (
     associations.length !== 2 ||
     associations[0]?.animeId !== PREFIX_ANIME_ID ||
@@ -221,9 +213,7 @@ function validatePlan(plan: JojoPlannerOperation): void {
     fail("Planner association creation rows are not the expected two system mappings");
   }
 
-  const segments = [...plan.plan.createSegments].sort(
-    (a, b) => a.animeId - b.animeId,
-  );
+  const segments = [...plan.plan.createSegments].sort((a, b) => a.animeId - b.animeId);
   const prefixSegment = segments.find((row) => row.animeId === PREFIX_ANIME_ID);
   const suffixSegment = segments.find((row) => row.animeId === SUFFIX_ANIME_ID);
   if (
@@ -264,21 +254,29 @@ function validatePlan(plan: JojoPlannerOperation): void {
 }
 
 async function detectAlreadyApplied(execute: ExecuteSql): Promise<boolean> {
-  const [entity] = await rowsWith<{ id: number }>(execute, sql`
+  const [entity] = await rowsWith<{ id: number }>(
+    execute,
+    sql`
     select id
     from public.provider_entities
     where provider = ${PROVIDER} and provider_id = ${PROVIDER_ID}
-  `);
+  `,
+  );
   if (!entity) return false;
 
-  const legacy = await rowsWith<{ id: number }>(execute, sql`
+  const legacy = await rowsWith<{ id: number }>(
+    execute,
+    sql`
     select id
     from public.anime_mappings
     where provider = ${PROVIDER} and provider_id = ${PROVIDER_ID}
-  `);
+  `,
+  );
   if (legacy.length !== 0) return false;
 
-  const associations = await rowsWith<AssociationVerificationRow>(execute, sql`
+  const associations = await rowsWith<AssociationVerificationRow>(
+    execute,
+    sql`
     select
       apm.id,
       apm.anime_id as "animeId",
@@ -300,7 +298,8 @@ async function detectAlreadyApplied(execute: ExecuteSql): Promise<boolean> {
         or apm.anime_id in (${PREFIX_ANIME_ID}, ${SUFFIX_ANIME_ID}, ${CURRENT_OWNER_ANIME_ID})
       )
     order by apm.anime_id, aps.provider_episode_start
-  `);
+  `,
+  );
 
   if (associations.length !== 2) return false;
   const prefix = associations.find((row) => row.animeId === PREFIX_ANIME_ID);
@@ -328,7 +327,9 @@ async function detectAlreadyApplied(execute: ExecuteSql): Promise<boolean> {
     return false;
   }
 
-  const episodeRows = await rowsWith<EpisodeVerificationRow>(execute, sql`
+  const episodeRows = await rowsWith<EpisodeVerificationRow>(
+    execute,
+    sql`
     select
       em.id as "mappingId",
       e.anime_id as "animeId",
@@ -344,7 +345,8 @@ async function detectAlreadyApplied(execute: ExecuteSql): Promise<boolean> {
     where em.provider = ${PROVIDER}
       and e.anime_id in (${PREFIX_ANIME_ID}, ${SUFFIX_ANIME_ID}, ${CURRENT_OWNER_ANIME_ID})
     order by e.anime_id, e.number, em.id
-  `);
+  `,
+  );
   if (episodeRows.length !== SEASON_END) return false;
   if (episodeRows.some((row) => row.animeId === CURRENT_OWNER_ANIME_ID)) return false;
 
@@ -376,17 +378,16 @@ async function detectAlreadyApplied(execute: ExecuteSql): Promise<boolean> {
   return true;
 }
 
-async function verifyAppliedState(
-  execute: ExecuteSql,
-  plan: JojoPlannerOperation,
-): Promise<void> {
+async function verifyAppliedState(execute: ExecuteSql, plan: JojoPlannerOperation): Promise<void> {
   if (!(await detectAlreadyApplied(execute))) {
     fail("Post-write segmented JoJo state does not satisfy the expected structural invariants");
   }
 
   const [move] = plan.plan.episodeMappingReassignments;
   if (!move) fail("Missing planned episode reassignment during verification");
-  const moveRows = await rowsWith<EpisodeVerificationRow>(execute, sql`
+  const moveRows = await rowsWith<EpisodeVerificationRow>(
+    execute,
+    sql`
     select
       em.id as "mappingId",
       e.anime_id as "animeId",
@@ -400,7 +401,8 @@ async function verifyAppliedState(
     from public.episode_mappings em
     join public.episodes e on e.id = em.episode_id
     where em.id = ${move.episodeMappingId}
-  `);
+  `,
+  );
   const moved = moveRows[0];
   if (
     moveRows.length !== 1 ||
@@ -417,7 +419,9 @@ async function verifyAppliedState(
   }
 
   for (const expected of plan.plan.episodeMappingsToCreate) {
-    const matches = await rowsWith<EpisodeVerificationRow>(execute, sql`
+    const matches = await rowsWith<EpisodeVerificationRow>(
+      execute,
+      sql`
       select
         em.id as "mappingId",
         e.anime_id as "animeId",
@@ -431,7 +435,8 @@ async function verifyAppliedState(
       from public.episode_mappings em
       join public.episodes e on e.id = em.episode_id
       where em.provider = ${PROVIDER} and em.provider_id = ${expected.providerEpisodeId}
-    `);
+    `,
+    );
     const row = matches[0];
     if (
       matches.length !== 1 ||
@@ -443,12 +448,17 @@ async function verifyAppliedState(
       row.source !== "system" ||
       row.confidence < 95
     ) {
-      fail(`Created suffix provider episode ${expected.providerEpisodeNumber} failed exact verification`);
+      fail(
+        `Created suffix provider episode ${expected.providerEpisodeNumber} failed exact verification`,
+      );
     }
   }
 }
 
-async function applyPlan(tx: DbTransaction, plan: JojoPlannerOperation): Promise<{
+async function applyPlan(
+  tx: DbTransaction,
+  plan: JojoPlannerOperation,
+): Promise<{
   legacyMappingsRetired: number;
   v2AssociationsRetired: number;
   v2AssociationsCreated: number;
@@ -463,7 +473,9 @@ async function applyPlan(tx: DbTransaction, plan: JojoPlannerOperation): Promise
   const [move] = plan.plan.episodeMappingReassignments;
   if (!legacy || !oldV2 || !move) fail("Incomplete JoJo migration plan");
 
-  const deletedLegacy = await rowsWith<{ id: number }>(execute, sql`
+  const deletedLegacy = await rowsWith<{ id: number }>(
+    execute,
+    sql`
     delete from public.anime_mappings
     where id = ${legacy.id}
       and anime_id = ${CURRENT_OWNER_ANIME_ID}
@@ -472,10 +484,13 @@ async function applyPlan(tx: DbTransaction, plan: JojoPlannerOperation): Promise
       and source = ${legacy.source}
       and confidence = ${legacy.confidence}
     returning id
-  `);
+  `,
+  );
   if (deletedLegacy.length !== 1) fail("Legacy Phantom Blood mapping changed before deletion");
 
-  const deletedV2 = await rowsWith<{ id: number }>(execute, sql`
+  const deletedV2 = await rowsWith<{ id: number }>(
+    execute,
+    sql`
     delete from public.anime_provider_mappings apm
     where apm.id = ${oldV2.id}
       and apm.anime_id = ${CURRENT_OWNER_ANIME_ID}
@@ -487,12 +502,16 @@ async function applyPlan(tx: DbTransaction, plan: JojoPlannerOperation): Promise
         where aps.anime_provider_mapping_id = apm.id
       )
     returning id
-  `);
-  if (deletedV2.length !== 1) fail("Zero-segment Phantom Blood v2 association changed before deletion");
+  `,
+  );
+  if (deletedV2.length !== 1)
+    fail("Zero-segment Phantom Blood v2 association changed before deletion");
 
   const createdAssociations = new Map<number, number>();
   for (const association of plan.plan.createV2Associations) {
-    const inserted = await rowsWith<{ id: number; animeId: number }>(execute, sql`
+    const inserted = await rowsWith<{ id: number; animeId: number }>(
+      execute,
+      sql`
       insert into public.anime_provider_mappings
         (anime_id, provider_entity_id, confidence, source, is_primary)
       values (
@@ -503,7 +522,8 @@ async function applyPlan(tx: DbTransaction, plan: JojoPlannerOperation): Promise
         ${association.isPrimary}
       )
       returning id, anime_id as "animeId"
-    `);
+    `,
+    );
     if (inserted.length !== 1 || inserted[0]?.animeId !== association.animeId) {
       fail(`Failed to create exact v2 association for anime ${association.animeId}`);
     }
@@ -514,7 +534,9 @@ async function applyPlan(tx: DbTransaction, plan: JojoPlannerOperation): Promise
   for (const segment of plan.plan.createSegments) {
     const associationId = createdAssociations.get(segment.animeId);
     if (!associationId) fail(`Missing new association for segment anime ${segment.animeId}`);
-    const inserted = await rowsWith<{ id: number }>(execute, sql`
+    const inserted = await rowsWith<{ id: number }>(
+      execute,
+      sql`
       insert into public.anime_provider_segments
         (
           anime_provider_mapping_id,
@@ -531,12 +553,15 @@ async function applyPlan(tx: DbTransaction, plan: JojoPlannerOperation): Promise
         ${segment.localEpisodeEnd}
       )
       returning id
-    `);
+    `,
+    );
     if (inserted.length !== 1) fail(`Failed to create segment for anime ${segment.animeId}`);
     segmentsCreated += 1;
   }
 
-  const reassigned = await rowsWith<{ id: number }>(execute, sql`
+  const reassigned = await rowsWith<{ id: number }>(
+    execute,
+    sql`
     update public.episode_mappings
     set episode_id = ${move.toEpisodeId}, updated_at = now()
     where id = ${move.episodeMappingId}
@@ -547,12 +572,15 @@ async function applyPlan(tx: DbTransaction, plan: JojoPlannerOperation): Promise
       and source = ${move.preserveSource}
       and confidence = ${move.preserveConfidence}
     returning id
-  `);
+  `,
+  );
   if (reassigned.length !== 1) fail("Stolen TVDB episode 1 changed before reassignment");
 
   let episodeMappingsCreated = 0;
   for (const mapping of plan.plan.episodeMappingsToCreate) {
-    const inserted = await rowsWith<{ id: number }>(execute, sql`
+    const inserted = await rowsWith<{ id: number }>(
+      execute,
+      sql`
       insert into public.episode_mappings
         (
           episode_id,
@@ -571,7 +599,8 @@ async function applyPlan(tx: DbTransaction, plan: JojoPlannerOperation): Promise
         ${mapping.source}
       )
       returning id
-    `);
+    `,
+    );
     if (inserted.length !== 1) {
       fail(`Failed to insert suffix provider episode ${mapping.providerEpisodeNumber}`);
     }

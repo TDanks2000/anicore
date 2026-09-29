@@ -1,17 +1,16 @@
-import { sql } from "drizzle-orm";
-
 import { closeDb } from "@anicore/db";
-import { queryRows } from "../lib/query-rows";
 import { getTvdbOfficialEpisodes, getTvdbSeriesExtended } from "@anicore/providers/thetvdb/client";
 import { TMDB } from "@api-wrappers/tmdb-wrapper";
+import { sql } from "drizzle-orm";
+import { queryRows } from "../lib/query-rows";
 
 import {
-  diagnoseAmbiguousMappingGroup,
-  parseProviderSeasonId,
   type AmbiguousMappingAnimeIdentity,
   type AmbiguousMappingGroupDiagnosis,
   type AmbiguousMappingProviderEvidence,
+  diagnoseAmbiguousMappingGroup,
   type ProviderEvidenceStatus,
+  parseProviderSeasonId,
 } from "./ambiguous-provider-mapping-diagnosis";
 
 type Provider = "thetvdb" | "tmdb";
@@ -98,9 +97,7 @@ async function mapWithConcurrency<T, R>(
       results[index] = await mapper(items[index]!);
     }
   };
-  await Promise.all(
-    Array.from({ length: Math.min(concurrency, items.length) }, () => worker()),
-  );
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => worker()));
   return results;
 }
 
@@ -111,8 +108,9 @@ function errorStatus(error: unknown): number | null {
 }
 
 function isNotFoundError(error: unknown): boolean {
-  return errorStatus(error) === 404 || /request failed:\s*404(?:\s|:|$)/i.test(
-    error instanceof Error ? error.message : String(error),
+  return (
+    errorStatus(error) === 404 ||
+    /request failed:\s*404(?:\s|:|$)/i.test(error instanceof Error ? error.message : String(error))
   );
 }
 
@@ -138,10 +136,7 @@ interface TvdbSeriesLookup {
   series: { name: string; slug: string | null; firstAired: string | null } | null;
 }
 
-async function resolveTvdbSeries(
-  cache: TvdbCache,
-  showId: number,
-): Promise<TvdbSeriesLookup> {
+async function resolveTvdbSeries(cache: TvdbCache, showId: number): Promise<TvdbSeriesLookup> {
   let series = cache.series.get(showId);
   if (series === undefined) {
     try {
@@ -196,9 +191,7 @@ async function resolveTvdbSeasonEvidence(
   }
   if (!episodes) return null;
 
-  const seasonEpisodes = episodes.filter(
-    (episode) => episode.seasonNumber === seasonNumber,
-  );
+  const seasonEpisodes = episodes.filter((episode) => episode.seasonNumber === seasonNumber);
   const aired = seasonEpisodes
     .map((episode) => episode.aired)
     .filter((value): value is string => Boolean(value))
@@ -252,7 +245,10 @@ async function resolveTvdbEvidence(
 }
 
 interface TmdbCache {
-  shows: Map<number, { name: string; firstAired: string | null; showEpisodeCount: number | null } | null>;
+  shows: Map<
+    number,
+    { name: string; firstAired: string | null; showEpisodeCount: number | null } | null
+  >;
   seasons: Map<string, { episodeCount: number | null; firstAired: string | null } | null>;
 }
 
@@ -351,10 +347,7 @@ async function resolveTmdbEvidence(
 }
 
 async function run(): Promise<Record<string, unknown>> {
-  const [rows, identityRows] = await Promise.all([
-    loadAmbiguousMappingRows(),
-    loadAnimeIdentity(),
-  ]);
+  const [rows, identityRows] = await Promise.all([loadAmbiguousMappingRows(), loadAnimeIdentity()]);
 
   const hasTvdb = rows.some((row) => row.provider === "thetvdb");
   const hasTmdb = rows.some((row) => row.provider === "tmdb");
@@ -402,7 +395,9 @@ async function run(): Promise<Record<string, unknown>> {
     const candidates = await mapWithConcurrency(
       animeRows,
       4,
-      async (row): Promise<{
+      async (
+        row,
+      ): Promise<{
         provider: Provider;
         providerId: string;
         providerUrl: string | null;

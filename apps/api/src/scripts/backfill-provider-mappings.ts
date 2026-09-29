@@ -1,11 +1,5 @@
-import { sql, type SQL } from "drizzle-orm";
-
-import {
-  closeDb,
-  db,
-  tryAcquireSyncLease,
-  type SyncLease,
-} from "@anicore/db";
+import { closeDb, db, type SyncLease, tryAcquireSyncLease } from "@anicore/db";
+import { type SQL, sql } from "drizzle-orm";
 import { type DbTransaction, queryRows, transactionRows } from "../lib/query-rows";
 
 type Mode = "dry-run" | "apply";
@@ -71,11 +65,7 @@ async function assertSegmentMappingTablesExist(): Promise<void> {
       to_regclass('public.anime_provider_segments')::text as "animeProviderSegments"
   `);
 
-  if (
-    !row?.providerEntities ||
-    !row.animeProviderMappings ||
-    !row.animeProviderSegments
-  ) {
+  if (!row?.providerEntities || !row.animeProviderMappings || !row.animeProviderSegments) {
     throw new Error(
       "Segment-aware provider mapping tables do not exist yet; run `bun run db:migrate` before this backfill",
     );
@@ -126,7 +116,9 @@ const legacyMappingsWithoutV2LinkSql = sql`
 `;
 
 async function insertProviderEntities(tx: DbTransaction): Promise<number> {
-  const rows = await transactionRows<{ id: number }>(tx, sql`
+  const rows = await transactionRows<{ id: number }>(
+    tx,
+    sql`
     insert into public.provider_entities (
       provider,
       provider_id,
@@ -152,12 +144,15 @@ async function insertProviderEntities(tx: DbTransaction): Promise<number> {
       am.id desc
     on conflict (provider, provider_id) do nothing
     returning id
-  `);
+  `,
+  );
   return rows.length;
 }
 
 async function insertAnimeProviderMappings(tx: DbTransaction): Promise<number> {
-  const rows = await transactionRows<{ id: number }>(tx, sql`
+  const rows = await transactionRows<{ id: number }>(
+    tx,
+    sql`
     insert into public.anime_provider_mappings (
       anime_id,
       provider_entity_id,
@@ -182,7 +177,8 @@ async function insertAnimeProviderMappings(tx: DbTransaction): Promise<number> {
     where am.provider in ('thetvdb', 'tmdb')
     on conflict (anime_id, provider_entity_id) do nothing
     returning id
-  `);
+  `,
+  );
   return rows.length;
 }
 
@@ -218,10 +214,7 @@ async function run(mode: Mode): Promise<BackfillReport> {
       const providerEntityInsertCount = await insertProviderEntities(tx);
       const animeProviderMappingInsertCount = await insertAnimeProviderMappings(tx);
 
-      const remaining = await transactionCount(
-        tx,
-        legacyMappingsWithoutV2LinkSql,
-      );
+      const remaining = await transactionCount(tx, legacyMappingsWithoutV2LinkSql);
 
       if (providerEntityInsertCount !== plannedProviderEntityInsertCount) {
         throw new Error(
@@ -229,9 +222,7 @@ async function run(mode: Mode): Promise<BackfillReport> {
         );
       }
 
-      if (
-        animeProviderMappingInsertCount !== plannedAnimeProviderMappingInsertCount
-      ) {
+      if (animeProviderMappingInsertCount !== plannedAnimeProviderMappingInsertCount) {
         throw new Error(
           `Anime/provider backfill planned ${plannedAnimeProviderMappingInsertCount} inserts but wrote ${animeProviderMappingInsertCount}; transaction rolled back`,
         );

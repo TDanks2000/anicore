@@ -23,7 +23,10 @@ function rows(
 describe("provider collision coverage diagnostics", () => {
   test("recognizes complete offset coverage", () => {
     const result = analyzeCollisionCoverageGroup(
-      rows(Array.from({ length: 12 }, (_, index) => index + 1), 13),
+      rows(
+        Array.from({ length: 12 }, (_, index) => index + 1),
+        13,
+      ),
     );
     expect(result.completeCoverage).toBe(true);
     expect(result.evidenceBackedLinear).toBe(true);
@@ -33,7 +36,10 @@ describe("provider collision coverage diagnostics", () => {
 
   test("recognizes partial trailing coverage without guessing the missing episode", () => {
     const result = analyzeCollisionCoverageGroup(
-      rows(Array.from({ length: 11 }, (_, index) => index + 1), 13),
+      rows(
+        Array.from({ length: 11 }, (_, index) => index + 1),
+        13,
+      ),
     );
     expect(result.completeCoverage).toBe(false);
     expect(result.evidenceBackedLinear).toBe(true);

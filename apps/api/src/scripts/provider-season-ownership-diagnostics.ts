@@ -63,8 +63,7 @@ export function classifyProviderSeasonOwnership(
   const normalized = episodes
     .filter(
       (episode) =>
-        Number.isInteger(episode.providerEpisodeNumber) &&
-        episode.providerEpisodeNumber > 0,
+        Number.isInteger(episode.providerEpisodeNumber) && episode.providerEpisodeNumber > 0,
     )
     .sort((a, b) => a.providerEpisodeNumber - b.providerEpisodeNumber);
 

@@ -1,10 +1,9 @@
+import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, afterEach, describe, expect, test } from "bun:test";
-
-import { app } from "./app";
 import { closeDb } from "@anicore/db";
+import { app } from "./app";
 import { SyncMonitor } from "./lib/sync-monitor";
 
 async function json(response: Response): Promise<unknown> {
@@ -36,18 +35,14 @@ describe("app contract", () => {
   });
 
   test("returns 400 for invalid episode ids", async () => {
-    const response = await app.handle(
-      new Request("http://localhost/episodes/nope"),
-    );
+    const response = await app.handle(new Request("http://localhost/episodes/nope"));
 
     expect(response.status).toBe(400);
     expect(await json(response)).toEqual({ error: "Invalid episode id" });
   });
 
   test("returns safe global errors for unknown routes and invalid bodies", async () => {
-    const notFound = await app.handle(
-      new Request("http://localhost/does-not-exist"),
-    );
+    const notFound = await app.handle(new Request("http://localhost/does-not-exist"));
     expect(notFound.status).toBe(404);
     expect(await json(notFound)).toEqual({ error: "Not found" });
 
@@ -123,9 +118,7 @@ describe("app contract", () => {
     process.env.ANICORE_SYNC_MONITOR_DIR = dir;
     process.env.ANICORE_SYNC_MONITOR_CODE = "test-code";
 
-    const unauthorized = await app.handle(
-      new Request("http://localhost/sync-monitor/"),
-    );
+    const unauthorized = await app.handle(new Request("http://localhost/sync-monitor/"));
     expect(unauthorized.status).toBe(401);
     expect(await json(unauthorized)).toEqual({
       error: "Invalid sync monitor code",
@@ -177,7 +170,7 @@ describe("app contract", () => {
 
     const statusResponse = await app.handle(
       new Request("http://localhost/sync-monitor/", {
-        headers: { Authorization: "Basic " + btoa("anicore:test-code") },
+        headers: { Authorization: `Basic ${btoa("anicore:test-code")}` },
       }),
     );
     expect(statusResponse.status).toBe(200);

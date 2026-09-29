@@ -1,21 +1,9 @@
-import {
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { afterEach, describe, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, test } from "bun:test";
 
-import {
-  appendAnilistId,
-  loadIds,
-  loadProgress,
-  parseProgress,
-  saveProgress,
-} from "./cache";
+import { appendAnilistId, loadIds, loadProgress, parseProgress, saveProgress } from "./cache";
 
 const originalCwd = process.cwd();
 const originalFetch = globalThis.fetch;
@@ -28,7 +16,7 @@ function useTempCwd(): string {
 }
 
 afterEach(() => {
-	globalThis.fetch = originalFetch;
+  globalThis.fetch = originalFetch;
   process.chdir(originalCwd);
   if (tmp) {
     rmSync(tmp, { recursive: true, force: true });
@@ -44,9 +32,7 @@ describe("AniList ID cache", () => {
     expect(appendAnilistId(7)).toBe(true);
     expect(appendAnilistId(42)).toBe(false);
 
-    expect(readFileSync(join(dir, "data/cache/anilist_ids.txt"), "utf-8")).toBe(
-      "42\n7\n",
-    );
+    expect(readFileSync(join(dir, "data/cache/anilist_ids.txt"), "utf-8")).toBe("42\n7\n");
     expect(await loadIds()).toEqual([7, 42]);
   });
 
@@ -66,37 +52,37 @@ describe("AniList ID cache", () => {
     expect(() => appendAnilistId(1.5)).toThrow("Invalid AniList ID: 1.5");
   });
 
-	test("preserves ids appended while a refresh request is in flight", async () => {
-		const dir = useTempCwd();
-		appendAnilistId(7);
+  test("preserves ids appended while a refresh request is in flight", async () => {
+    const dir = useTempCwd();
+    appendAnilistId(7);
 
-		let releaseFetch: (() => void) | undefined;
-		const waiting = new Promise<void>((resolve) => {
-			releaseFetch = resolve;
-		});
-		globalThis.fetch = Object.assign(
-			async () => {
-				await waiting;
-				return new Response("1\n");
-			},
-			{ preconnect: () => undefined },
-		);
+    let releaseFetch: (() => void) | undefined;
+    const waiting = new Promise<void>((resolve) => {
+      releaseFetch = resolve;
+    });
+    globalThis.fetch = Object.assign(
+      async () => {
+        await waiting;
+        return new Response("1\n");
+      },
+      { preconnect: () => undefined },
+    );
 
-		const refreshing = loadIds(true);
-		await Promise.resolve();
-		appendAnilistId(42);
-		releaseFetch?.();
+    const refreshing = loadIds(true);
+    await Promise.resolve();
+    appendAnilistId(42);
+    releaseFetch?.();
 
-		expect(await refreshing).toEqual([1, 7, 42]);
-		expect(
-			new Set(
-				readFileSync(join(dir, "data/cache/anilist_ids.txt"), "utf-8")
-					.trim()
-					.split("\n")
-					.map(Number),
-			),
-		).toEqual(new Set([1, 7, 42]));
-	});
+    expect(await refreshing).toEqual([1, 7, 42]);
+    expect(
+      new Set(
+        readFileSync(join(dir, "data/cache/anilist_ids.txt"), "utf-8")
+          .trim()
+          .split("\n")
+          .map(Number),
+      ),
+    ).toEqual(new Set([1, 7, 42]));
+  });
 });
 
 describe("sync progress checkpoint", () => {
@@ -148,17 +134,13 @@ describe("sync progress checkpoint", () => {
     mkdirSync(cacheDir, { recursive: true });
 
     writeFileSync(progressPath, "{not-json");
-    await expect(loadProgress()).rejects.toThrow(
-      "Refusing to restart from index 0",
-    );
+    await expect(loadProgress()).rejects.toThrow("Refusing to restart from index 0");
 
     writeFileSync(
       progressPath,
       JSON.stringify({ version: 1, lastIndex: -5, stats: validProgress.stats }),
     );
-    await expect(loadProgress()).rejects.toThrow(
-      "invalid shape or unsupported version",
-    );
+    await expect(loadProgress()).rejects.toThrow("invalid shape or unsupported version");
   });
 
   test("atomically replaces a valid checkpoint", async () => {
@@ -166,11 +148,9 @@ describe("sync progress checkpoint", () => {
     await saveProgress(validProgress);
 
     expect(await loadProgress()).toEqual(validProgress);
-    expect(
-      JSON.parse(
-        readFileSync(join(dir, "data/cache/progress.json"), "utf-8"),
-      ),
-    ).toEqual(validProgress);
+    expect(JSON.parse(readFileSync(join(dir, "data/cache/progress.json"), "utf-8"))).toEqual(
+      validProgress,
+    );
   });
 
   test("rejects an invalid save without damaging the previous checkpoint", async () => {

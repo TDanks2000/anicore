@@ -25,9 +25,7 @@ describe("provider season identity verification", () => {
 
     expect(result.ok).toBe(true);
     expect(result.reason).toBeNull();
-    expect(result.bestTitleSimilarity).toBeGreaterThanOrEqual(
-      MIN_PROVIDER_TITLE_SIMILARITY,
-    );
+    expect(result.bestTitleSimilarity).toBeGreaterThanOrEqual(MIN_PROVIDER_TITLE_SIMILARITY);
   });
 
   test("rejects contaminated local rows when AniList metadata count disagrees", () => {

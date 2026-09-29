@@ -1,6 +1,5 @@
-import { sql } from "drizzle-orm";
-
 import { closeDb } from "@anicore/db";
+import { sql } from "drizzle-orm";
 import { queryRows } from "../lib/query-rows";
 import { parseRepairMappingsArgs } from "./repair-mappings-cli";
 
@@ -58,9 +57,7 @@ export function electPrimaries(rows: AmbiguousMappingRow[]): ElectedPrimary[] {
 
     const ranked = [...group].sort(
       (a, b) =>
-        b.confidence - a.confidence ||
-        sourceRank(a.source) - sourceRank(b.source) ||
-        a.id - b.id,
+        b.confidence - a.confidence || sourceRank(a.source) - sourceRank(b.source) || a.id - b.id,
     );
 
     const [winner, ...losers] = ranked;
@@ -73,9 +70,7 @@ export function electPrimaries(rows: AmbiguousMappingRow[]): ElectedPrimary[] {
     });
   }
 
-  return elected.sort(
-    (a, b) => a.animeId - b.animeId || a.provider.localeCompare(b.provider),
-  );
+  return elected.sort((a, b) => a.animeId - b.animeId || a.provider.localeCompare(b.provider));
 }
 
 async function loadAmbiguousMappings(): Promise<AmbiguousMappingRow[]> {
@@ -101,9 +96,7 @@ async function main(): Promise<void> {
     const rows = await loadAmbiguousMappings();
     const elected = electPrimaries(rows);
 
-    console.log(
-      `Ambiguous (anime, provider) groups with no primary: ${elected.length}`,
-    );
+    console.log(`Ambiguous (anime, provider) groups with no primary: ${elected.length}`);
     for (const group of elected) {
       const alternatives = group.losers
         .map((row) => `${row.providerId} (${row.source}/${row.confidence})`)

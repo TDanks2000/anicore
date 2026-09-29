@@ -1,14 +1,7 @@
-import { asc, eq } from "drizzle-orm";
-
 import { db } from "@anicore/db";
-import {
-  animeStudioLinks,
-  animeTagLinks,
-  studios,
-  tags,
-  type Anime,
-} from "@anicore/db/schema";
+import { type Anime, animeStudioLinks, animeTagLinks, studios, tags } from "@anicore/db/schema";
 import { fromJsonArray } from "@anicore/providers/lib/json";
+import { asc, eq } from "drizzle-orm";
 
 export function formatAnime(row: Anime) {
   const { genresJson, synonymsJson, ...rest } = row;

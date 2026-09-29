@@ -1,8 +1,7 @@
-import { sql } from "drizzle-orm";
-
 import { closeDb } from "@anicore/db";
-import { queryRows } from "../lib/query-rows";
 import { getTvdbSeasonEpisodes } from "@anicore/providers/thetvdb/client";
+import { sql } from "drizzle-orm";
+import { queryRows } from "../lib/query-rows";
 
 const PROVIDER = "thetvdb" as const;
 const PROVIDER_ID = "262954:2";
@@ -175,8 +174,7 @@ async function runSuffixDiagnostic(): Promise<SuffixSample> {
     (candidate) => candidate.animeId === SUFFIX_ANIME_ID,
   );
   if (
-    !suffixCandidate ||
-    !suffixCandidate.episodeCountMatches ||
+    !suffixCandidate?.episodeCountMatches ||
     !suffixCandidate.localCoverageMatches ||
     !suffixCandidate.boundaryDatesMatch ||
     !suffixCandidate.directlyRelatedToTarget
@@ -257,7 +255,9 @@ async function run(): Promise<Record<string, unknown>> {
       and anime_id in (${PREFIX_ANIME_ID}, ${SUFFIX_ANIME_ID})
   `);
   if (targetLegacyMappings.length !== 0) {
-    fail("Stardust Crusaders or Egypt-hen already has a legacy TVDB mapping; refusing mixed legacy/segment migration");
+    fail(
+      "Stardust Crusaders or Egypt-hen already has a legacy TVDB mapping; refusing mixed legacy/segment migration",
+    );
   }
 
   const v2EntityAssociations = await queryRows<V2AssociationRow>(sql`
@@ -289,7 +289,11 @@ async function run(): Promise<Record<string, unknown>> {
     );
   }
 
-  const targetV2ProviderAssociations = await queryRows<{ id: number; animeId: number; providerId: string }>(sql`
+  const targetV2ProviderAssociations = await queryRows<{
+    id: number;
+    animeId: number;
+    providerId: string;
+  }>(sql`
     select apm.id, apm.anime_id as "animeId", pe.provider_id as "providerId"
     from public.anime_provider_mappings apm
     join public.provider_entities pe on pe.id = apm.provider_entity_id
@@ -297,7 +301,9 @@ async function run(): Promise<Record<string, unknown>> {
       and apm.anime_id in (${PREFIX_ANIME_ID}, ${SUFFIX_ANIME_ID})
   `);
   if (targetV2ProviderAssociations.length !== 0) {
-    fail("Stardust Crusaders or Egypt-hen already has a v2 TVDB association; refusing to guess around existing state");
+    fail(
+      "Stardust Crusaders or Egypt-hen already has a v2 TVDB association; refusing to guess around existing state",
+    );
   }
 
   const localEpisodes = await queryRows<LocalEpisodeRow>(sql`
@@ -309,8 +315,18 @@ async function run(): Promise<Record<string, unknown>> {
   `);
   const prefixEpisodes = localEpisodes.filter((episode) => episode.animeId === PREFIX_ANIME_ID);
   const suffixEpisodes = localEpisodes.filter((episode) => episode.animeId === SUFFIX_ANIME_ID);
-  assertExactRange(prefixEpisodes.map((episode) => episode.number), 1, PREFIX_END, "Stardust local episodes");
-  assertExactRange(suffixEpisodes.map((episode) => episode.number), 1, SEASON_END - PREFIX_END, "Egypt-hen local episodes");
+  assertExactRange(
+    prefixEpisodes.map((episode) => episode.number),
+    1,
+    PREFIX_END,
+    "Stardust local episodes",
+  );
+  assertExactRange(
+    suffixEpisodes.map((episode) => episode.number),
+    1,
+    SEASON_END - PREFIX_END,
+    "Egypt-hen local episodes",
+  );
   const prefixEpisodeByNumber = new Map(prefixEpisodes.map((episode) => [episode.number, episode]));
   const suffixEpisodeByNumber = new Map(suffixEpisodes.map((episode) => [episode.number, episode]));
 
@@ -390,13 +406,17 @@ async function run(): Promise<Record<string, unknown>> {
         current.localKind !== "normal" ||
         Number(current.providerEpisodeNumber) !== providerNumber
       ) {
-        fail(`TVDB season 2 episode ${providerNumber} is no longer mapped exactly to Stardust local ${providerNumber}`);
+        fail(
+          `TVDB season 2 episode ${providerNumber} is no longer mapped exactly to Stardust local ${providerNumber}`,
+        );
       }
       continue;
     }
 
     if (current) {
-      fail(`TVDB season 2 suffix episode ${providerNumber} is already mapped; expected an unmapped authoritative suffix`);
+      fail(
+        `TVDB season 2 suffix episode ${providerNumber} is already mapped; expected an unmapped authoritative suffix`,
+      );
     }
     const localNumber = providerNumber - PREFIX_END;
     const targetEpisode = suffixEpisodeByNumber.get(localNumber)!;
@@ -507,9 +527,7 @@ if (import.meta.main) {
   try {
     const args = Bun.argv.slice(2);
     if (args.length > 0) {
-      fail(
-        `This command is dry-run only and accepts no arguments; received: ${args.join(" ")}`,
-      );
+      fail(`This command is dry-run only and accepts no arguments; received: ${args.join(" ")}`);
     }
     console.log(JSON.stringify(await run(), null, 2));
   } catch (error) {

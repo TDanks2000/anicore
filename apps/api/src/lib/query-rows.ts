@@ -1,6 +1,5 @@
-import { type SQL } from "drizzle-orm";
-
 import { db } from "@anicore/db";
+import type { SQL } from "drizzle-orm";
 
 export type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -17,10 +16,7 @@ export async function queryRows<T>(query: SQL): Promise<T[]> {
 }
 
 /** Transaction-scoped counterpart to {@link queryRows}. */
-export async function transactionRows<T>(
-  tx: DbTransaction,
-  query: SQL,
-): Promise<T[]> {
+export async function transactionRows<T>(tx: DbTransaction, query: SQL): Promise<T[]> {
   const result = await tx.execute(query);
   return [...result] as unknown as T[];
 }

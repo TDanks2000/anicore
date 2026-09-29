@@ -1,8 +1,8 @@
-import postgres from "postgres";
+import { getDatabaseConfig } from "@anicore/db/db-config";
 
 import { analyzeDbShape } from "@anicore/db/db-shape";
-import { getDatabaseConfig } from "@anicore/db/db-config";
 import { log } from "@anicore/providers/lib/logger";
+import postgres from "postgres";
 
 interface TableRow {
   tableSchema: string;
@@ -72,9 +72,7 @@ try {
   log.info("AniCore DB shape check");
   log.divider();
 
-  log.info(
-    `Expected tables present: ${report.expectedTablesPresent.length}`,
-  );
+  log.info(`Expected tables present: ${report.expectedTablesPresent.length}`);
   for (const tableName of report.expectedTablesPresent) {
     log.success(`table present: ${tableName}`);
   }
@@ -93,9 +91,7 @@ try {
     log.success("legacy tables absent: anime_studios, anime_tags");
   }
 
-  log.info(
-    `Expected indexes present: ${report.expectedIndexesPresent.length}`,
-  );
+  log.info(`Expected indexes present: ${report.expectedIndexesPresent.length}`);
   for (const { tableName, indexName } of report.expectedIndexesPresent) {
     log.success(`index present: ${tableName}.${indexName}`);
   }

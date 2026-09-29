@@ -1,5 +1,5 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 
 const migrationSql = readFileSync(
   new URL("../../../drizzle/0001_anicore_language_status.sql", import.meta.url),
@@ -10,9 +10,7 @@ describe("language status migration", () => {
   test("migrates legacy episode audio rows through anime episode identity", () => {
     expect(migrationSql).toContain('CREATE TABLE "episode_language_status"');
     expect(migrationSql).toContain('FROM "episode_audio_status" eas');
-    expect(migrationSql).toContain(
-      'INNER JOIN "episodes" e ON e."id" = eas."episode_id"',
-    );
+    expect(migrationSql).toContain('INNER JOIN "episodes" e ON e."id" = eas."episode_id"');
     expect(migrationSql).toContain('e."anime_id"');
     expect(migrationSql).toContain('e."number"');
     expect(migrationSql).toContain("'audio' AS \"media_type\"");

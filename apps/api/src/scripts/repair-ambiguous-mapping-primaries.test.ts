@@ -1,14 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  type AmbiguousMappingRow,
   electPrimaries,
   sourceRank,
-  type AmbiguousMappingRow,
 } from "./repair-ambiguous-mapping-primaries";
 
-function row(
-  overrides: Partial<AmbiguousMappingRow> & { id: number },
-): AmbiguousMappingRow {
+function row(overrides: Partial<AmbiguousMappingRow> & { id: number }): AmbiguousMappingRow {
   return {
     animeId: 1,
     provider: "kitsu",

@@ -1,9 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import {
-  assertAnimeScheduleRouteCompatible,
-  assertSingleAnimeScheduleIdentity,
-} from "./identity";
+import { assertAnimeScheduleRouteCompatible, assertSingleAnimeScheduleIdentity } from "./identity";
 
 describe("AnimeSchedule identity", () => {
   test("accepts zero or one cached route", () => {

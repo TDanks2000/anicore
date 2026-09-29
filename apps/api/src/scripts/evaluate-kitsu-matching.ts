@@ -7,9 +7,9 @@ import type { KitsuSearchNode } from "@anicore/providers/kitsu/client";
 // exports map, so it is reached with a relative path into the package's source
 // instead of inventing a new public subpath for a one-off measurement script.
 import {
+  type MatchHints,
   scoreKitsuCandidates,
   selectKitsuMatch,
-  type MatchHints,
 } from "../../../../packages/providers/src/providers/kitsu/matching";
 
 const DEFAULT_CORPUS_PATH = "data/eval/kitsu-matching-corpus.json";
@@ -127,8 +127,7 @@ export function gradeCase(testCase: KitsuMatchingCorpusCase): GradedCase {
   const ranked = [...scored].sort((a, b) => b.score - a.score);
   const bestScore = ranked[0]?.score ?? null;
 
-  const expectedEntry =
-    scored.find((entry) => entry.node.id === testCase.expectedKitsuId) ?? null;
+  const expectedEntry = scored.find((entry) => entry.node.id === testCase.expectedKitsuId) ?? null;
 
   const selectedNode = selectKitsuMatch(scored);
   const selectedEntry = selectedNode

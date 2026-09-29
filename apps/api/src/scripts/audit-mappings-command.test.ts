@@ -13,9 +13,11 @@ const repoRoot = "/tmp/anicore";
 const temporaryDirectories: string[] = [];
 
 afterEach(async () => {
-  await Promise.all(temporaryDirectories.splice(0).map((directory) =>
-    rm(directory, { recursive: true, force: true }),
-  ));
+  await Promise.all(
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { recursive: true, force: true })),
+  );
 });
 
 describe("parseAuditCommandArgs", () => {
@@ -34,9 +36,7 @@ describe("parseAuditCommandArgs", () => {
   });
 
   test("accepts a path after --write", () => {
-    expect(
-      parseAuditCommandArgs(["--write", "reports/mappings.json"], repoRoot),
-    ).toEqual({
+    expect(parseAuditCommandArgs(["--write", "reports/mappings.json"], repoRoot)).toEqual({
       auditArgs: [],
       writePath: resolve(repoRoot, "reports/mappings.json"),
     });
@@ -44,10 +44,7 @@ describe("parseAuditCommandArgs", () => {
 
   test("accepts --write=<path> and preserves unrelated arguments", () => {
     expect(
-      parseAuditCommandArgs(
-        ["--future-option", "--write=reports/mappings.json"],
-        repoRoot,
-      ),
+      parseAuditCommandArgs(["--future-option", "--write=reports/mappings.json"], repoRoot),
     ).toEqual({
       auditArgs: ["--future-option"],
       writePath: resolve(repoRoot, "reports/mappings.json"),
@@ -106,10 +103,7 @@ describe("writeAuditReport", () => {
     await writeFile(reportPath, "previous report\n");
 
     expect(
-      await writeAuditReport(
-        reportPath,
-        JSON.stringify({ ok: false, error: "audit crashed" }),
-      ),
+      await writeAuditReport(reportPath, JSON.stringify({ ok: false, error: "audit crashed" })),
     ).toBe(false);
     expect(await readFile(reportPath, "utf8")).toBe("previous report\n");
   });

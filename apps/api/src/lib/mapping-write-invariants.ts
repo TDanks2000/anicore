@@ -1,11 +1,6 @@
-import { and, eq } from "drizzle-orm";
-
 import { db } from "@anicore/db";
-import {
-  animeMappings,
-  episodes,
-  type AnimeMapping,
-} from "@anicore/db/schema";
+import { type AnimeMapping, animeMappings, episodes } from "@anicore/db/schema";
+import { and, eq } from "drizzle-orm";
 import {
   assertUnambiguousAnimeMappingPrimaries,
   assertUniqueMappingIdentities,
@@ -56,25 +51,15 @@ function normalizeMapping(mapping: MutableMappingInput): void {
   mapping.providerSlug = optionalMappingText(mapping.providerSlug ?? undefined);
   mapping.providerUrl = optionalMappingText(mapping.providerUrl ?? undefined);
   if ("providerEpisodeNumber" in mapping) {
-    mapping.providerEpisodeNumber = optionalMappingText(
-      mapping.providerEpisodeNumber ?? undefined,
-    );
+    mapping.providerEpisodeNumber = optionalMappingText(mapping.providerEpisodeNumber ?? undefined);
   }
 }
 
-async function animeHasProviderMapping(
-  animeId: number,
-  provider: Provider,
-): Promise<boolean> {
+async function animeHasProviderMapping(animeId: number, provider: Provider): Promise<boolean> {
   const [row] = await db
     .select({ id: animeMappings.id })
     .from(animeMappings)
-    .where(
-      and(
-        eq(animeMappings.animeId, animeId),
-        eq(animeMappings.provider, provider),
-      ),
-    )
+    .where(and(eq(animeMappings.animeId, animeId), eq(animeMappings.provider, provider)))
     .limit(1);
   return Boolean(row);
 }
@@ -135,9 +120,7 @@ export async function enforceMappingWriteInvariants(input: {
       body.providerId = canonicalProviderId(body.providerId);
       body.providerSlug = optionalMappingText(body.providerSlug ?? undefined);
       body.providerUrl = optionalMappingText(body.providerUrl ?? undefined);
-      body.providerEpisodeNumber = optionalMappingText(
-        body.providerEpisodeNumber ?? undefined,
-      );
+      body.providerEpisodeNumber = optionalMappingText(body.providerEpisodeNumber ?? undefined);
 
       const [episode] = await db
         .select({ animeId: episodes.animeId })

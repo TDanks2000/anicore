@@ -8,9 +8,7 @@ import {
   type ResolvedCollisionGroup,
 } from "./provider-collision-segment-plan";
 
-function row(
-  overrides: Partial<CollisionEpisodeMappingRow> = {},
-): CollisionEpisodeMappingRow {
+function row(overrides: Partial<CollisionEpisodeMappingRow> = {}): CollisionEpisodeMappingRow {
   return {
     episodeMappingId: 1,
     animeId: 10,
@@ -28,9 +26,7 @@ function row(
   };
 }
 
-function resolvedGroup(
-  overrides: Partial<ResolvedCollisionGroup> = {},
-): ResolvedCollisionGroup {
+function resolvedGroup(overrides: Partial<ResolvedCollisionGroup> = {}): ResolvedCollisionGroup {
   return {
     animeId: 10,
     provider: "tmdb",

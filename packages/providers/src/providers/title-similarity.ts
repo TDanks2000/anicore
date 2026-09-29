@@ -32,9 +32,7 @@ export function normalizeComparableTitle(value: string): string {
   // "cour" (as in "2nd Cour") into "cor" before it can be recognised.
   const withCanonicalOrdinals = canonicalizeOrdinals(cleaned);
 
-  return foldLatinLongVowels(withCanonicalOrdinals)
-    .replace(/\s+/g, " ")
-    .trim();
+  return foldLatinLongVowels(withCanonicalOrdinals).replace(/\s+/g, " ").trim();
 }
 
 /**
@@ -250,15 +248,10 @@ const CONTAINMENT_LENGTH_RATIO_THRESHOLD = 0.8;
  * subset-plus-large-length-gap combination that signals "same prefix,
  * different work" rather than "same work, extra noise".
  */
-function applyContainmentPenalty(
-  score: number,
-  normalizedA: string,
-  normalizedB: string,
-): number {
+function applyContainmentPenalty(score: number, normalizedA: string, normalizedB: string): number {
   const tokensA = new Set(normalizedA.split(" ").filter(Boolean));
   const tokensB = new Set(normalizedB.split(" ").filter(Boolean));
-  const [shorter, longer] =
-    tokensA.size <= tokensB.size ? [tokensA, tokensB] : [tokensB, tokensA];
+  const [shorter, longer] = tokensA.size <= tokensB.size ? [tokensA, tokensB] : [tokensB, tokensA];
   if (!shorter.size) return score;
 
   for (const token of shorter) {
@@ -320,10 +313,7 @@ const UNPAIRED_SEQUEL_SCORE_CAP = 0.6;
  * the added token is a short sequel number. Ordinal 1 is deliberately excluded,
  * because "X" and "X Season 1" genuinely are the same work.
  */
-function hasUnpairedSequelOrdinal(
-  normalizedA: string,
-  normalizedB: string,
-): boolean {
+function hasUnpairedSequelOrdinal(normalizedA: string, normalizedB: string): boolean {
   const ordinalsA = extractOrdinalNumbers(normalizedA);
   const ordinalsB = extractOrdinalNumbers(normalizedB);
   if (ordinalsA.length && ordinalsB.length) return false;

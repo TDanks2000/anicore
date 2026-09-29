@@ -30,8 +30,6 @@ describe("AniList mapper cross-provider identity", () => {
   });
 
   test("does not invent a MAL mapping when AniList has no idMal", () => {
-    expect(
-      mapAnilistAnime(media({ idMal: null })).authoritativeMappings,
-    ).toEqual([]);
+    expect(mapAnilistAnime(media({ idMal: null })).authoritativeMappings).toEqual([]);
   });
 });

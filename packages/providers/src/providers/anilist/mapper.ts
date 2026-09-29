@@ -1,25 +1,15 @@
 import type { ProviderAnimeData } from "../types";
-import { anilistClient } from "./client";
+import type { anilistClient } from "./client";
 
-type AnilistGetByIdResult = Awaited<
-  ReturnType<typeof anilistClient.anime.getAnimeById>
->;
+type AnilistGetByIdResult = Awaited<ReturnType<typeof anilistClient.anime.getAnimeById>>;
 type AnilistMedia = NonNullable<AnilistGetByIdResult["Media"]>;
 
 function resolveTitle(media: AnilistMedia): string {
-  return (
-    media.title?.romaji ??
-    media.title?.english ??
-    media.title?.native ??
-    String(media.id)
-  );
+  return media.title?.romaji ?? media.title?.english ?? media.title?.native ?? String(media.id);
 }
 
 function fuzzyDateToIso(
-  date:
-    | { year: number | null; month: number | null; day: number | null }
-    | null
-    | undefined,
+  date: { year: number | null; month: number | null; day: number | null } | null | undefined,
 ): string | null {
   if (!date?.year) return null;
   const m = date.month ? String(date.month).padStart(2, "0") : "01";
@@ -43,8 +33,7 @@ function dedupeStudios(
     }
 
     existing.isMain = existing.isMain || studio.isMain;
-    existing.isAnimationStudio =
-      existing.isAnimationStudio || studio.isAnimationStudio;
+    existing.isAnimationStudio = existing.isAnimationStudio || studio.isAnimationStudio;
     existing.anilistStudioId ??= studio.anilistStudioId ?? null;
   }
 
@@ -53,9 +42,7 @@ function dedupeStudios(
 
 export function mapAnilistAnime(media: AnilistMedia): ProviderAnimeData {
   const studios = (media.studios?.edges ?? [])
-    .filter(
-      (e): e is NonNullable<typeof e> => e !== null && e.node !== null,
-    )
+    .filter((e): e is NonNullable<typeof e> => e !== null && e.node !== null)
     .map((e) => ({
       name: e.node!.name,
       isMain: false,
@@ -75,9 +62,7 @@ export function mapAnilistAnime(media: AnilistMedia): ProviderAnimeData {
     }));
 
   const externalLinks = (media.externalLinks ?? [])
-    .filter(
-      (l): l is NonNullable<typeof l> => l !== null && !!l.url,
-    )
+    .filter((l): l is NonNullable<typeof l> => l !== null && !!l.url)
     .map((l) => ({
       site: l.site,
       url: l.url!,
@@ -120,8 +105,8 @@ export function mapAnilistAnime(media: AnilistMedia): ProviderAnimeData {
     countryOfOrigin: (media.countryOfOrigin as string) ?? null,
     isAdult: media.isAdult ?? false,
 
-    genres: (media.genres?.filter((g: string | null): g is string => g !== null) ?? []),
-    synonyms: (media.synonyms?.filter((s: string | null): s is string => s !== null) ?? []),
+    genres: media.genres?.filter((g: string | null): g is string => g !== null) ?? [],
+    synonyms: media.synonyms?.filter((s: string | null): s is string => s !== null) ?? [],
 
     averageScore: media.averageScore ?? null,
     meanScore: media.meanScore ?? null,
@@ -130,10 +115,7 @@ export function mapAnilistAnime(media: AnilistMedia): ProviderAnimeData {
     trending: media.trending ?? null,
 
     coverImage:
-      media.coverImage?.extraLarge ??
-      media.coverImage?.large ??
-      media.coverImage?.medium ??
-      null,
+      media.coverImage?.extraLarge ?? media.coverImage?.large ?? media.coverImage?.medium ?? null,
     coverImageColor: media.coverImage?.color ?? null,
     bannerImage: media.bannerImage ?? null,
 

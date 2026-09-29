@@ -54,10 +54,7 @@ export const audioStatusEnum = t.Union([
   t.Literal("partial"),
 ]);
 
-export const languageMediaTypeEnum = t.Union([
-  t.Literal("audio"),
-  t.Literal("subtitle"),
-]);
+export const languageMediaTypeEnum = t.Union([t.Literal("audio"), t.Literal("subtitle")]);
 
 export const animeLanguageStatusEnum = t.Union([
   t.Literal("unknown"),

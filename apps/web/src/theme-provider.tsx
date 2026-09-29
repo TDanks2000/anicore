@@ -1,5 +1,5 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 type Theme = "dark" | "light" | "system";
 
@@ -12,10 +12,7 @@ interface ThemeProviderState {
 const ThemeProviderContext = createContext<ThemeProviderState | null>(null);
 
 function getSystemTheme(): "dark" | "light" {
-  if (
-    typeof window !== "undefined" &&
-    window.matchMedia("(prefers-color-scheme: dark)").matches
-  ) {
+  if (typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches) {
     return "dark";
   }
 
@@ -35,9 +32,7 @@ export function ThemeProvider({
     if (typeof window === "undefined") return defaultTheme;
     return (window.localStorage.getItem(storageKey) as Theme | null) ?? defaultTheme;
   });
-  const [systemTheme, setSystemTheme] = useState<"dark" | "light">(
-    getSystemTheme,
-  );
+  const [systemTheme, setSystemTheme] = useState<"dark" | "light">(getSystemTheme);
 
   const resolvedTheme = theme === "system" ? systemTheme : theme;
 
@@ -67,11 +62,7 @@ export function ThemeProvider({
     [resolvedTheme, storageKey, theme],
   );
 
-  return (
-    <ThemeProviderContext.Provider value={value}>
-      {children}
-    </ThemeProviderContext.Provider>
-  );
+  return <ThemeProviderContext.Provider value={value}>{children}</ThemeProviderContext.Provider>;
 }
 
 export function useTheme() {

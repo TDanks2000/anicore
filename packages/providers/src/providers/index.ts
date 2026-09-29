@@ -1,5 +1,3 @@
-import { and, eq, inArray, or, sql } from "drizzle-orm";
-
 import { db } from "@anicore/db";
 import {
   anime,
@@ -11,14 +9,11 @@ import {
   studios,
   tags,
 } from "@anicore/db/schema";
+import { and, eq, inArray, or, sql } from "drizzle-orm";
 import { toJsonArray } from "../lib/json";
 import { slugify } from "../lib/slug";
 import { syncAuthoritativeCrossMappings } from "./authoritative-cross-mappings";
-import {
-  dedupeProviderStudios,
-  dedupeProviderTags,
-  normalizeEntityName,
-} from "./normalize";
+import { dedupeProviderStudios, dedupeProviderTags, normalizeEntityName } from "./normalize";
 import type { ProviderAnimeData } from "./types";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -73,11 +68,7 @@ function buildAnimeFields(data: ProviderAnimeData) {
   };
 }
 
-async function upsertRelatedData(
-  animeId: number,
-  data: ProviderAnimeData,
-  tx: Tx,
-): Promise<void> {
+async function upsertRelatedData(animeId: number, data: ProviderAnimeData, tx: Tx): Promise<void> {
   // Studios — replace on every sync since the set is authoritative
   if (data.studios !== undefined) {
     await tx.delete(animeStudioLinks).where(eq(animeStudioLinks.animeId, animeId));
@@ -88,12 +79,15 @@ async function upsertRelatedData(
         .map((studio) => studio.anilistStudioId)
         .filter((id): id is number => id !== null && id !== undefined);
 
-      const existingStudios = await tx.select().from(studios).where(
-        or(
-          inArray(studios.normalizedName, names),
-          anilistIds.length ? inArray(studios.anilistStudioId, anilistIds) : sql`false`,
-        ),
-      );
+      const existingStudios = await tx
+        .select()
+        .from(studios)
+        .where(
+          or(
+            inArray(studios.normalizedName, names),
+            anilistIds.length ? inArray(studios.anilistStudioId, anilistIds) : sql`false`,
+          ),
+        );
 
       const byNormalizedName = new Map(
         existingStudios.map((studio) => [studio.normalizedName, studio]),
@@ -104,7 +98,10 @@ async function upsertRelatedData(
           .map((studio) => [studio.anilistStudioId!, studio]),
       );
 
-      const linkByStudioId = new Map<number, { animeId: number; studioId: number; isMain: boolean }>();
+      const linkByStudioId = new Map<
+        number,
+        { animeId: number; studioId: number; isMain: boolean }
+      >();
 
       for (const studioDataRow of studioData) {
         const normalizedName = normalizeEntityName(studioDataRow.name);
@@ -183,9 +180,7 @@ async function upsertRelatedData(
         .from(tags)
         .where(inArray(tags.normalizedName, normalizedNames));
 
-      const byNormalizedName = new Map(
-        existingTags.map((tag) => [tag.normalizedName, tag]),
-      );
+      const byNormalizedName = new Map(existingTags.map((tag) => [tag.normalizedName, tag]));
       const linkValues: Array<{ animeId: number; tagId: number; rank: number | null }> = [];
 
       for (const tagDataRow of tagData) {
@@ -211,8 +206,7 @@ async function upsertRelatedData(
           const nextCategory = tagRow.category ?? tagDataRow.category ?? null;
           const nextGeneralSpoiler =
             tagRow.isGeneralSpoiler || (tagDataRow.isGeneralSpoiler ?? false);
-          const nextMediaSpoiler =
-            tagRow.isMediaSpoiler || (tagDataRow.isMediaSpoiler ?? false);
+          const nextMediaSpoiler = tagRow.isMediaSpoiler || (tagDataRow.isMediaSpoiler ?? false);
           const nextAdult = tagRow.isAdult || (tagDataRow.isAdult ?? false);
 
           if (
@@ -253,9 +247,7 @@ async function upsertRelatedData(
 
   // External links — replace on every sync
   if (data.externalLinks !== undefined) {
-    await tx
-      .delete(animeExternalLinks)
-      .where(eq(animeExternalLinks.animeId, animeId));
+    await tx.delete(animeExternalLinks).where(eq(animeExternalLinks.animeId, animeId));
     if (data.externalLinks.length) {
       await tx.insert(animeExternalLinks).values(
         data.externalLinks.map((l) => ({
@@ -295,10 +287,7 @@ async function upsertRelatedData(
   }
 }
 
-async function syncCrossMappingsIfPresent(
-  animeId: number,
-  data: ProviderAnimeData,
-): Promise<void> {
+async function syncCrossMappingsIfPresent(animeId: number, data: ProviderAnimeData): Promise<void> {
   if (data.authoritativeMappings?.length) {
     await syncAuthoritativeCrossMappings(animeId, data.authoritativeMappings);
   }
@@ -311,10 +300,7 @@ export async function upsertAnimeFromProvider(
     .select({ animeId: animeMappings.animeId })
     .from(animeMappings)
     .where(
-      and(
-        eq(animeMappings.provider, data.provider),
-        eq(animeMappings.providerId, data.providerId),
-      ),
+      and(eq(animeMappings.provider, data.provider), eq(animeMappings.providerId, data.providerId)),
     )
     .limit(1);
 
@@ -350,9 +336,7 @@ export async function upsertAnimeFromProvider(
       .returning();
 
     if (!created) {
-      throw new Error(
-        `Failed to insert anime for ${data.provider}:${data.providerId}`,
-      );
+      throw new Error(`Failed to insert anime for ${data.provider}:${data.providerId}`);
     }
 
     await tx.insert(animeMappings).values({

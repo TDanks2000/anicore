@@ -1,4 +1,4 @@
-import * as React from "react";
+import type * as React from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -12,10 +12,7 @@ export function Alert({ className, ...props }: React.HTMLAttributes<HTMLDivEleme
   );
 }
 
-export function AlertTitle({
-  className,
-  ...props
-}: React.HTMLAttributes<HTMLHeadingElement>) {
+export function AlertTitle({ className, ...props }: React.HTMLAttributes<HTMLHeadingElement>) {
   return <h5 className={cn("mb-1 font-medium leading-none", className)} {...props} />;
 }
 

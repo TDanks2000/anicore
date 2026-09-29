@@ -1,18 +1,17 @@
-import { sql } from "drizzle-orm";
-
 import { closeDb } from "@anicore/db";
-import { queryRows } from "../lib/query-rows";
 import {
   getTvdbSeasonEpisodes,
   getTvdbSeriesBySlug,
   type TvdbEpisodeBase,
   type TvdbSeriesBaseRecord,
 } from "@anicore/providers/thetvdb/client";
+import { sql } from "drizzle-orm";
+import { queryRows } from "../lib/query-rows";
 
 import {
   buildTvdbSlugResolutionGroups,
-  verifyResolvedTvdbSlugGroup,
   type TvdbSlugResolutionGroup,
+  verifyResolvedTvdbSlugGroup,
 } from "./orphan-tvdb-slug-repair";
 import {
   buildTmdbResolvedCollisionGroups,
@@ -193,9 +192,7 @@ async function mapWithConcurrency<T, R>(
       results[index] = await mapper(items[index]!);
     }
   };
-  await Promise.all(
-    Array.from({ length: Math.min(concurrency, items.length) }, () => worker()),
-  );
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => worker()));
   return results;
 }
 
@@ -279,14 +276,13 @@ function classifyEvidence(
 }
 
 async function run(): Promise<Record<string, unknown>> {
-  const [orphanRows, providerOwners, animeRows, relationRows, anilistRows] =
-    await Promise.all([
-      loadNormalOrphanRows(),
-      loadProviderOwners(),
-      loadAnimeMetadata(),
-      loadRelations(),
-      loadAniListMappings(),
-    ]);
+  const [orphanRows, providerOwners, animeRows, relationRows, anilistRows] = await Promise.all([
+    loadNormalOrphanRows(),
+    loadProviderOwners(),
+    loadAnimeMetadata(),
+    loadRelations(),
+    loadAniListMappings(),
+  ]);
 
   if (orphanRows.some((row) => row.provider === "thetvdb") && !process.env.TVDB_API_KEY?.trim()) {
     throw new Error("TVDB_API_KEY is required for provider collision identity diagnostics");

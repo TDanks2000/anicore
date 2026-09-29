@@ -36,9 +36,7 @@ describe("episode source number alignment", () => {
   });
 
   test("rejects a provider season whose numbering is offset from the AniList cour", () => {
-    expect(hasUsableEpisodeNumberAlignment(context, batch(12, 2024, 13))).toBe(
-      false,
-    );
+    expect(hasUsableEpisodeNumberAlignment(context, batch(12, 2024, 13))).toBe(false);
   });
 
   test("rejects duplicate provider episode numbers", () => {
@@ -63,21 +61,15 @@ describe("episode source batch scoring", () => {
   });
 
   test("rejects a season from a clearly different year", () => {
-    expect(scoreSourceEpisodeBatch(context, batch(12, 2020))).toBe(
-      Number.NEGATIVE_INFINITY,
-    );
+    expect(scoreSourceEpisodeBatch(context, batch(12, 2020))).toBe(Number.NEGATIVE_INFINITY);
   });
 
   test("rejects a season with a wildly different episode count", () => {
-    expect(scoreSourceEpisodeBatch(context, batch(24))).toBe(
-      Number.NEGATIVE_INFINITY,
-    );
+    expect(scoreSourceEpisodeBatch(context, batch(24))).toBe(Number.NEGATIVE_INFINITY);
   });
 
   test("rejects a count-compatible season whose episode numbers cannot map locally", () => {
-    expect(scoreSourceEpisodeBatch(context, batch(12, 2024, 13))).toBe(
-      Number.NEGATIVE_INFINITY,
-    );
+    expect(scoreSourceEpisodeBatch(context, batch(12, 2024, 13))).toBe(Number.NEGATIVE_INFINITY);
   });
 
   test("does not reject a larger provider batch when the final local count is unknown", () => {

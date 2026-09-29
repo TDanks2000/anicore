@@ -1,771 +1,702 @@
 import { relations, sql } from "drizzle-orm";
 import {
-	boolean,
-	index,
-	integer,
-	pgTable,
-	real,
-	serial,
-	text,
-	timestamp,
-	uniqueIndex,
+  boolean,
+  index,
+  integer,
+  pgTable,
+  real,
+  serial,
+  text,
+  timestamp,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 export const anime = pgTable(
-	"anime",
-	{
-		id: serial("id").primaryKey(),
+  "anime",
+  {
+    id: serial("id").primaryKey(),
 
-		slug: text("slug"),
+    slug: text("slug"),
 
-		titleRomaji: text("title_romaji").notNull(),
-		titleEnglish: text("title_english"),
-		titleNative: text("title_native"),
-		titleUserPreferred: text("title_user_preferred"),
+    titleRomaji: text("title_romaji").notNull(),
+    titleEnglish: text("title_english"),
+    titleNative: text("title_native"),
+    titleUserPreferred: text("title_user_preferred"),
 
-		description: text("description"),
+    description: text("description"),
 
-		format: text("format"),
-		status: text("status"),
-		source: text("source"),
+    format: text("format"),
+    status: text("status"),
+    source: text("source"),
 
-		season: text("season"),
-		seasonYear: integer("season_year"),
-		startDate: text("start_date"),
-		endDate: text("end_date"),
+    season: text("season"),
+    seasonYear: integer("season_year"),
+    startDate: text("start_date"),
+    endDate: text("end_date"),
 
-		episodeCount: integer("episode_count"),
-		durationMinutes: integer("duration_minutes"),
+    episodeCount: integer("episode_count"),
+    durationMinutes: integer("duration_minutes"),
 
-		countryOfOrigin: text("country_of_origin"),
-		isAdult: boolean("is_adult").notNull().default(false),
+    countryOfOrigin: text("country_of_origin"),
+    isAdult: boolean("is_adult").notNull().default(false),
 
-		genresJson: text("genres_json").notNull().default("[]"),
-		synonymsJson: text("synonyms_json").notNull().default("[]"),
+    genresJson: text("genres_json").notNull().default("[]"),
+    synonymsJson: text("synonyms_json").notNull().default("[]"),
 
-		averageScore: integer("average_score"),
-		meanScore: integer("mean_score"),
-		popularity: integer("popularity"),
-		favourites: integer("favourites"),
-		trending: integer("trending"),
+    averageScore: integer("average_score"),
+    meanScore: integer("mean_score"),
+    popularity: integer("popularity"),
+    favourites: integer("favourites"),
+    trending: integer("trending"),
 
-		coverImage: text("cover_image"),
-		coverImageColor: text("cover_image_color"),
-		bannerImage: text("banner_image"),
+    coverImage: text("cover_image"),
+    coverImageColor: text("cover_image_color"),
+    bannerImage: text("banner_image"),
 
-		trailerVideoId: text("trailer_video_id"),
-		trailerSite: text("trailer_site"),
-		trailerThumbnail: text("trailer_thumbnail"),
+    trailerVideoId: text("trailer_video_id"),
+    trailerSite: text("trailer_site"),
+    trailerThumbnail: text("trailer_thumbnail"),
 
-		nextEpisodeNumber: integer("next_episode_number"),
-		nextEpisodeAirsAt: integer("next_episode_airs_at"),
+    nextEpisodeNumber: integer("next_episode_number"),
+    nextEpisodeAirsAt: integer("next_episode_airs_at"),
 
-		hashtag: text("hashtag"),
+    hashtag: text("hashtag"),
 
-		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 
-		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-	},
-	(table) => ({
-		slugIdx: uniqueIndex("anime_slug_idx").on(table.slug),
-		titleRomajiIdx: index("anime_title_romaji_idx").on(table.titleRomaji),
-		titleEnglishIdx: index("anime_title_english_idx").on(table.titleEnglish),
-		seasonIdx: index("anime_season_idx").on(table.seasonYear, table.season),
-		formatIdx: index("anime_format_idx").on(table.format),
-		statusIdx: index("anime_status_idx").on(table.status),
-		sourceIdx: index("anime_source_idx").on(table.source),
-		startDateIdx: index("anime_start_date_idx").on(table.startDate),
-		trendingIdx: index("anime_trending_idx").on(table.trending),
-		meanScoreIdx: index("anime_mean_score_idx").on(table.meanScore),
-	}),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    slugIdx: uniqueIndex("anime_slug_idx").on(table.slug),
+    titleRomajiIdx: index("anime_title_romaji_idx").on(table.titleRomaji),
+    titleEnglishIdx: index("anime_title_english_idx").on(table.titleEnglish),
+    seasonIdx: index("anime_season_idx").on(table.seasonYear, table.season),
+    formatIdx: index("anime_format_idx").on(table.format),
+    statusIdx: index("anime_status_idx").on(table.status),
+    sourceIdx: index("anime_source_idx").on(table.source),
+    startDateIdx: index("anime_start_date_idx").on(table.startDate),
+    trendingIdx: index("anime_trending_idx").on(table.trending),
+    meanScoreIdx: index("anime_mean_score_idx").on(table.meanScore),
+  }),
 );
 
 export const animeMappings = pgTable(
-	"anime_mappings",
-	{
-		id: serial("id").primaryKey(),
+  "anime_mappings",
+  {
+    id: serial("id").primaryKey(),
 
-		animeId: integer("anime_id")
-			.notNull()
-			.references(() => anime.id, { onDelete: "cascade" }),
+    animeId: integer("anime_id")
+      .notNull()
+      .references(() => anime.id, { onDelete: "cascade" }),
 
-		provider: text("provider", {
-			enum: [
-				"anilist",
-				"kitsu",
-				"thetvdb",
-				"mal",
-				"tmdb",
-				"simkl",
-				"anisearch",
-				"animeplanet",
-				"animeschedule",
-				"other",
-			],
-		}).notNull(),
+    provider: text("provider", {
+      enum: [
+        "anilist",
+        "kitsu",
+        "thetvdb",
+        "mal",
+        "tmdb",
+        "simkl",
+        "anisearch",
+        "animeplanet",
+        "animeschedule",
+        "other",
+      ],
+    }).notNull(),
 
-		providerId: text("provider_id").notNull(),
-		providerSlug: text("provider_slug"),
-		providerUrl: text("provider_url"),
+    providerId: text("provider_id").notNull(),
+    providerSlug: text("provider_slug"),
+    providerUrl: text("provider_url"),
 
-		confidence: integer("confidence").notNull().default(100),
+    confidence: integer("confidence").notNull().default(100),
 
-		source: text("source", {
-			enum: ["manual", "api", "import", "fuzzy", "system"],
-		})
-			.notNull()
-			.default("manual"),
+    source: text("source", {
+      enum: ["manual", "api", "import", "fuzzy", "system"],
+    })
+      .notNull()
+      .default("manual"),
 
-		isPrimary: boolean("is_primary").notNull().default(false),
+    isPrimary: boolean("is_primary").notNull().default(false),
 
-		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 
-		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-	},
-	(table) => ({
-		providerIdIdx: uniqueIndex("anime_mappings_provider_id_idx").on(
-			table.provider,
-			table.providerId,
-		),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    providerIdIdx: uniqueIndex("anime_mappings_provider_id_idx").on(
+      table.provider,
+      table.providerId,
+    ),
 
-		animeProviderIdIdx: uniqueIndex("anime_mappings_anime_provider_id_idx").on(
-			table.animeId,
-			table.provider,
-			table.providerId,
-		),
+    animeProviderIdIdx: uniqueIndex("anime_mappings_anime_provider_id_idx").on(
+      table.animeId,
+      table.provider,
+      table.providerId,
+    ),
 
-		animeProviderIdx: index("anime_mappings_anime_provider_idx").on(
-			table.animeId,
-			table.provider,
-		),
+    animeProviderIdx: index("anime_mappings_anime_provider_idx").on(table.animeId, table.provider),
 
-		// At most one primary mapping per (anime, provider). Consumers that read a
-		// single mapping rely on this to be deterministic; without it the
-		// invariant was only checked in request validation, so anything writing
-		// outside that path could silently create an ambiguous pair. Partial, so
-		// having no primary at all remains allowed.
-		animeProviderPrimaryIdx: uniqueIndex("anime_mappings_anime_provider_primary_idx")
-			.on(table.animeId, table.provider)
-			.where(sql`${table.isPrimary}`),
+    // At most one primary mapping per (anime, provider). Consumers that read a
+    // single mapping rely on this to be deterministic; without it the
+    // invariant was only checked in request validation, so anything writing
+    // outside that path could silently create an ambiguous pair. Partial, so
+    // having no primary at all remains allowed.
+    animeProviderPrimaryIdx: uniqueIndex("anime_mappings_anime_provider_primary_idx")
+      .on(table.animeId, table.provider)
+      .where(sql`${table.isPrimary}`),
 
-		providerSlugIdx: index("anime_mappings_provider_slug_idx").on(
-			table.provider,
-			table.providerSlug,
-		),
-	}),
+    providerSlugIdx: index("anime_mappings_provider_slug_idx").on(
+      table.provider,
+      table.providerSlug,
+    ),
+  }),
 );
 
 export const animeRelationLinks = pgTable(
-	"anime_relation_links",
-	{
-		id: serial("id").primaryKey(),
+  "anime_relation_links",
+  {
+    id: serial("id").primaryKey(),
 
-		animeId: integer("anime_id")
-			.notNull()
-			.references(() => anime.id, { onDelete: "cascade" }),
+    animeId: integer("anime_id")
+      .notNull()
+      .references(() => anime.id, { onDelete: "cascade" }),
 
-		relatedAnimeId: integer("related_anime_id")
-			.notNull()
-			.references(() => anime.id, { onDelete: "cascade" }),
+    relatedAnimeId: integer("related_anime_id")
+      .notNull()
+      .references(() => anime.id, { onDelete: "cascade" }),
 
-		relationType: text("relation_type").notNull(),
+    relationType: text("relation_type").notNull(),
 
-		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-	},
-	(table) => ({
-		pairIdx: uniqueIndex("anime_relation_links_pair_idx").on(
-			table.animeId,
-			table.relatedAnimeId,
-		),
-		relatedIdx: index("anime_relation_links_related_idx").on(
-			table.relatedAnimeId,
-		),
-		typeIdx: index("anime_relation_links_type_idx").on(table.relationType),
-	}),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    pairIdx: uniqueIndex("anime_relation_links_pair_idx").on(table.animeId, table.relatedAnimeId),
+    relatedIdx: index("anime_relation_links_related_idx").on(table.relatedAnimeId),
+    typeIdx: index("anime_relation_links_type_idx").on(table.relationType),
+  }),
 );
 
 export const studios = pgTable(
-	"studios",
-	{
-		id: serial("id").primaryKey(),
-		name: text("name").notNull(),
-		normalizedName: text("normalized_name").notNull(),
-		isAnimationStudio: boolean("is_animation_studio").notNull().default(false),
-		anilistStudioId: integer("anilist_studio_id"),
-	},
-	(table) => ({
-		normalizedNameIdx: uniqueIndex("studios_normalized_name_idx").on(
-			table.normalizedName,
-		),
-		nameIdx: index("studios_name_idx").on(table.name),
-		anilistIdIdx: uniqueIndex("studios_anilist_id_idx").on(
-			table.anilistStudioId,
-		),
-	}),
+  "studios",
+  {
+    id: serial("id").primaryKey(),
+    name: text("name").notNull(),
+    normalizedName: text("normalized_name").notNull(),
+    isAnimationStudio: boolean("is_animation_studio").notNull().default(false),
+    anilistStudioId: integer("anilist_studio_id"),
+  },
+  (table) => ({
+    normalizedNameIdx: uniqueIndex("studios_normalized_name_idx").on(table.normalizedName),
+    nameIdx: index("studios_name_idx").on(table.name),
+    anilistIdIdx: uniqueIndex("studios_anilist_id_idx").on(table.anilistStudioId),
+  }),
 );
 
 export const animeStudioLinks = pgTable(
-	"anime_studio_links",
-	{
-		id: serial("id").primaryKey(),
+  "anime_studio_links",
+  {
+    id: serial("id").primaryKey(),
 
-		animeId: integer("anime_id")
-			.notNull()
-			.references(() => anime.id, { onDelete: "cascade" }),
+    animeId: integer("anime_id")
+      .notNull()
+      .references(() => anime.id, { onDelete: "cascade" }),
 
-		studioId: integer("studio_id")
-			.notNull()
-			.references(() => studios.id, { onDelete: "cascade" }),
+    studioId: integer("studio_id")
+      .notNull()
+      .references(() => studios.id, { onDelete: "cascade" }),
 
-		isMain: boolean("is_main").notNull().default(false),
-	},
-	(table) => ({
-		animeStudioIdx: uniqueIndex("anime_studio_links_anime_studio_idx").on(
-			table.animeId,
-			table.studioId,
-		),
-		animeIdx: index("anime_studio_links_anime_idx").on(table.animeId),
-		studioIdx: index("anime_studio_links_studio_idx").on(table.studioId),
-	}),
+    isMain: boolean("is_main").notNull().default(false),
+  },
+  (table) => ({
+    animeStudioIdx: uniqueIndex("anime_studio_links_anime_studio_idx").on(
+      table.animeId,
+      table.studioId,
+    ),
+    animeIdx: index("anime_studio_links_anime_idx").on(table.animeId),
+    studioIdx: index("anime_studio_links_studio_idx").on(table.studioId),
+  }),
 );
 
 export const tags = pgTable(
-	"tags",
-	{
-		id: serial("id").primaryKey(),
-		name: text("name").notNull(),
-		normalizedName: text("normalized_name").notNull(),
-		category: text("category"),
-		isGeneralSpoiler: boolean("is_general_spoiler").notNull().default(false),
-		isMediaSpoiler: boolean("is_media_spoiler").notNull().default(false),
-		isAdult: boolean("is_adult").notNull().default(false),
-	},
-	(table) => ({
-		normalizedNameIdx: uniqueIndex("tags_normalized_name_idx").on(
-			table.normalizedName,
-		),
-		nameIdx: index("tags_name_idx").on(table.name),
-		categoryIdx: index("tags_category_idx").on(table.category),
-	}),
+  "tags",
+  {
+    id: serial("id").primaryKey(),
+    name: text("name").notNull(),
+    normalizedName: text("normalized_name").notNull(),
+    category: text("category"),
+    isGeneralSpoiler: boolean("is_general_spoiler").notNull().default(false),
+    isMediaSpoiler: boolean("is_media_spoiler").notNull().default(false),
+    isAdult: boolean("is_adult").notNull().default(false),
+  },
+  (table) => ({
+    normalizedNameIdx: uniqueIndex("tags_normalized_name_idx").on(table.normalizedName),
+    nameIdx: index("tags_name_idx").on(table.name),
+    categoryIdx: index("tags_category_idx").on(table.category),
+  }),
 );
 
 export const animeTagLinks = pgTable(
-	"anime_tag_links",
-	{
-		id: serial("id").primaryKey(),
+  "anime_tag_links",
+  {
+    id: serial("id").primaryKey(),
 
-		animeId: integer("anime_id")
-			.notNull()
-			.references(() => anime.id, { onDelete: "cascade" }),
+    animeId: integer("anime_id")
+      .notNull()
+      .references(() => anime.id, { onDelete: "cascade" }),
 
-		tagId: integer("tag_id")
-			.notNull()
-			.references(() => tags.id, { onDelete: "cascade" }),
+    tagId: integer("tag_id")
+      .notNull()
+      .references(() => tags.id, { onDelete: "cascade" }),
 
-		rank: integer("rank"),
-	},
-	(table) => ({
-		animeTagIdx: uniqueIndex("anime_tag_links_anime_tag_idx").on(
-			table.animeId,
-			table.tagId,
-		),
-		animeIdx: index("anime_tag_links_anime_idx").on(table.animeId),
-		tagIdx: index("anime_tag_links_tag_idx").on(table.tagId),
-		animeRankIdx: index("anime_tag_links_anime_rank_idx").on(
-			table.animeId,
-			table.rank,
-		),
-	}),
+    rank: integer("rank"),
+  },
+  (table) => ({
+    animeTagIdx: uniqueIndex("anime_tag_links_anime_tag_idx").on(table.animeId, table.tagId),
+    animeIdx: index("anime_tag_links_anime_idx").on(table.animeId),
+    tagIdx: index("anime_tag_links_tag_idx").on(table.tagId),
+    animeRankIdx: index("anime_tag_links_anime_rank_idx").on(table.animeId, table.rank),
+  }),
 );
 
 export const animeExternalLinks = pgTable(
-	"anime_external_links",
-	{
-		id: serial("id").primaryKey(),
+  "anime_external_links",
+  {
+    id: serial("id").primaryKey(),
 
-		animeId: integer("anime_id")
-			.notNull()
-			.references(() => anime.id, { onDelete: "cascade" }),
+    animeId: integer("anime_id")
+      .notNull()
+      .references(() => anime.id, { onDelete: "cascade" }),
 
-		site: text("site").notNull(),
-		url: text("url").notNull(),
-		type: text("type"),
-		language: text("language"),
-		color: text("color"),
-		icon: text("icon"),
-	},
-	(table) => ({
-		animeUrlIdx: uniqueIndex("anime_external_links_anime_url_idx").on(
-			table.animeId,
-			table.url,
-		),
-		animeTypeIdx: index("anime_external_links_anime_type_idx").on(
-			table.animeId,
-			table.type,
-		),
-		siteIdx: index("anime_external_links_site_idx").on(table.site),
-	}),
+    site: text("site").notNull(),
+    url: text("url").notNull(),
+    type: text("type"),
+    language: text("language"),
+    color: text("color"),
+    icon: text("icon"),
+  },
+  (table) => ({
+    animeUrlIdx: uniqueIndex("anime_external_links_anime_url_idx").on(table.animeId, table.url),
+    animeTypeIdx: index("anime_external_links_anime_type_idx").on(table.animeId, table.type),
+    siteIdx: index("anime_external_links_site_idx").on(table.site),
+  }),
 );
 
 export const episodes = pgTable(
-	"episodes",
-	{
-		id: serial("id").primaryKey(),
+  "episodes",
+  {
+    id: serial("id").primaryKey(),
 
-		animeId: integer("anime_id")
-			.notNull()
-			.references(() => anime.id, { onDelete: "cascade" }),
+    animeId: integer("anime_id")
+      .notNull()
+      .references(() => anime.id, { onDelete: "cascade" }),
 
-		number: integer("number").notNull(),
+    number: integer("number").notNull(),
 
-		displayNumber: text("display_number"),
+    displayNumber: text("display_number"),
 
-		sortNumber: real("sort_number").notNull(),
+    sortNumber: real("sort_number").notNull(),
 
-		seasonNumber: integer("season_number"),
-		absoluteNumber: integer("absolute_number"),
+    seasonNumber: integer("season_number"),
+    absoluteNumber: integer("absolute_number"),
 
-		title: text("title"),
-		titleRomaji: text("title_romaji"),
-		titleEnglish: text("title_english"),
-		titleNative: text("title_native"),
+    title: text("title"),
+    titleRomaji: text("title_romaji"),
+    titleEnglish: text("title_english"),
+    titleNative: text("title_native"),
 
-		synopsis: text("synopsis"),
+    synopsis: text("synopsis"),
 
-		airDate: text("air_date"),
-		thumbnail: text("thumbnail"),
+    airDate: text("air_date"),
+    thumbnail: text("thumbnail"),
 
-		lengthMinutes: integer("length_minutes"),
+    lengthMinutes: integer("length_minutes"),
 
-		kind: text("kind", {
-			enum: ["normal", "special", "ova", "recap", "trailer", "extra", "other"],
-		})
-			.notNull()
-			.default("normal"),
+    kind: text("kind", {
+      enum: ["normal", "special", "ova", "recap", "trailer", "extra", "other"],
+    })
+      .notNull()
+      .default("normal"),
 
-		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 
-		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-	},
-	(table) => ({
-		animeNumberKindIdx: uniqueIndex("episodes_anime_number_kind_idx").on(
-			table.animeId,
-			table.number,
-			table.kind,
-		),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    animeNumberKindIdx: uniqueIndex("episodes_anime_number_kind_idx").on(
+      table.animeId,
+      table.number,
+      table.kind,
+    ),
 
-		animeSortIdx: index("episodes_anime_sort_idx").on(
-			table.animeId,
-			table.sortNumber,
-		),
+    animeSortIdx: index("episodes_anime_sort_idx").on(table.animeId, table.sortNumber),
 
-		airDateIdx: index("episodes_air_date_idx").on(table.airDate),
-	}),
+    airDateIdx: index("episodes_air_date_idx").on(table.airDate),
+  }),
 );
 
 export const episodeMappings = pgTable(
-	"episode_mappings",
-	{
-		id: serial("id").primaryKey(),
+  "episode_mappings",
+  {
+    id: serial("id").primaryKey(),
 
-		episodeId: integer("episode_id")
-			.notNull()
-			.references(() => episodes.id, { onDelete: "cascade" }),
+    episodeId: integer("episode_id")
+      .notNull()
+      .references(() => episodes.id, { onDelete: "cascade" }),
 
-		provider: text("provider", {
-			enum: [
-				"anilist",
-				"kitsu",
-				"thetvdb",
-				"mal",
-				"tmdb",
-				"simkl",
-				"anisearch",
-				"animeplanet",
-				"animeschedule",
-				"other",
-			],
-		}).notNull(),
+    provider: text("provider", {
+      enum: [
+        "anilist",
+        "kitsu",
+        "thetvdb",
+        "mal",
+        "tmdb",
+        "simkl",
+        "anisearch",
+        "animeplanet",
+        "animeschedule",
+        "other",
+      ],
+    }).notNull(),
 
-		providerId: text("provider_id").notNull(),
-		providerSlug: text("provider_slug"),
-		providerUrl: text("provider_url"),
+    providerId: text("provider_id").notNull(),
+    providerSlug: text("provider_slug"),
+    providerUrl: text("provider_url"),
 
-		providerEpisodeNumber: text("provider_episode_number"),
+    providerEpisodeNumber: text("provider_episode_number"),
 
-		confidence: integer("confidence").notNull().default(100),
+    confidence: integer("confidence").notNull().default(100),
 
-		source: text("source", {
-			enum: ["manual", "api", "import", "fuzzy", "system"],
-		})
-			.notNull()
-			.default("manual"),
+    source: text("source", {
+      enum: ["manual", "api", "import", "fuzzy", "system"],
+    })
+      .notNull()
+      .default("manual"),
 
-		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 
-		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-	},
-	(table) => ({
-		providerEpisodeIdIdx: uniqueIndex(
-			"episode_mappings_provider_episode_id_idx",
-		).on(table.provider, table.providerId),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    providerEpisodeIdIdx: uniqueIndex("episode_mappings_provider_episode_id_idx").on(
+      table.provider,
+      table.providerId,
+    ),
 
-		episodeProviderIdIdx: uniqueIndex(
-			"episode_mappings_episode_provider_id_idx",
-		).on(table.episodeId, table.provider, table.providerId),
+    episodeProviderIdIdx: uniqueIndex("episode_mappings_episode_provider_id_idx").on(
+      table.episodeId,
+      table.provider,
+      table.providerId,
+    ),
 
-		episodeProviderIdx: index("episode_mappings_episode_provider_idx").on(
-			table.episodeId,
-			table.provider,
-		),
-	}),
+    episodeProviderIdx: index("episode_mappings_episode_provider_idx").on(
+      table.episodeId,
+      table.provider,
+    ),
+  }),
 );
 
 export const animeLanguageStatus = pgTable(
-	"anime_language_status",
-	{
-		id: serial("id").primaryKey(),
+  "anime_language_status",
+  {
+    id: serial("id").primaryKey(),
 
-		animeId: integer("anime_id")
-			.notNull()
-			.references(() => anime.id, { onDelete: "cascade" }),
+    animeId: integer("anime_id")
+      .notNull()
+      .references(() => anime.id, { onDelete: "cascade" }),
 
-		languageCode: text("language_code").notNull(),
+    languageCode: text("language_code").notNull(),
 
-		mediaType: text("media_type", {
-			enum: ["audio", "subtitle"],
-		}).notNull(),
+    mediaType: text("media_type", {
+      enum: ["audio", "subtitle"],
+    }).notNull(),
 
-		status: text("status", {
-			enum: [
-				"unknown",
-				"possible",
-				"likely",
-				"confirmed",
-				"partial",
-				"not_available",
-			],
-		})
-			.notNull()
-			.default("unknown"),
+    status: text("status", {
+      enum: ["unknown", "possible", "likely", "confirmed", "partial", "not_available"],
+    })
+      .notNull()
+      .default("unknown"),
 
-		confidence: integer("confidence").notNull().default(0),
+    confidence: integer("confidence").notNull().default(0),
 
-		isManualOverride: boolean("is_manual_override").notNull().default(false),
+    isManualOverride: boolean("is_manual_override").notNull().default(false),
 
-		notes: text("notes"),
+    notes: text("notes"),
 
-		checkedAt: timestamp("checked_at", { withTimezone: true }).notNull().defaultNow(),
+    checkedAt: timestamp("checked_at", { withTimezone: true }).notNull().defaultNow(),
 
-		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 
-		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-	},
-	(table) => ({
-		animeLanguageMediaIdx: uniqueIndex(
-			"anime_language_status_anime_language_media_idx",
-		).on(table.animeId, table.languageCode, table.mediaType),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    animeLanguageMediaIdx: uniqueIndex("anime_language_status_anime_language_media_idx").on(
+      table.animeId,
+      table.languageCode,
+      table.mediaType,
+    ),
 
-		reviewQueueIdx: index("anime_language_status_review_queue_idx").on(
-			table.status,
-			table.confidence,
-			table.isManualOverride,
-		),
-	}),
+    reviewQueueIdx: index("anime_language_status_review_queue_idx").on(
+      table.status,
+      table.confidence,
+      table.isManualOverride,
+    ),
+  }),
 );
 
 export const animeLanguageEvidence = pgTable(
-	"anime_language_evidence",
-	{
-		id: serial("id").primaryKey(),
+  "anime_language_evidence",
+  {
+    id: serial("id").primaryKey(),
 
-		animeId: integer("anime_id")
-			.notNull()
-			.references(() => anime.id, { onDelete: "cascade" }),
+    animeId: integer("anime_id")
+      .notNull()
+      .references(() => anime.id, { onDelete: "cascade" }),
 
-		languageCode: text("language_code").notNull(),
+    languageCode: text("language_code").notNull(),
 
-		mediaType: text("media_type", {
-			enum: ["audio", "subtitle"],
-		}).notNull(),
+    mediaType: text("media_type", {
+      enum: ["audio", "subtitle"],
+    }).notNull(),
 
-		source: text("source", {
-			enum: [
-				"ann",
-				"official_site",
-				"provider",
-				"home_video",
-				"community",
-				"manual",
-				"other",
-			],
-		}).notNull(),
+    source: text("source", {
+      enum: ["ann", "official_site", "provider", "home_video", "community", "manual", "other"],
+    }).notNull(),
 
-		sourceUrl: text("source_url"),
+    sourceUrl: text("source_url"),
 
-		evidenceType: text("evidence_type", {
-			enum: [
-				"voice_cast",
-				"provider_audio",
-				"provider_subtitle",
-				"official_announcement",
-				"home_video_release",
-				"manual_verified",
-				"community_submission",
-				"other",
-			],
-		}).notNull(),
+    evidenceType: text("evidence_type", {
+      enum: [
+        "voice_cast",
+        "provider_audio",
+        "provider_subtitle",
+        "official_announcement",
+        "home_video_release",
+        "manual_verified",
+        "community_submission",
+        "other",
+      ],
+    }).notNull(),
 
-		value: text("value").notNull(),
+    value: text("value").notNull(),
 
-		confidence: integer("confidence").notNull().default(0),
+    confidence: integer("confidence").notNull().default(0),
 
-		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 
-		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-	},
-	(table) => ({
-		animeLanguageMediaIdx: index(
-			"anime_language_evidence_anime_language_media_idx",
-		).on(table.animeId, table.languageCode, table.mediaType),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    animeLanguageMediaIdx: index("anime_language_evidence_anime_language_media_idx").on(
+      table.animeId,
+      table.languageCode,
+      table.mediaType,
+    ),
 
-		sourceIdx: index("anime_language_evidence_source_idx").on(table.source),
+    sourceIdx: index("anime_language_evidence_source_idx").on(table.source),
 
-		confidenceIdx: index("anime_language_evidence_confidence_idx").on(
-			table.confidence,
-		),
-	}),
+    confidenceIdx: index("anime_language_evidence_confidence_idx").on(table.confidence),
+  }),
 );
 
 export const episodeLanguageStatus = pgTable(
-	"episode_language_status",
-	{
-		id: serial("id").primaryKey(),
+  "episode_language_status",
+  {
+    id: serial("id").primaryKey(),
 
-		animeId: integer("anime_id")
-			.notNull()
-			.references(() => anime.id, { onDelete: "cascade" }),
+    animeId: integer("anime_id")
+      .notNull()
+      .references(() => anime.id, { onDelete: "cascade" }),
 
-		episodeNumber: integer("episode_number").notNull(),
+    episodeNumber: integer("episode_number").notNull(),
 
-		languageCode: text("language_code").notNull(),
+    languageCode: text("language_code").notNull(),
 
-		mediaType: text("media_type", {
-			enum: ["audio", "subtitle"],
-		}).notNull(),
+    mediaType: text("media_type", {
+      enum: ["audio", "subtitle"],
+    }).notNull(),
 
-		status: text("status", {
-			enum: ["unknown", "available", "missing", "partial"],
-		})
-			.notNull()
-			.default("unknown"),
+    status: text("status", {
+      enum: ["unknown", "available", "missing", "partial"],
+    })
+      .notNull()
+      .default("unknown"),
 
-		provider: text("provider").notNull().default("manual"),
+    provider: text("provider").notNull().default("manual"),
 
-		confidence: integer("confidence").notNull().default(0),
+    confidence: integer("confidence").notNull().default(0),
 
-		checkedAt: timestamp("checked_at", { withTimezone: true }).notNull().defaultNow(),
+    checkedAt: timestamp("checked_at", { withTimezone: true }).notNull().defaultNow(),
 
-		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 
-		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-	},
-	(table) => ({
-		animeEpisodeLanguageMediaIdx: uniqueIndex(
-			"episode_language_status_anime_episode_language_media_idx",
-		).on(
-			table.animeId,
-			table.episodeNumber,
-			table.languageCode,
-			table.mediaType,
-			table.provider,
-		),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    animeEpisodeLanguageMediaIdx: uniqueIndex(
+      "episode_language_status_anime_episode_language_media_idx",
+    ).on(table.animeId, table.episodeNumber, table.languageCode, table.mediaType, table.provider),
 
-		statusIdx: index("episode_language_status_status_idx").on(table.status),
+    statusIdx: index("episode_language_status_status_idx").on(table.status),
 
-		providerIdx: index("episode_language_status_provider_idx").on(table.provider),
-	}),
+    providerIdx: index("episode_language_status_provider_idx").on(table.provider),
+  }),
 );
 
 export const syncRuns = pgTable(
-	"sync_runs",
-	{
-		id: serial("id").primaryKey(),
+  "sync_runs",
+  {
+    id: serial("id").primaryKey(),
 
-		provider: text("provider", {
-			enum: [
-				"anilist",
-				"kitsu",
-				"mal",
-				"tmdb",
-				"simkl",
-				"anisearch",
-				"animeplanet",
-				"animeschedule",
-				"other",
-			],
-		}).notNull(),
+    provider: text("provider", {
+      enum: [
+        "anilist",
+        "kitsu",
+        "mal",
+        "tmdb",
+        "simkl",
+        "anisearch",
+        "animeplanet",
+        "animeschedule",
+        "other",
+      ],
+    }).notNull(),
 
-		kind: text("kind", {
-			enum: ["anime", "episodes", "mappings", "audio_status", "full"],
-		}).notNull(),
+    kind: text("kind", {
+      enum: ["anime", "episodes", "mappings", "audio_status", "full"],
+    }).notNull(),
 
-		status: text("status", {
-			enum: ["running", "success", "failed", "partial"],
-		})
-			.notNull()
-			.default("running"),
+    status: text("status", {
+      enum: ["running", "success", "failed", "partial"],
+    })
+      .notNull()
+      .default("running"),
 
-		startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
 
-		finishedAt: timestamp("finished_at", { withTimezone: true }),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
 
-		itemsScanned: integer("items_scanned").notNull().default(0),
-		itemsCreated: integer("items_created").notNull().default(0),
-		itemsUpdated: integer("items_updated").notNull().default(0),
-		itemsFailed: integer("items_failed").notNull().default(0),
+    itemsScanned: integer("items_scanned").notNull().default(0),
+    itemsCreated: integer("items_created").notNull().default(0),
+    itemsUpdated: integer("items_updated").notNull().default(0),
+    itemsFailed: integer("items_failed").notNull().default(0),
 
-		errorMessage: text("error_message"),
-		metadataJson: text("metadata_json").notNull().default("{}"),
-	},
-	(table) => ({
-		providerKindIdx: index("sync_runs_provider_kind_idx").on(
-			table.provider,
-			table.kind,
-		),
+    errorMessage: text("error_message"),
+    metadataJson: text("metadata_json").notNull().default("{}"),
+  },
+  (table) => ({
+    providerKindIdx: index("sync_runs_provider_kind_idx").on(table.provider, table.kind),
 
-		statusIdx: index("sync_runs_status_idx").on(table.status),
-	}),
+    statusIdx: index("sync_runs_status_idx").on(table.status),
+  }),
 );
 
 // Drizzle ORM relation definitions
 
 export const animeOrmRelations = relations(anime, ({ many }) => ({
-	mappings: many(animeMappings),
-	episodes: many(episodes),
-	languageStatuses: many(animeLanguageStatus),
-	languageEvidence: many(animeLanguageEvidence),
-	episodeLanguageStatuses: many(episodeLanguageStatus),
-	relationLinks: many(animeRelationLinks, { relationName: "animeSource" }),
-	relatedToLinks: many(animeRelationLinks, { relationName: "animeRelated" }),
-	studioLinks: many(animeStudioLinks),
-	tagLinks: many(animeTagLinks),
-	externalLinks: many(animeExternalLinks),
+  mappings: many(animeMappings),
+  episodes: many(episodes),
+  languageStatuses: many(animeLanguageStatus),
+  languageEvidence: many(animeLanguageEvidence),
+  episodeLanguageStatuses: many(episodeLanguageStatus),
+  relationLinks: many(animeRelationLinks, { relationName: "animeSource" }),
+  relatedToLinks: many(animeRelationLinks, { relationName: "animeRelated" }),
+  studioLinks: many(animeStudioLinks),
+  tagLinks: many(animeTagLinks),
+  externalLinks: many(animeExternalLinks),
 }));
 
 export const animeMappingsRelations = relations(animeMappings, ({ one }) => ({
-	anime: one(anime, {
-		fields: [animeMappings.animeId],
-		references: [anime.id],
-	}),
+  anime: one(anime, {
+    fields: [animeMappings.animeId],
+    references: [anime.id],
+  }),
 }));
 
-export const animeRelationLinksRelations = relations(
-	animeRelationLinks,
-	({ one }) => ({
-		anime: one(anime, {
-			fields: [animeRelationLinks.animeId],
-			references: [anime.id],
-			relationName: "animeSource",
-		}),
-		relatedAnime: one(anime, {
-			fields: [animeRelationLinks.relatedAnimeId],
-			references: [anime.id],
-			relationName: "animeRelated",
-		}),
-	}),
-);
+export const animeRelationLinksRelations = relations(animeRelationLinks, ({ one }) => ({
+  anime: one(anime, {
+    fields: [animeRelationLinks.animeId],
+    references: [anime.id],
+    relationName: "animeSource",
+  }),
+  relatedAnime: one(anime, {
+    fields: [animeRelationLinks.relatedAnimeId],
+    references: [anime.id],
+    relationName: "animeRelated",
+  }),
+}));
 
 export const studiosRelations = relations(studios, ({ many }) => ({
-	animeLinks: many(animeStudioLinks),
+  animeLinks: many(animeStudioLinks),
 }));
 
-export const animeStudioLinksRelations = relations(
-	animeStudioLinks,
-	({ one }) => ({
-		anime: one(anime, {
-			fields: [animeStudioLinks.animeId],
-			references: [anime.id],
-		}),
-		studio: one(studios, {
-			fields: [animeStudioLinks.studioId],
-			references: [studios.id],
-		}),
-	}),
-);
+export const animeStudioLinksRelations = relations(animeStudioLinks, ({ one }) => ({
+  anime: one(anime, {
+    fields: [animeStudioLinks.animeId],
+    references: [anime.id],
+  }),
+  studio: one(studios, {
+    fields: [animeStudioLinks.studioId],
+    references: [studios.id],
+  }),
+}));
 
 export const tagsRelations = relations(tags, ({ many }) => ({
-	animeLinks: many(animeTagLinks),
+  animeLinks: many(animeTagLinks),
 }));
 
 export const animeTagLinksRelations = relations(animeTagLinks, ({ one }) => ({
-	anime: one(anime, {
-		fields: [animeTagLinks.animeId],
-		references: [anime.id],
-	}),
-	tag: one(tags, {
-		fields: [animeTagLinks.tagId],
-		references: [tags.id],
-	}),
+  anime: one(anime, {
+    fields: [animeTagLinks.animeId],
+    references: [anime.id],
+  }),
+  tag: one(tags, {
+    fields: [animeTagLinks.tagId],
+    references: [tags.id],
+  }),
 }));
 
-export const animeExternalLinksRelations = relations(
-	animeExternalLinks,
-	({ one }) => ({
-		anime: one(anime, {
-			fields: [animeExternalLinks.animeId],
-			references: [anime.id],
-		}),
-	}),
-);
+export const animeExternalLinksRelations = relations(animeExternalLinks, ({ one }) => ({
+  anime: one(anime, {
+    fields: [animeExternalLinks.animeId],
+    references: [anime.id],
+  }),
+}));
 
 export const episodesRelations = relations(episodes, ({ one, many }) => ({
-	anime: one(anime, {
-		fields: [episodes.animeId],
-		references: [anime.id],
-	}),
-	mappings: many(episodeMappings),
+  anime: one(anime, {
+    fields: [episodes.animeId],
+    references: [anime.id],
+  }),
+  mappings: many(episodeMappings),
 }));
 
-export const episodeMappingsRelations = relations(
-	episodeMappings,
-	({ one }) => ({
-		episode: one(episodes, {
-			fields: [episodeMappings.episodeId],
-			references: [episodes.id],
-		}),
-	}),
-);
+export const episodeMappingsRelations = relations(episodeMappings, ({ one }) => ({
+  episode: one(episodes, {
+    fields: [episodeMappings.episodeId],
+    references: [episodes.id],
+  }),
+}));
 
-export const animeLanguageStatusRelations = relations(
-	animeLanguageStatus,
-	({ one }) => ({
-		anime: one(anime, {
-			fields: [animeLanguageStatus.animeId],
-			references: [anime.id],
-		}),
-	}),
-);
+export const animeLanguageStatusRelations = relations(animeLanguageStatus, ({ one }) => ({
+  anime: one(anime, {
+    fields: [animeLanguageStatus.animeId],
+    references: [anime.id],
+  }),
+}));
 
-export const animeLanguageEvidenceRelations = relations(
-	animeLanguageEvidence,
-	({ one }) => ({
-		anime: one(anime, {
-			fields: [animeLanguageEvidence.animeId],
-			references: [anime.id],
-		}),
-	}),
-);
+export const animeLanguageEvidenceRelations = relations(animeLanguageEvidence, ({ one }) => ({
+  anime: one(anime, {
+    fields: [animeLanguageEvidence.animeId],
+    references: [anime.id],
+  }),
+}));
 
-export const episodeLanguageStatusRelations = relations(
-	episodeLanguageStatus,
-	({ one }) => ({
-		anime: one(anime, {
-			fields: [episodeLanguageStatus.animeId],
-			references: [anime.id],
-		}),
-	}),
-);
+export const episodeLanguageStatusRelations = relations(episodeLanguageStatus, ({ one }) => ({
+  anime: one(anime, {
+    fields: [episodeLanguageStatus.animeId],
+    references: [anime.id],
+  }),
+}));
 
 export type Anime = typeof anime.$inferSelect;
 export type NewAnime = typeof anime.$inferInsert;

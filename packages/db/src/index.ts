@@ -1,5 +1,5 @@
-import { drizzle } from "drizzle-orm/postgres-js";
 import { randomUUID } from "node:crypto";
+import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 
 import { getDatabaseConfig } from "./db-config";
@@ -10,8 +10,8 @@ const SYNC_LEASE_HEARTBEAT_MS = 60_000;
 const SYNC_LEASE_STALE_MINUTES = 5;
 
 const schema = {
-	...coreSchema,
-	...providerMappingSchema,
+  ...coreSchema,
+  ...providerMappingSchema,
 };
 
 type PostgresClient = ReturnType<typeof postgres>;
@@ -20,22 +20,22 @@ let clientInstance: PostgresClient | null = null;
 let dbInstance: ReturnType<typeof createDb> | null = null;
 
 function getClient(): PostgresClient {
-	if (!clientInstance) {
-		const databaseConfig = getDatabaseConfig();
-		clientInstance = postgres(databaseConfig.url, { ssl: databaseConfig.ssl });
-	}
-	return clientInstance;
+  if (!clientInstance) {
+    const databaseConfig = getDatabaseConfig();
+    clientInstance = postgres(databaseConfig.url, { ssl: databaseConfig.ssl });
+  }
+  return clientInstance;
 }
 
 function createDb() {
-	return drizzle(getClient(), { schema });
+  return drizzle(getClient(), { schema });
 }
 
 function getDb(): ReturnType<typeof createDb> {
-	if (!dbInstance) {
-		dbInstance = createDb();
-	}
-	return dbInstance;
+  if (!dbInstance) {
+    dbInstance = createDb();
+  }
+  return dbInstance;
 }
 
 /**
@@ -47,32 +47,32 @@ function getDb(): ReturnType<typeof createDb> {
  * entrypoints call this at startup to keep the original fail-fast behaviour.
  */
 export function assertDatabaseConfigured(): void {
-	getDatabaseConfig();
+  getDatabaseConfig();
 }
 
 export const db = new Proxy({} as ReturnType<typeof createDb>, {
-	get(_target, property) {
-		const instance = getDb() as unknown as Record<string | symbol, unknown>;
-		const value = instance[property];
-		return typeof value === "function" ? value.bind(instance) : value;
-	},
-	has(_target, property) {
-		return property in (getDb() as object);
-	},
+  get(_target, property) {
+    const instance = getDb() as unknown as Record<string | symbol, unknown>;
+    const value = instance[property];
+    return typeof value === "function" ? value.bind(instance) : value;
+  },
+  has(_target, property) {
+    return property in (getDb() as object);
+  },
 });
 
 export type Db = typeof db;
 export interface SyncLease {
-	release(succeeded?: boolean): Promise<void>;
+  release(succeeded?: boolean): Promise<void>;
 }
 
 export async function tryAcquireSyncLease(): Promise<SyncLease | null> {
-	const client = getClient();
-	const token = randomUUID();
-	const heartbeatAt = new Date().toISOString();
-	const leaseId = await client.begin(async (sql) => {
-		await sql`LOCK TABLE sync_runs IN EXCLUSIVE MODE`;
-		await sql`
+  const client = getClient();
+  const token = randomUUID();
+  const heartbeatAt = new Date().toISOString();
+  const leaseId = await client.begin(async (sql) => {
+    await sql`LOCK TABLE sync_runs IN EXCLUSIVE MODE`;
+    await sql`
 			UPDATE sync_runs
 			SET status = 'failed',
 				finished_at = NOW(),
@@ -85,7 +85,7 @@ export async function tryAcquireSyncLease(): Promise<SyncLease | null> {
 					started_at
 				) < NOW() - (${SYNC_LEASE_STALE_MINUTES} * INTERVAL '1 minute')
 		`;
-		const active = await sql<{ id: number }[]>`
+    const active = await sql<{ id: number }[]>`
 			SELECT id
 			FROM sync_runs
 			WHERE provider = 'anilist'
@@ -93,9 +93,9 @@ export async function tryAcquireSyncLease(): Promise<SyncLease | null> {
 				AND status = 'running'
 			LIMIT 1
 		`;
-		if (active.length > 0) return null;
+    if (active.length > 0) return null;
 
-		const inserted = await sql<{ id: number }[]>`
+    const inserted = await sql<{ id: number }[]>`
 			INSERT INTO sync_runs (provider, kind, status, metadata_json)
 			VALUES (
 				'anilist',
@@ -105,13 +105,13 @@ export async function tryAcquireSyncLease(): Promise<SyncLease | null> {
 			)
 			RETURNING id
 		`;
-		return inserted[0]?.id ?? null;
-	});
+    return inserted[0]?.id ?? null;
+  });
 
-	if (leaseId === null) return null;
+  if (leaseId === null) return null;
 
-	const heartbeat = setInterval(() => {
-		void client`
+  const heartbeat = setInterval(() => {
+    void client`
 			UPDATE sync_runs
 			SET metadata_json = jsonb_set(
 				metadata_json::jsonb,
@@ -121,23 +121,23 @@ export async function tryAcquireSyncLease(): Promise<SyncLease | null> {
 			WHERE id = ${leaseId}
 				AND status = 'running'
 		`.catch((error) =>
-			console.error(
-				JSON.stringify({
-					event: "sync.lease_heartbeat.failed",
-					err: error instanceof Error ? error.message : String(error),
-				}),
-			),
-		);
-	}, SYNC_LEASE_HEARTBEAT_MS);
-	heartbeat.unref?.();
+      console.error(
+        JSON.stringify({
+          event: "sync.lease_heartbeat.failed",
+          err: error instanceof Error ? error.message : String(error),
+        }),
+      ),
+    );
+  }, SYNC_LEASE_HEARTBEAT_MS);
+  heartbeat.unref?.();
 
-	let released = false;
-	return {
-		async release(succeeded = true): Promise<void> {
-			if (released) return;
-			released = true;
-			clearInterval(heartbeat);
-			await client`
+  let released = false;
+  return {
+    async release(succeeded = true): Promise<void> {
+      if (released) return;
+      released = true;
+      clearInterval(heartbeat);
+      await client`
 				UPDATE sync_runs
 				SET status = ${succeeded ? "success" : "failed"},
 					finished_at = NOW(),
@@ -145,13 +145,13 @@ export async function tryAcquireSyncLease(): Promise<SyncLease | null> {
 				WHERE id = ${leaseId}
 					AND status = 'running'
 			`;
-		},
-	};
+    },
+  };
 }
 
 export async function closeDb(): Promise<void> {
-	if (!clientInstance) return;
-	await clientInstance.end();
-	clientInstance = null;
-	dbInstance = null;
+  if (!clientInstance) return;
+  await clientInstance.end();
+  clientInstance = null;
+  dbInstance = null;
 }

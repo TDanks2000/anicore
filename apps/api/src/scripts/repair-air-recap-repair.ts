@@ -1,12 +1,6 @@
-import { sql, type SQL } from "drizzle-orm";
-
-import {
-  closeDb,
-  db,
-  tryAcquireSyncLease,
-  type SyncLease,
-} from "@anicore/db";
-import { type DbTransaction } from "../lib/query-rows";
+import { closeDb, db, type SyncLease, tryAcquireSyncLease } from "@anicore/db";
+import { type SQL, sql } from "drizzle-orm";
+import type { DbTransaction } from "../lib/query-rows";
 
 import { parseRepairMappingsArgs } from "./repair-mappings-cli";
 
@@ -307,11 +301,14 @@ function validatePlan(plan: AirPlannerOperation): void {
 }
 
 async function detectAlreadyApplied(execute: ExecuteSql): Promise<boolean> {
-  const providerEntities = await rowsWith<{ id: number }>(execute, sql`
+  const providerEntities = await rowsWith<{ id: number }>(
+    execute,
+    sql`
     select id
     from public.provider_entities
     where provider = ${PROVIDER} and provider_id = ${PROVIDER_ID}
-  `);
+  `,
+  );
   if (providerEntities.length !== 1) return false;
   const providerEntityId = providerEntities[0]!.id;
 
@@ -320,7 +317,9 @@ async function detectAlreadyApplied(execute: ExecuteSql): Promise<boolean> {
     source: string;
     confidence: number;
     isPrimary: boolean;
-  }>(execute, sql`
+  }>(
+    execute,
+    sql`
     select
       anime_id as "animeId",
       source,
@@ -328,7 +327,8 @@ async function detectAlreadyApplied(execute: ExecuteSql): Promise<boolean> {
       is_primary as "isPrimary"
     from public.anime_mappings
     where provider = ${PROVIDER} and provider_id = ${PROVIDER_ID}
-  `);
+  `,
+  );
   if (
     legacy.length !== 1 ||
     legacy[0]?.animeId !== TARGET_ANIME_ID ||
@@ -339,7 +339,9 @@ async function detectAlreadyApplied(execute: ExecuteSql): Promise<boolean> {
     return false;
   }
 
-  const associations = await rowsWith<ParentVerificationRow>(execute, sql`
+  const associations = await rowsWith<ParentVerificationRow>(
+    execute,
+    sql`
     select
       apm.anime_id as "animeId",
       apm.provider_entity_id as "providerEntityId",
@@ -353,7 +355,8 @@ async function detectAlreadyApplied(execute: ExecuteSql): Promise<boolean> {
     where apm.provider_entity_id = ${providerEntityId}
     group by apm.id
     order by apm.id
-  `);
+  `,
+  );
   if (
     associations.length !== 1 ||
     associations[0]?.animeId !== TARGET_ANIME_ID ||
@@ -367,7 +370,9 @@ async function detectAlreadyApplied(execute: ExecuteSql): Promise<boolean> {
   }
 
   const providerIds = EXPECTED_PROVIDER_EPISODE_IDS.map((id) => sql`${id}`);
-  const episodeRows = await rowsWith<EpisodeVerificationRow>(execute, sql`
+  const episodeRows = await rowsWith<EpisodeVerificationRow>(
+    execute,
+    sql`
     select
       em.id as "mappingId",
       e.anime_id as "animeId",
@@ -388,7 +393,8 @@ async function detectAlreadyApplied(execute: ExecuteSql): Promise<boolean> {
     where em.provider = ${PROVIDER}
       and em.provider_id in (${sql.join(providerIds, sql`, `)})
     order by em.provider_episode_number::int, em.id
-  `);
+  `,
+  );
   if (episodeRows.length !== RECAP_NUMBER) return false;
   if (new Set(episodeRows.map((row) => row.providerId)).size !== RECAP_NUMBER) return false;
 
@@ -406,9 +412,7 @@ async function detectAlreadyApplied(execute: ExecuteSql): Promise<boolean> {
     }
   }
 
-  const recap = episodeRows.find(
-    (row) => row.providerId === EXPECTED_PROVIDER_EPISODE_IDS[12],
-  );
+  const recap = episodeRows.find((row) => row.providerId === EXPECTED_PROVIDER_EPISODE_IDS[12]);
   if (
     !recap ||
     recap.animeId !== TARGET_ANIME_ID ||
@@ -430,17 +434,16 @@ async function detectAlreadyApplied(execute: ExecuteSql): Promise<boolean> {
   return oldOwnerRows.length === 0;
 }
 
-async function verifyAppliedState(
-  execute: ExecuteSql,
-  plan: AirPlannerOperation,
-): Promise<void> {
+async function verifyAppliedState(execute: ExecuteSql, plan: AirPlannerOperation): Promise<void> {
   if (!(await detectAlreadyApplied(execute))) {
     fail("Post-write AIR state does not satisfy the expected whole-season + recap invariants");
   }
 
   const [move] = plan.plan.episodeMappingReassignments;
   if (!move) fail("Missing AIR episode reassignment during verification");
-  const movedRows = await rowsWith<EpisodeVerificationRow>(execute, sql`
+  const movedRows = await rowsWith<EpisodeVerificationRow>(
+    execute,
+    sql`
     select
       em.id as "mappingId",
       e.anime_id as "animeId",
@@ -459,7 +462,8 @@ async function verifyAppliedState(
     from public.episode_mappings em
     join public.episodes e on e.id = em.episode_id
     where em.id = ${move.episodeMappingId}
-  `);
+  `,
+  );
   const moved = movedRows[0];
   if (
     movedRows.length !== 1 ||
@@ -477,7 +481,10 @@ async function verifyAppliedState(
   }
 }
 
-async function applyPlan(tx: DbTransaction, plan: AirPlannerOperation): Promise<{
+async function applyPlan(
+  tx: DbTransaction,
+  plan: AirPlannerOperation,
+): Promise<{
   legacyMappingsRetired: number;
   v2AssociationsRetired: number;
   legacyMappingsCreated: number;
@@ -498,7 +505,9 @@ async function applyPlan(tx: DbTransaction, plan: AirPlannerOperation): Promise<
     fail("Incomplete AIR recap repair plan");
   }
 
-  const deletedLegacy = await rowsWith<{ id: number }>(execute, sql`
+  const deletedLegacy = await rowsWith<{ id: number }>(
+    execute,
+    sql`
     delete from public.anime_mappings
     where id = ${legacy.id}
       and anime_id = ${CURRENT_OWNER_ANIME_ID}
@@ -507,10 +516,13 @@ async function applyPlan(tx: DbTransaction, plan: AirPlannerOperation): Promise<
       and source = ${legacy.source}
       and confidence = ${legacy.confidence}
     returning id
-  `);
+  `,
+  );
   if (deletedLegacy.length !== 1) fail("Legacy Airs TVDB mapping changed before deletion");
 
-  const deletedV2 = await rowsWith<{ id: number }>(execute, sql`
+  const deletedV2 = await rowsWith<{ id: number }>(
+    execute,
+    sql`
     delete from public.anime_provider_mappings apm
     where apm.id = ${oldV2.id}
       and apm.anime_id = ${CURRENT_OWNER_ANIME_ID}
@@ -522,10 +534,13 @@ async function applyPlan(tx: DbTransaction, plan: AirPlannerOperation): Promise<
         where aps.anime_provider_mapping_id = apm.id
       )
     returning id
-  `);
+  `,
+  );
   if (deletedV2.length !== 1) fail("Zero-segment Airs v2 association changed before deletion");
 
-  const insertedLegacy = await rowsWith<{ id: number; animeId: number }>(execute, sql`
+  const insertedLegacy = await rowsWith<{ id: number; animeId: number }>(
+    execute,
+    sql`
     insert into public.anime_mappings
       (anime_id, provider, provider_id, confidence, source, is_primary)
     values (
@@ -537,12 +552,15 @@ async function applyPlan(tx: DbTransaction, plan: AirPlannerOperation): Promise<
       ${newLegacy.isPrimary}
     )
     returning id, anime_id as "animeId"
-  `);
+  `,
+  );
   if (insertedLegacy.length !== 1 || insertedLegacy[0]?.animeId !== TARGET_ANIME_ID) {
     fail("Failed to create exact AIR legacy TVDB parent");
   }
 
-  const insertedV2 = await rowsWith<{ id: number; animeId: number }>(execute, sql`
+  const insertedV2 = await rowsWith<{ id: number; animeId: number }>(
+    execute,
+    sql`
     insert into public.anime_provider_mappings
       (anime_id, provider_entity_id, confidence, source, is_primary)
     values (
@@ -553,12 +571,15 @@ async function applyPlan(tx: DbTransaction, plan: AirPlannerOperation): Promise<
       ${newV2.isPrimary}
     )
     returning id, anime_id as "animeId"
-  `);
+  `,
+  );
   if (insertedV2.length !== 1 || insertedV2[0]?.animeId !== TARGET_ANIME_ID) {
     fail("Failed to create exact AIR v2 TVDB parent");
   }
 
-  const reassigned = await rowsWith<{ id: number }>(execute, sql`
+  const reassigned = await rowsWith<{ id: number }>(
+    execute,
+    sql`
     update public.episode_mappings
     set episode_id = ${move.toEpisodeId}, updated_at = now()
     where id = ${move.episodeMappingId}
@@ -569,10 +590,13 @@ async function applyPlan(tx: DbTransaction, plan: AirPlannerOperation): Promise<
       and source = ${move.preserveSource}
       and confidence = ${move.preserveConfidence}
     returning id
-  `);
+  `,
+  );
   if (reassigned.length !== 1) fail("Stolen AIR TVDB episode 1 changed before reassignment");
 
-  const insertedRecap = await rowsWith<{ id: number; animeId: number }>(execute, sql`
+  const insertedRecap = await rowsWith<{ id: number; animeId: number }>(
+    execute,
+    sql`
     insert into public.episodes
       (
         anime_id,
@@ -597,7 +621,8 @@ async function applyPlan(tx: DbTransaction, plan: AirPlannerOperation): Promise<
       ${recapEpisode.seasonNumber}
     )
     returning id, anime_id as "animeId"
-  `);
+  `,
+  );
   const recapEpisodeId = insertedRecap[0]?.id;
   if (
     insertedRecap.length !== 1 ||
@@ -607,7 +632,9 @@ async function applyPlan(tx: DbTransaction, plan: AirPlannerOperation): Promise<
     fail("Failed to materialize exact AIR recap episode 13");
   }
 
-  const insertedRecapMapping = await rowsWith<{ id: number }>(execute, sql`
+  const insertedRecapMapping = await rowsWith<{ id: number }>(
+    execute,
+    sql`
     insert into public.episode_mappings
       (
         episode_id,
@@ -626,7 +653,8 @@ async function applyPlan(tx: DbTransaction, plan: AirPlannerOperation): Promise<
       ${recapMapping.source}
     )
     returning id
-  `);
+  `,
+  );
   if (insertedRecapMapping.length !== 1) {
     fail("Failed to create exact AIR recap TVDB episode mapping");
   }

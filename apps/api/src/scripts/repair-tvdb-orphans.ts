@@ -1,18 +1,12 @@
-import { sql } from "drizzle-orm";
-
-import {
-  closeDb,
-  db,
-  tryAcquireSyncLease,
-  type SyncLease,
-} from "@anicore/db";
-import { queryRows } from "../lib/query-rows";
+import { closeDb, db, type SyncLease, tryAcquireSyncLease } from "@anicore/db";
 import {
   getTvdbSeasonEpisodes,
   getTvdbSeriesBySlug,
   type TvdbEpisodeBase,
   type TvdbSeriesBaseRecord,
 } from "@anicore/providers/thetvdb/client";
+import { sql } from "drizzle-orm";
+import { queryRows } from "../lib/query-rows";
 
 import type {
   ExistingProviderIdentity,
@@ -21,9 +15,9 @@ import type {
 import {
   buildTvdbSlugResolutionGroups,
   filterTvdbSlugCandidateCollisions,
-  verifyResolvedTvdbSlugGroup,
   type TvdbSlugRepairCandidate,
   type TvdbSlugResolutionGroup,
+  verifyResolvedTvdbSlugGroup,
 } from "./orphan-tvdb-slug-repair";
 import { parseRepairMappingsArgs } from "./repair-mappings-cli";
 
@@ -141,9 +135,7 @@ async function mapWithConcurrency<T, R>(
     }
   };
 
-  await Promise.all(
-    Array.from({ length: Math.min(concurrency, items.length) }, () => worker()),
-  );
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => worker()));
   return results;
 }
 
@@ -169,10 +161,7 @@ async function resolveGroupsAgainstTvdb(groups: TvdbSlugResolutionGroup[]): Prom
     return promise;
   };
 
-  const getSeason = (
-    seriesId: number,
-    seasonNumber: number,
-  ): Promise<TvdbEpisodeBase[]> => {
+  const getSeason = (seriesId: number, seasonNumber: number): Promise<TvdbEpisodeBase[]> => {
     const key = `${seriesId}:${seasonNumber}`;
     let promise = seasonCache.get(key);
     if (!promise) {
@@ -216,11 +205,7 @@ async function resolveGroupsAgainstTvdb(groups: TvdbSlugResolutionGroup[]): Prom
     }
 
     const seasonEpisodes = await getSeason(series.id, group.seasonNumber);
-    const candidate = verifyResolvedTvdbSlugGroup(
-      group,
-      series,
-      seasonEpisodes,
-    );
+    const candidate = verifyResolvedTvdbSlugGroup(group, series, seasonEpisodes);
     if (!candidate) {
       return {
         candidate: null,
@@ -247,9 +232,7 @@ async function resolveGroupsAgainstTvdb(groups: TvdbSlugResolutionGroup[]): Prom
   };
 }
 
-async function applyCandidates(
-  candidates: TvdbSlugRepairCandidate[],
-): Promise<number> {
+async function applyCandidates(candidates: TvdbSlugRepairCandidate[]): Promise<number> {
   if (candidates.length === 0) return 0;
 
   return db.transaction(async (tx) => {
@@ -302,9 +285,7 @@ async function applyCandidates(
   });
 }
 
-function sampleCandidates(
-  candidates: TvdbSlugRepairCandidate[],
-): CandidateSample[] {
+function sampleCandidates(candidates: TvdbSlugRepairCandidate[]): CandidateSample[] {
   return candidates.slice(0, 20).map((candidate) => ({
     animeId: candidate.animeId,
     providerId: candidate.providerId,
@@ -317,9 +298,7 @@ function sampleCandidates(
 
 async function runRepair(mode: RepairMode): Promise<RepairReport> {
   if (!process.env.TVDB_API_KEY?.trim()) {
-    throw new Error(
-      "TVDB_API_KEY is required to resolve legacy TVDB slug orphan mappings",
-    );
+    throw new Error("TVDB_API_KEY is required to resolve legacy TVDB slug orphan mappings");
   }
 
   const [orphanRows, existingIdentities] = await Promise.all([
@@ -351,9 +330,7 @@ async function runRepair(mode: RepairMode): Promise<RepairReport> {
   const remainingTvdbOrphanEpisodeMappings =
     mode === "apply" ? await countOrphanTvdbRows() : orphanRows.length;
   const resolvedEpisodeMappingCount =
-    mode === "apply"
-      ? orphanRows.length - remainingTvdbOrphanEpisodeMappings
-      : 0;
+    mode === "apply" ? orphanRows.length - remainingTvdbOrphanEpisodeMappings : 0;
 
   if (mode === "apply") {
     if (appliedParentCount !== candidates.length) {
@@ -381,13 +358,11 @@ async function runRepair(mode: RepairMode): Promise<RepairReport> {
       eligibleSlugGroups: groupPlan.groups.length,
       eligibleSlugEpisodeMappings,
       skippedInvalidEvidenceGroups: groupPlan.skippedInvalidEvidenceGroups,
-      skippedInvalidEvidenceEpisodeMappings:
-        groupPlan.skippedInvalidEvidenceEpisodeMappings,
+      skippedInvalidEvidenceEpisodeMappings: groupPlan.skippedInvalidEvidenceEpisodeMappings,
       remoteVerifiedGroups: resolved.candidates.length,
       remoteRejectedGroups: resolved.rejected.length,
       skippedCollisionGroups: collisionFiltered.skippedCollisionGroups,
-      skippedCollisionEpisodeMappings:
-        collisionFiltered.skippedCollisionEpisodeMappings,
+      skippedCollisionEpisodeMappings: collisionFiltered.skippedCollisionEpisodeMappings,
       plannedParentCount: candidates.length,
       plannedEpisodeMappingCount,
       appliedParentCount,
