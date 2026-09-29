@@ -52,6 +52,7 @@
       "devDependencies": {
         "@types/react": "catalog:",
         "@types/react-dom": "catalog:",
+        "bun-types": "catalog:",
         "typescript": "catalog:",
       },
     },
