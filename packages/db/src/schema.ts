@@ -10,6 +10,19 @@ import {
   timestamp,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
+import {
+  animeLanguageStatuses,
+  episodeKinds,
+  episodeLanguageStatuses,
+  languageEvidenceSources,
+  languageEvidenceTypes,
+  languageMediaTypes,
+  mappingSources,
+  providers,
+  syncRunKinds,
+  syncRunProviders,
+  syncRunStatuses,
+} from "./enums";
 
 export const anime = pgTable(
   "anime",
@@ -90,18 +103,7 @@ export const animeMappings = pgTable(
       .references(() => anime.id, { onDelete: "cascade" }),
 
     provider: text("provider", {
-      enum: [
-        "anilist",
-        "kitsu",
-        "thetvdb",
-        "mal",
-        "tmdb",
-        "simkl",
-        "anisearch",
-        "animeplanet",
-        "animeschedule",
-        "other",
-      ],
+      enum: providers,
     }).notNull(),
 
     providerId: text("provider_id").notNull(),
@@ -111,7 +113,7 @@ export const animeMappings = pgTable(
     confidence: integer("confidence").notNull().default(100),
 
     source: text("source", {
-      enum: ["manual", "api", "import", "fuzzy", "system"],
+      enum: mappingSources,
     })
       .notNull()
       .default("manual"),
@@ -312,7 +314,7 @@ export const episodes = pgTable(
     lengthMinutes: integer("length_minutes"),
 
     kind: text("kind", {
-      enum: ["normal", "special", "ova", "recap", "trailer", "extra", "other"],
+      enum: episodeKinds,
     })
       .notNull()
       .default("normal"),
@@ -344,18 +346,7 @@ export const episodeMappings = pgTable(
       .references(() => episodes.id, { onDelete: "cascade" }),
 
     provider: text("provider", {
-      enum: [
-        "anilist",
-        "kitsu",
-        "thetvdb",
-        "mal",
-        "tmdb",
-        "simkl",
-        "anisearch",
-        "animeplanet",
-        "animeschedule",
-        "other",
-      ],
+      enum: providers,
     }).notNull(),
 
     providerId: text("provider_id").notNull(),
@@ -367,7 +358,7 @@ export const episodeMappings = pgTable(
     confidence: integer("confidence").notNull().default(100),
 
     source: text("source", {
-      enum: ["manual", "api", "import", "fuzzy", "system"],
+      enum: mappingSources,
     })
       .notNull()
       .default("manual"),
@@ -407,11 +398,11 @@ export const animeLanguageStatus = pgTable(
     languageCode: text("language_code").notNull(),
 
     mediaType: text("media_type", {
-      enum: ["audio", "subtitle"],
+      enum: languageMediaTypes,
     }).notNull(),
 
     status: text("status", {
-      enum: ["unknown", "possible", "likely", "confirmed", "partial", "not_available"],
+      enum: animeLanguageStatuses,
     })
       .notNull()
       .default("unknown"),
@@ -455,26 +446,17 @@ export const animeLanguageEvidence = pgTable(
     languageCode: text("language_code").notNull(),
 
     mediaType: text("media_type", {
-      enum: ["audio", "subtitle"],
+      enum: languageMediaTypes,
     }).notNull(),
 
     source: text("source", {
-      enum: ["ann", "official_site", "provider", "home_video", "community", "manual", "other"],
+      enum: languageEvidenceSources,
     }).notNull(),
 
     sourceUrl: text("source_url"),
 
     evidenceType: text("evidence_type", {
-      enum: [
-        "voice_cast",
-        "provider_audio",
-        "provider_subtitle",
-        "official_announcement",
-        "home_video_release",
-        "manual_verified",
-        "community_submission",
-        "other",
-      ],
+      enum: languageEvidenceTypes,
     }).notNull(),
 
     value: text("value").notNull(),
@@ -512,11 +494,11 @@ export const episodeLanguageStatus = pgTable(
     languageCode: text("language_code").notNull(),
 
     mediaType: text("media_type", {
-      enum: ["audio", "subtitle"],
+      enum: languageMediaTypes,
     }).notNull(),
 
     status: text("status", {
-      enum: ["unknown", "available", "missing", "partial"],
+      enum: episodeLanguageStatuses,
     })
       .notNull()
       .default("unknown"),
@@ -548,25 +530,15 @@ export const syncRuns = pgTable(
     id: serial("id").primaryKey(),
 
     provider: text("provider", {
-      enum: [
-        "anilist",
-        "kitsu",
-        "mal",
-        "tmdb",
-        "simkl",
-        "anisearch",
-        "animeplanet",
-        "animeschedule",
-        "other",
-      ],
+      enum: syncRunProviders,
     }).notNull(),
 
     kind: text("kind", {
-      enum: ["anime", "episodes", "mappings", "audio_status", "full"],
+      enum: syncRunKinds,
     }).notNull(),
 
     status: text("status", {
-      enum: ["running", "success", "failed", "partial"],
+      enum: syncRunStatuses,
     })
       .notNull()
       .default("running"),

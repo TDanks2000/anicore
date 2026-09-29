@@ -22,7 +22,11 @@ let dbInstance: ReturnType<typeof createDb> | null = null;
 function getClient(): PostgresClient {
   if (!clientInstance) {
     const databaseConfig = getDatabaseConfig();
-    clientInstance = postgres(databaseConfig.url, { ssl: databaseConfig.ssl });
+    clientInstance = postgres(databaseConfig.url, {
+      ssl: databaseConfig.ssl,
+      // Idempotent DDL ("already exists, skipping") is not worth logging.
+      onnotice: () => {},
+    });
   }
   return clientInstance;
 }

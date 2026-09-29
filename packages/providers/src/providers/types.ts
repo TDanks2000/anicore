@@ -1,14 +1,6 @@
-export type ProviderName =
-  | "anilist"
-  | "kitsu"
-  | "thetvdb"
-  | "mal"
-  | "tmdb"
-  | "simkl"
-  | "anisearch"
-  | "animeplanet"
-  | "animeschedule"
-  | "other";
+import type { Provider } from "@anicore/db/enums";
+
+export type ProviderName = Provider;
 
 export interface PluginResult {
   status: "matched" | "unmatched" | "error";

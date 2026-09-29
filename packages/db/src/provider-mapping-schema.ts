@@ -11,22 +11,8 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 
+import { mappingSources, providers } from "./enums";
 import { anime } from "./schema";
-
-const PROVIDERS = [
-  "anilist",
-  "kitsu",
-  "thetvdb",
-  "mal",
-  "tmdb",
-  "simkl",
-  "anisearch",
-  "animeplanet",
-  "animeschedule",
-  "other",
-] as const;
-
-const MAPPING_SOURCES = ["manual", "api", "import", "fuzzy", "system"] as const;
 
 /**
  * Canonical external-provider identity.
@@ -39,7 +25,7 @@ export const providerEntities = pgTable(
   "provider_entities",
   {
     id: serial("id").primaryKey(),
-    provider: text("provider", { enum: PROVIDERS }).notNull(),
+    provider: text("provider", { enum: providers }).notNull(),
     providerId: text("provider_id").notNull(),
     providerSlug: text("provider_slug"),
     providerUrl: text("provider_url"),
@@ -76,7 +62,7 @@ export const animeProviderMappings = pgTable(
       .notNull()
       .references(() => providerEntities.id, { onDelete: "cascade" }),
     confidence: integer("confidence").notNull().default(100),
-    source: text("source", { enum: MAPPING_SOURCES }).notNull().default("manual"),
+    source: text("source", { enum: mappingSources }).notNull().default("manual"),
     isPrimary: boolean("is_primary").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
