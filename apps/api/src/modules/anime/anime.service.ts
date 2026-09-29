@@ -9,10 +9,12 @@ import {
   studios,
   tags,
 } from "@anicore/db/schema";
+import { insertAnimeWithUniqueSlug } from "@anicore/providers";
 import { toJsonArray } from "@anicore/providers/lib/json";
+import { slugCandidates } from "@anicore/providers/lib/slug";
 import { and, asc, desc, eq, ilike, or, type SQL, sql } from "drizzle-orm";
 
-import { conflict, isUniqueViolation, notFound } from "../../lib/errors";
+import { conflict, notFound } from "../../lib/errors";
 import { optionalText } from "../../lib/validators";
 import {
   type AnimeMappingInput,
@@ -225,21 +227,24 @@ export async function createAnime(input: CreateAnimeInput) {
   const preparedMappings = prepareNewAnimeMappings(mappings);
 
   return db.transaction(async (tx) => {
+    const values = {
+      ...fields,
+      isAdult: fields.isAdult ?? false,
+      genresJson: toJsonArray(genres),
+      synonymsJson: toJsonArray(synonyms),
+    };
+    const requestedSlug = optionalText(slug);
+
     let row: typeof anime.$inferSelect | undefined;
-    try {
+    if (requestedSlug) {
       [row] = await tx
         .insert(anime)
-        .values({
-          ...fields,
-          slug: optionalText(slug),
-          isAdult: fields.isAdult ?? false,
-          genresJson: toJsonArray(genres),
-          synonymsJson: toJsonArray(synonyms),
-        })
+        .values({ ...values, slug: requestedSlug })
+        .onConflictDoNothing({ target: anime.slug })
         .returning();
-    } catch (error) {
-      if (isUniqueViolation(error)) throw conflict("An anime with this slug already exists");
-      throw error;
+      if (!row) throw conflict("An anime with this slug already exists");
+    } else {
+      row = await insertAnimeWithUniqueSlug(tx, values, slugCandidates(fields.titleRomaji));
     }
 
     await insertAnimeMappings(tx, row!.id, preparedMappings);
