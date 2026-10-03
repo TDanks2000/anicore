@@ -24,6 +24,7 @@ export const providers = [
   "anisearch",
   "animeplanet",
   "animeschedule",
+  "crunchyroll",
   "other",
 ] as const;
 export type Provider = (typeof providers)[number];

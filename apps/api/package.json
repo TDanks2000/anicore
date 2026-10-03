@@ -4,6 +4,7 @@
   "scripts": {
     "build": "tsc --noEmit",
     "db:audit-mappings": "bun src/scripts/audit-mappings-command.ts",
+    "db:audit-languages": "bun src/scripts/audit-language-status.ts",
     "db:check-shape": "bun src/scripts/check-db-shape.ts",
     "db:empty": "bun src/scripts/empty-db.ts",
     "db:generate": "drizzle-kit generate",

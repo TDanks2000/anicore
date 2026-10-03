@@ -5,6 +5,8 @@ import {
   mapLegacyAudioStatusToEpisodeStatus,
   resolveAnimeStatus,
   resolveAnimeStatusFromEvidence,
+  resolveEpisodeStatuses,
+  summarizeEpisodeCoverage,
   toLegacyEpisodeAudioResponse,
 } from "./language-status.scoring";
 
@@ -61,7 +63,7 @@ describe("language status scoring", () => {
           confidence: 50,
         },
       ]),
-    ).toEqual({ status: "possible", confidence: 50 });
+    ).toEqual({ status: "unknown", confidence: 0 });
 
     expect(
       resolveAnimeStatusFromEvidence([
@@ -86,6 +88,42 @@ describe("language status scoring", () => {
         },
       ]),
     ).toEqual({ status: "partial", confidence: 80 });
+  });
+
+  test("conflicting reliable availability resolves to unknown, independent of order", () => {
+    const positive = {
+      source: "provider" as const,
+      evidenceType: "provider_audio" as const,
+      value: "available",
+      confidence: 90,
+    };
+    const negative = { ...positive, value: "not_available" };
+    for (const evidence of [
+      [positive, negative],
+      [negative, positive],
+    ])
+      expect(resolveAnimeStatusFromEvidence(evidence)).toEqual({
+        status: "unknown",
+        confidence: 0,
+      });
+  });
+
+  test("partial episode coverage is not upgraded by cast existence evidence", () => {
+    expect(
+      resolveAnimeStatusFromEvidence([
+        { source: "provider", evidenceType: "provider_audio", value: "partial", confidence: 90 },
+        { source: "provider", evidenceType: "voice_cast", value: "available", confidence: 75 },
+      ]),
+    ).toEqual({ status: "partial", confidence: 90 });
+  });
+
+  test("unknown and future schedules are never positive evidence", () => {
+    for (const value of ["unknown", "scheduled", "announced", "", "missing"])
+      expect(
+        resolveAnimeStatusFromEvidence([
+          { source: "community", evidenceType: "community_submission", value, confidence: 50 },
+        ]),
+      ).toEqual({ status: "unknown", confidence: 0 });
   });
 
   test("legacy episode audio status maps to new episode language status", () => {
@@ -121,5 +159,38 @@ describe("language status scoring", () => {
         sourceProvider: "manual",
       },
     ]);
+  });
+
+  test("episode statuses resolve to one per episode, manual first, ties abstain", () => {
+    const vote = (
+      episodeNumber: number,
+      status: "available" | "missing" | "unknown" | "partial",
+      confidence: number,
+      provider: string,
+    ) => ({ episodeNumber, status, confidence, provider });
+    const resolved = resolveEpisodeStatuses([
+      vote(2, "available", 95, "crunchyroll"),
+      vote(1, "available", 75, "derived-airdate"),
+      vote(1, "available", 95, "crunchyroll"),
+      vote(3, "available", 90, "animeschedule"),
+      vote(3, "missing", 90, "other"),
+      vote(4, "missing", 50, "manual"),
+      vote(4, "available", 95, "crunchyroll"),
+      vote(5, "unknown", 99, "other"),
+      vote(5, "partial", 60, "other"),
+    ]);
+    expect(resolved.map((row) => [row.episodeNumber, row.status, row.provider])).toEqual([
+      [1, "available", "crunchyroll"],
+      [2, "available", "crunchyroll"],
+      [3, "unknown", "animeschedule"],
+      [4, "missing", "manual"],
+      [5, "partial", "other"],
+    ]);
+    expect(summarizeEpisodeCoverage(resolved, [1, 2, 3, 4, 5, 6])).toEqual({
+      totalEpisodes: 6,
+      available: 3,
+      missing: 1,
+      unknown: 2,
+    });
   });
 });

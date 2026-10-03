@@ -31,11 +31,21 @@ export const sourceEnum = t.UnionEnum(mappingSources);
 export const episodeKindEnum = t.UnionEnum(episodeKinds);
 export const audioModeEnum = t.UnionEnum(legacyAudioModes);
 export const audioStatusEnum = t.UnionEnum(legacyAudioStatuses);
-export const languageMediaTypeEnum = t.UnionEnum(languageMediaTypes);
-export const animeLanguageStatusEnum = t.UnionEnum(animeLanguageStatuses);
-export const episodeLanguageStatusEnum = t.UnionEnum(episodeLanguageStatuses);
-export const languageEvidenceSourceEnum = t.UnionEnum(languageEvidenceSources);
-export const languageEvidenceTypeEnum = t.UnionEnum(languageEvidenceTypes);
+// UnionEnum supplies its first value as an implicit default, even inside Optional.
+// Missing filters must stay absent and required evidence fields must be explicit.
+export const languageMediaTypeEnum = t.Union(languageMediaTypes.map((value) => t.Literal(value)));
+export const animeLanguageStatusEnum = t.Union(
+  animeLanguageStatuses.map((value) => t.Literal(value)),
+);
+export const episodeLanguageStatusEnum = t.Union(
+  episodeLanguageStatuses.map((value) => t.Literal(value)),
+);
+export const languageEvidenceSourceEnum = t.Union(
+  languageEvidenceSources.map((value) => t.Literal(value)),
+);
+export const languageEvidenceTypeEnum = t.Union(
+  languageEvidenceTypes.map((value) => t.Literal(value)),
+);
 
 export const MAX_PAGE_SIZE = 100;
 

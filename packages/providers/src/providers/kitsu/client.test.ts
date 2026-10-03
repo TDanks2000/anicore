@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 
-import { fetchKitsuEpisodes, searchKitsuByTitle } from "./client";
+import { fetchKitsuEpisodes, fetchKitsuEpisodeTitles, searchKitsuByTitle } from "./client";
 
 const originalFetch = globalThis.fetch;
 
@@ -9,7 +9,7 @@ afterEach(() => {
 });
 
 describe("Kitsu GraphQL client", () => {
-  test("does not request the unstable canonical title field", async () => {
+  test("keeps the non-null canonical title out of the search and episode queries", async () => {
     const requests: string[] = [];
     globalThis.fetch = Object.assign(
       async (_input: string | URL | Request, init?: RequestInit) => {
@@ -30,5 +30,28 @@ describe("Kitsu GraphQL client", () => {
     for (const request of requests) {
       expect(request).not.toContain("canonical");
     }
+  });
+
+  test("fetches canonical episode titles separately and tolerates nulled records", async () => {
+    globalThis.fetch = Object.assign(
+      async () =>
+        Response.json({
+          data: {
+            findAnimeById: {
+              episodes: {
+                nodes: [
+                  { id: "229115", titles: { canonical: " Asteroid Blues " } },
+                  null,
+                  { id: "229114", titles: { canonical: "" } },
+                ],
+              },
+            },
+          },
+          errors: [{ message: "Cannot return null for non-nullable field TitlesList.canonical" }],
+        }),
+      { preconnect: () => undefined },
+    );
+
+    expect([...(await fetchKitsuEpisodeTitles("1"))]).toEqual([["229115", "Asteroid Blues"]]);
   });
 });

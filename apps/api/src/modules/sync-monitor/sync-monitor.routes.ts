@@ -1,7 +1,14 @@
+import type { SyncMonitorSnapshotResponse } from "@anicore/sync-monitor";
 import { MAX_AUTO_SYNC_INTERVAL_MINUTES } from "@anicore/sync-monitor";
 import { Elysia, t } from "elysia";
 
 import { checkAutomaticSyncNow, getAutomaticSyncState } from "../../lib/automatic-sync";
+import {
+  clearDashboardCache,
+  getDashboardResources,
+  previewCache,
+  updateDashboardProxy,
+} from "../../lib/dashboard-resources";
 import { conflict, HttpError } from "../../lib/errors";
 import {
   getSyncMonitorFileInfo,
@@ -9,8 +16,8 @@ import {
   isSyncMonitorAuthorized,
   readSyncMonitorControlState,
   readSyncMonitorEvents,
+  readSyncMonitorRuntimeConfig,
   readSyncMonitorStatus,
-  SyncMonitor,
   validateSyncMonitorRuntimeConfigPatch,
   writeSyncMonitorControlState,
   writeSyncMonitorRuntimeConfig,
@@ -47,8 +54,61 @@ function controlPayload() {
   };
 }
 
+/**
+ * A revision string that changes only when the dashboard-visible data changes.
+ * The client uses it to skip re-renders on idle poll ticks.
+ */
+function buildRevision(input: {
+  status: ReturnType<typeof readSyncMonitorStatus>;
+  control: ReturnType<typeof readSyncMonitorControlState>;
+  runtime: ReturnType<typeof readSyncMonitorRuntimeConfig>;
+  automation: ReturnType<typeof getAutomaticSyncState>;
+  events: ReturnType<typeof readSyncMonitorEvents>;
+  active: boolean;
+}): string {
+  const lastEvent = input.events.at(-1);
+  return [
+    input.active ? "active" : "idle",
+    input.status?.runId ?? "no-run",
+    input.status?.state ?? "no-state",
+    input.status?.updatedAt ?? "no-updated",
+    input.control.command ?? "no-command",
+    input.control.requestedAt ?? "no-requested",
+    input.control.acknowledgedAt ?? "no-ack",
+    input.runtime.updatedAt,
+    input.automation.state,
+    input.automation.lastCheckedAt ?? "no-check",
+    input.automation.nextRunAt ?? "no-next",
+    String(input.events.length),
+    lastEvent ? `${lastEvent.at}|${lastEvent.message}` : "no-events",
+  ].join("~");
+}
+
+function snapshotPayload(eventLimit: number): SyncMonitorSnapshotResponse {
+  const status = readSyncMonitorStatus();
+  const control = readSyncMonitorControlState();
+  const runtime = readSyncMonitorRuntimeConfig();
+  const automation = getAutomaticSyncState();
+  const events = readSyncMonitorEvents(eventLimit);
+  const active = isAnySyncActive();
+
+  return {
+    revision: buildRevision({ status, control, runtime, automation, events, active }),
+    serverTime: new Date().toISOString(),
+    status,
+    active,
+    control,
+    files: getSyncMonitorFileInfo(),
+    config: getSyncMonitorPublicConfig(),
+    automation,
+    events,
+  };
+}
+
 function requestControl(command: "pause" | "resume" | "stop", message: string) {
-  if (!SyncMonitor.isLikelyActive(readSyncMonitorStatus())) {
+  // Use the same definition of "active" the dashboard sees, so the button state
+  // and the accepted command can never disagree.
+  if (!isAnySyncActive()) {
     throw conflict(`No active sync process to ${command}`);
   }
   writeSyncMonitorControlState(command, message);
@@ -77,10 +137,44 @@ export const syncMonitorRoutes = new Elysia({
     control: readSyncMonitorControlState(),
     files: getSyncMonitorFileInfo(),
   }))
+  .get("/snapshot", ({ query }) => snapshotPayload(query.eventLimit), {
+    query: t.Object({ eventLimit: t.Integer({ minimum: 1, maximum: 1000, default: 100 }) }),
+  })
   .get("/events", ({ query }) => ({ events: readSyncMonitorEvents(query.limit) }), {
     query: t.Object({ limit: t.Integer({ minimum: 1, maximum: 1000, default: 100 }) }),
   })
   .get("/config", () => configPayload())
+  .get("/resources", ({ query }) => getDashboardResources(query.offset), {
+    query: t.Object({ offset: t.Integer({ minimum: 0, default: 0 }) }),
+  })
+  .patch(
+    "/resources/proxy",
+    ({ body }) => {
+      updateDashboardProxy(body);
+      return getDashboardResources();
+    },
+    {
+      body: t.Object({
+        mode: t.Optional(t.UnionEnum(["environment", "direct", "custom", "free"])),
+        url: t.Optional(t.String({ maxLength: 4096 })),
+        noProxy: t.Optional(t.String({ maxLength: 4096 })),
+        maxAttempts: t.Optional(t.Integer({ minimum: 1, maximum: 100 })),
+        timeoutMs: t.Optional(t.Integer({ minimum: 100, maximum: 60000 })),
+      }),
+    },
+  )
+  .get("/resources/cache", ({ query }) => previewCache(query.name), {
+    query: t.Object({ name: t.String({ maxLength: 200 }) }),
+  })
+  .post(
+    "/resources/cache/clear",
+    ({ body }) => {
+      if (isAnySyncActive()) throw conflict("Stop sync before clearing provider caches");
+      clearDashboardCache(body.name);
+      return { cleared: body.name };
+    },
+    { body: t.Object({ name: t.String({ maxLength: 200 }) }) },
+  )
   .patch(
     "/config",
     ({ body }) => {

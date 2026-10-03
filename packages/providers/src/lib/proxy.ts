@@ -6,6 +6,9 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
+import { readProxySettings } from "./proxy-config";
+
+export { maskProxyUrl, readProxySettings, writeProxySettings } from "./proxy-config";
 
 const PROXY_ENV_KEYS = [
   "ANICORE_PROXY_URL",
@@ -34,6 +37,9 @@ const DEFAULT_PROXY_BYPASS_HOSTS = new Set([
   "api4.thetvdb.com",
   "api.themoviedb.org",
   "animeschedule.net",
+  // Crunchyroll's catalogue is regional; a rotating proxy would make its
+  // language tracks change with whichever country the proxy exits in.
+  "www.crunchyroll.com",
 ]);
 
 type FetchInput = Parameters<typeof fetch>[0];
@@ -154,7 +160,11 @@ function proxyAttemptTimeoutMs(): number {
   return DEFAULT_PROXY_ATTEMPT_TIMEOUT_MS;
 }
 
-function shouldBypassProxy(input: FetchInput, includeDefaultHosts: boolean): boolean {
+function shouldBypassProxy(
+  input: FetchInput,
+  includeDefaultHosts: boolean,
+  noProxy?: string,
+): boolean {
   const target = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
   let hostname: string;
   try {
@@ -165,7 +175,6 @@ function shouldBypassProxy(input: FetchInput, includeDefaultHosts: boolean): boo
 
   if (includeDefaultHosts && DEFAULT_PROXY_BYPASS_HOSTS.has(hostname)) return true;
 
-  const noProxy = process.env.NO_PROXY ?? process.env.no_proxy;
   if (!noProxy) return false;
 
   return noProxy
@@ -224,6 +233,17 @@ async function loadFreeProxyList(rawFetch: typeof fetch): Promise<string[]> {
   return freeProxyList;
 }
 
+/**
+ * The APIs routed through free proxies answer errors in JSON. An HTML or
+ * empty error response (other than a 404, which origins also serve as pages)
+ * comes from the proxy itself.
+ */
+export function isProxyErrorPage(response: Pick<Response, "status" | "headers">): boolean {
+  if (response.status < 400 || response.status === 404) return false;
+  const type = response.headers.get("content-type")?.toLowerCase() ?? "";
+  return !type.includes("json");
+}
+
 function nextFreeProxy(proxies: string[]): string {
   const proxy = proxies[freeProxyIndex % proxies.length]!;
   freeProxyIndex++;
@@ -234,6 +254,8 @@ async function fetchWithFreeProxyFallback(
   rawFetch: typeof fetch,
   input: FetchInput,
   init: FetchInit | undefined,
+  maxAttempts = freeProxyMaxAttempts(),
+  timeoutMs = proxyAttemptTimeoutMs(),
 ): Promise<Response> {
   let proxies: string[];
   let untestedSet: Set<string>;
@@ -252,8 +274,7 @@ async function fetchWithFreeProxyFallback(
   if (!proxies.length) return rawFetch(input, init);
 
   const callerSignal = init?.signal;
-  const timeoutMs = proxyAttemptTimeoutMs();
-  const attempts = Math.min(proxies.length, freeProxyMaxAttempts());
+  const attempts = Math.min(proxies.length, maxAttempts);
 
   for (let attempt = 0; attempt < attempts; attempt++) {
     const proxy = nextFreeProxy(proxies);
@@ -271,8 +292,10 @@ async function fetchWithFreeProxyFallback(
         proxy,
       } as BunProxyFetchInit);
 
-      // 407 means the proxy requires authentication — it's unusable as a free proxy.
-      if (response.status === 407) {
+      // 407 means the proxy requires authentication, and a non-JSON error page
+      // is the proxy's own refusal rather than the API's answer. Either way the
+      // proxy is unusable; returning its page failed whole anime with 400/405.
+      if (response.status === 407 || isProxyErrorPage(response)) {
         if (isUntested) removeProxyFromUntestedList(proxy);
         try {
           markDeadProxy(proxy);
@@ -311,8 +334,15 @@ export function installProxyFetch(): void {
   const rawFetch = globalThis.fetch.bind(globalThis);
 
   globalThis.fetch = (async (input: FetchInput, init?: FetchInit) => {
-    const configuredProxy = readConfiguredProxy();
-    if (shouldBypassProxy(input, !configuredProxy)) {
+    const settings = readProxySettings();
+    if (settings.mode === "direct") return rawFetch(input, init);
+    const configuredProxy =
+      settings.mode === "custom"
+        ? settings.url
+        : settings.mode === "environment"
+          ? readConfiguredProxy()
+          : null;
+    if (shouldBypassProxy(input, !configuredProxy, settings.noProxy)) {
       return rawFetch(input, init);
     }
 
@@ -330,8 +360,17 @@ export function installProxyFetch(): void {
       }
     }
 
-    if (envEnabled(process.env.ANICORE_USE_FREE_PROXY)) {
-      return fetchWithFreeProxyFallback(rawFetch, input, init);
+    if (
+      settings.mode === "free" ||
+      (settings.mode === "environment" && envEnabled(process.env.ANICORE_USE_FREE_PROXY))
+    ) {
+      return fetchWithFreeProxyFallback(
+        rawFetch,
+        input,
+        init,
+        settings.maxAttempts,
+        settings.timeoutMs,
+      );
     }
 
     return rawFetch(input, init);

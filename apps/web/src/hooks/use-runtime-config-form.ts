@@ -4,11 +4,12 @@ import {
   type SyncMonitorConfigResponse,
   type SyncMonitorRuntimeConfig,
 } from "@anicore/sync-monitor";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   DEFAULT_DRAFT,
   draftFromRuntime,
+  draftsEqual,
   isAutoSyncIntervalValid,
   parseRuntimeConfigDraft,
   type RuntimeConfigDraft,
@@ -17,8 +18,10 @@ import {
 export type FormMessage = { kind: "success" | "error"; text: string };
 
 /**
- * Editable copy of the runtime config. Server updates flow into the draft
- * until the user starts editing; after that the draft is theirs until saved.
+ * Editable copy of the runtime config. Server updates flow into the draft until
+ * the user diverges from them; after that the draft is theirs until saved.
+ * `dirty` is derived from the draft vs. the last server baseline, so reverting a
+ * field back to its saved value correctly disables Save again.
  */
 export function useRuntimeConfigForm(options: {
   client: SyncMonitorClient | null;
@@ -27,17 +30,29 @@ export function useRuntimeConfigForm(options: {
 }) {
   const { client, runtime, onSaved } = options;
   const [draft, setDraft] = useState<RuntimeConfigDraft>(DEFAULT_DRAFT);
-  const [dirty, setDirty] = useState(false);
+  const [baseline, setBaseline] = useState<RuntimeConfigDraft>(DEFAULT_DRAFT);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<FormMessage | null>(null);
+  const baselineRef = useRef(baseline);
 
   useEffect(() => {
-    if (!dirty && runtime) setDraft(draftFromRuntime(runtime));
-  }, [dirty, runtime]);
+    baselineRef.current = baseline;
+  }, [baseline]);
+
+  useEffect(() => {
+    if (!runtime) return;
+    const next = draftFromRuntime(runtime);
+    setDraft((current) => (draftsEqual(current, baselineRef.current) ? next : current));
+    setBaseline(next);
+  }, [runtime]);
+
+  const dirty = useMemo(() => !draftsEqual(draft, baseline), [draft, baseline]);
 
   const update = useCallback((change: Partial<RuntimeConfigDraft>) => {
-    setDirty(true);
-    setDraft((current) => ({ ...current, ...change }));
+    setDraft((current) => {
+      const next = { ...current, ...change };
+      return draftsEqual(current, next) ? current : next;
+    });
   }, []);
 
   const intervalInvalid = !isAutoSyncIntervalValid(draft);
@@ -59,8 +74,9 @@ export function useRuntimeConfigForm(options: {
     setSaving(true);
     try {
       const next = await client.updateConfig(parsed.patch);
-      setDraft(draftFromRuntime(next.runtime));
-      setDirty(false);
+      const savedDraft = draftFromRuntime(next.runtime);
+      setDraft(savedDraft);
+      setBaseline(savedDraft);
       setMessage({ kind: "success", text: "Runtime and automatic sync settings saved." });
       await onSaved(next);
     } catch (err) {

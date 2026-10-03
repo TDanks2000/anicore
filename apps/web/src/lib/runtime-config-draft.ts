@@ -53,6 +53,11 @@ function integerIn(value: number, min: number, max: number): boolean {
   return Number.isInteger(value) && value >= min && value <= max;
 }
 
+/** Field-wise equality, so unchanged drafts keep their previous object identity. */
+export function draftsEqual(a: RuntimeConfigDraft, b: RuntimeConfigDraft): boolean {
+  return (Object.keys(a) as (keyof RuntimeConfigDraft)[]).every((key) => a[key] === b[key]);
+}
+
 export function isAutoSyncIntervalValid(draft: RuntimeConfigDraft): boolean {
   return (
     !draft.autoSyncEnabled ||

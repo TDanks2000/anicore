@@ -9,7 +9,9 @@ describe("getDatabaseConfig", () => {
       url: `file:${DEFAULT_DATABASE_PATH}`,
       path: DEFAULT_DATABASE_PATH,
     });
-    expect(DEFAULT_DATABASE_PATH.endsWith("/apps/api/data/anicore.db")).toBe(true);
+    expect(DEFAULT_DATABASE_PATH.replaceAll("\\", "/").endsWith("/apps/api/data/anicore.db")).toBe(
+      true,
+    );
   });
 
   test("accepts plain paths and file: URLs, resolving relative ones", () => {

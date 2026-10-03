@@ -11,6 +11,10 @@ node_modules/
 .turbo/
 **/.turbo/
 
+# Logs
+data/logs/
+apps/api/data/logs/
+
 # Sync cache and generated output
 data/cache/
 data/sync-monitor/

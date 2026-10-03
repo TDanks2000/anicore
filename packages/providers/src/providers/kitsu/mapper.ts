@@ -16,6 +16,12 @@ function mapStatus(kitsuStatus: string | null): string | null {
   }
 }
 
+/** Kitsu's GraphQL API reports episode and anime lengths in seconds. */
+export function kitsuSecondsToMinutes(seconds: number | null | undefined): number | null {
+  if (typeof seconds !== "number" || !Number.isFinite(seconds) || seconds <= 0) return null;
+  return Math.max(1, Math.round(seconds / 60));
+}
+
 function resolvePreferredTitle(titles: KitsuSearchNode["titles"]): string | null {
   return titles.romanized ?? titles.translated ?? Object.values(titles.localized ?? {})[0] ?? null;
 }
@@ -43,7 +49,7 @@ export function mapKitsuAnime(node: KitsuSearchNode): ProviderAnimeData {
     seasonYear: year !== null && !Number.isNaN(year) ? year : null,
     endDate: node.endDate ?? null,
     episodeCount: node.episodeCount ?? null,
-    durationMinutes: node.episodeLength ?? null,
+    durationMinutes: kitsuSecondsToMinutes(node.episodeLength),
     isAdult: node.ageRating === "R18",
 
     synonyms: [...alternatives, ...localizedTitles],
@@ -71,13 +77,14 @@ export interface MappedEpisode extends ProviderEpisodeData {
 function mapEpisode(ep: KitsuEpisodeNode & { number: number }): MappedEpisode {
   return {
     number: ep.number,
-    title: ep.titles?.romanized ?? ep.titles?.translated ?? null,
+    // `canonical` carries no trustworthy locale, so it is only a display title.
+    title: ep.titles?.canonical ?? ep.titles?.romanized ?? ep.titles?.translated ?? null,
     titleRomaji: ep.titles?.romanized ?? null,
     titleEnglish: ep.titles?.translated ?? null,
     description:
       ep.description?.en ?? (ep.description ? Object.values(ep.description)[0] : null) ?? null,
     airDate: ep.releasedAt?.slice(0, 10) ?? null,
-    lengthMinutes: ep.length ?? null,
+    lengthMinutes: kitsuSecondsToMinutes(ep.length),
     thumbnail: ep.thumbnail?.original?.url ?? null,
     kitsuId: ep.id,
     providerId: ep.id,

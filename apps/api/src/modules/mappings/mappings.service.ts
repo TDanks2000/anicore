@@ -1,5 +1,10 @@
 import { db } from "@anicore/db";
 import type { MappingSource, Provider } from "@anicore/db/enums";
+import {
+  animeProviderMappings,
+  animeProviderSegments,
+  providerEntities,
+} from "@anicore/db/provider-mapping-schema";
 import { anime, animeMappings, episodeMappings, episodes } from "@anicore/db/schema";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 
@@ -222,6 +227,78 @@ export async function listAnimeMappings(animeId: number) {
     .from(animeMappings)
     .where(eq(animeMappings.animeId, animeId))
     .orderBy(asc(animeMappings.provider), desc(animeMappings.isPrimary), asc(animeMappings.id));
+}
+
+/**
+ * Provider entities shared by several anime (a Crunchyroll season split across
+ * AniList cours), with the episode ranges each anime occupies in them.
+ */
+export async function listAnimeSegmentMappings(animeId: number) {
+  const rows = await db
+    .select({
+      id: animeProviderMappings.id,
+      provider: providerEntities.provider,
+      providerId: providerEntities.providerId,
+      providerSlug: providerEntities.providerSlug,
+      providerUrl: providerEntities.providerUrl,
+      confidence: animeProviderMappings.confidence,
+      source: animeProviderMappings.source,
+      isPrimary: animeProviderMappings.isPrimary,
+      updatedAt: animeProviderMappings.updatedAt,
+      providerEpisodeStart: animeProviderSegments.providerEpisodeStart,
+      providerEpisodeEnd: animeProviderSegments.providerEpisodeEnd,
+      localEpisodeStart: animeProviderSegments.localEpisodeStart,
+      localEpisodeEnd: animeProviderSegments.localEpisodeEnd,
+    })
+    .from(animeProviderMappings)
+    .innerJoin(providerEntities, eq(animeProviderMappings.providerEntityId, providerEntities.id))
+    .leftJoin(
+      animeProviderSegments,
+      eq(animeProviderSegments.animeProviderMappingId, animeProviderMappings.id),
+    )
+    .where(eq(animeProviderMappings.animeId, animeId))
+    .orderBy(
+      asc(providerEntities.provider),
+      asc(animeProviderMappings.id),
+      asc(animeProviderSegments.localEpisodeStart),
+    );
+  const byId = new Map<
+    number,
+    Omit<
+      (typeof rows)[number],
+      "providerEpisodeStart" | "providerEpisodeEnd" | "localEpisodeStart" | "localEpisodeEnd"
+    > & {
+      segments: Array<{
+        providerEpisodeStart: number;
+        providerEpisodeEnd: number;
+        localEpisodeStart: number;
+        localEpisodeEnd: number;
+      }>;
+    }
+  >();
+  for (const {
+    providerEpisodeStart,
+    providerEpisodeEnd,
+    localEpisodeStart,
+    localEpisodeEnd,
+    ...mapping
+  } of rows) {
+    const entry = byId.get(mapping.id) ?? { ...mapping, segments: [] };
+    if (
+      providerEpisodeStart !== null &&
+      providerEpisodeEnd !== null &&
+      localEpisodeStart !== null &&
+      localEpisodeEnd !== null
+    )
+      entry.segments.push({
+        providerEpisodeStart,
+        providerEpisodeEnd,
+        localEpisodeStart,
+        localEpisodeEnd,
+      });
+    byId.set(mapping.id, entry);
+  }
+  return [...byId.values()];
 }
 
 export async function findAnimeByMapping(identity: MappingIdentity) {

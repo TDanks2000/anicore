@@ -29,6 +29,15 @@ const post = (path: string, body: unknown) => call("POST", path, body);
 const patch = (path: string, body: unknown) => call("PATCH", path, body);
 const del = (path: string) => call("DELETE", path);
 
+/** Full response for assertions on status codes and headers. */
+async function getResponse(path: string): Promise<Response> {
+  return app.handle(
+    new Request(`http://localhost${path}`, {
+      headers: { Authorization: `Bearer ${TOKEN}` },
+    }),
+  );
+}
+
 async function createAnime(body: Record<string, unknown>): Promise<number> {
   const response = await post("/anime", body);
   expect(response.status).toBe(200);
@@ -121,6 +130,64 @@ describeWithDatabase("API against SQLite", () => {
       expect(await titles("format=tv")).toEqual(["Show", "Later"]);
       expect(await titles("seasonYear=2001&season=spring")).toEqual(["Show"]);
       expect((await get("/anime?limit=101")).status).toBe(400);
+    });
+
+    test("sorts by catalogue fields, keeps missing values last, and reports totals", async () => {
+      await createAnime({
+        titleRomaji: "Beta",
+        format: "TV",
+        popularity: 5,
+        averageScore: 70,
+        episodeCount: 12,
+      });
+      await createAnime({
+        titleRomaji: "Alpha",
+        format: "TV",
+        popularity: 10,
+        averageScore: 90,
+        episodeCount: 24,
+      });
+      await createAnime({
+        titleRomaji: "Gamma",
+        format: "MOVIE",
+        popularity: 1,
+        averageScore: 50,
+        episodeCount: 1,
+      });
+      await createAnime({ titleRomaji: "Delta" });
+
+      const list = async (query: string) => {
+        const response = await getResponse(`/anime?${query}`);
+        expect(response.status).toBe(200);
+        return {
+          titles: ((await response.json()) as Json[]).map((row) => row.titleRomaji),
+          total: response.headers.get("x-total-count"),
+        };
+      };
+
+      expect(await list("sort=popularity&order=desc")).toEqual({
+        titles: ["Alpha", "Beta", "Gamma", "Delta"],
+        total: "4",
+      });
+      // Missing popularity sorts after real values in both directions.
+      expect(await list("sort=popularity&order=asc")).toEqual({
+        titles: ["Gamma", "Beta", "Alpha", "Delta"],
+        total: "4",
+      });
+      expect(await list("sort=title&order=asc")).toEqual({
+        titles: ["Alpha", "Beta", "Delta", "Gamma"],
+        total: "4",
+      });
+      expect(await list("sort=score&order=desc&limit=2&offset=1")).toEqual({
+        titles: ["Beta", "Gamma"],
+        total: "4",
+      });
+      // The total reflects filters, not just the page.
+      expect(await list("format=tv")).toEqual({ titles: ["Beta", "Alpha"], total: "2" });
+      expect(await list("q=beta")).toEqual({ titles: ["Beta"], total: "1" });
+
+      expect((await getResponse("/anime?sort=unknown")).status).toBe(400);
+      expect((await getResponse("/anime?order=sideways")).status).toBe(400);
     });
 
     test("GET lookups never import: an unknown AniList ID is a plain 404", async () => {
@@ -299,6 +366,39 @@ describeWithDatabase("API against SQLite", () => {
   });
 
   describe("language status administration", () => {
+    test("omitting the media filter returns both audio and subtitle status and evidence", async () => {
+      const id = await createAnime({ titleRomaji: "Both language tracks" });
+      for (const mediaType of ["audio", "subtitle"]) {
+        await post(`/admin/anime/${id}/language-evidence`, {
+          languageCode: "en",
+          mediaType,
+          source: "provider",
+          evidenceType: mediaType === "audio" ? "provider_audio" : "provider_subtitle",
+          value: "available",
+          confidence: 90,
+        });
+      }
+      const all = await get(`/anime/${id}/language-status`);
+      expect((all.body.statuses as Json[]).map((row) => row.mediaType)).toEqual([
+        "audio",
+        "subtitle",
+      ]);
+      expect((all.body.evidence as Json[]).length).toBe(2);
+      const only = await get(`/anime/${id}/language-status?mediaType=subtitle`);
+      expect((only.body.statuses as Json[]).map((row) => row.mediaType)).toEqual(["subtitle"]);
+      expect((only.body.evidence as Json[]).length).toBe(1);
+      expect(
+        (
+          await post(`/admin/anime/${id}/language-evidence`, {
+            languageCode: "en",
+            source: "provider",
+            evidenceType: "provider_audio",
+            value: "available",
+          })
+        ).status,
+      ).toBe(400);
+    });
+
     test("applies overrides and exposes the review queue to admins", async () => {
       const id = await createAnime({ titleRomaji: "Override" });
       const override = await post(`/admin/anime/${id}/language-override`, {

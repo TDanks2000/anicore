@@ -2,8 +2,9 @@ import { db } from "@anicore/db";
 import { animeMappings, episodeMappings, episodes } from "@anicore/db/schema";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { log } from "../../lib/logger";
+import { electSolePrimaryMapping } from "../authoritative-cross-mappings";
 import type { ProviderAnimeData } from "../types";
-import { fetchKitsuEpisodes } from "./client";
+import { fetchKitsuEpisodes, fetchKitsuEpisodeTitles } from "./client";
 import { conflictingKitsuIdentities, formatKitsuIdentityConflict } from "./identity";
 import { type MappedEpisode, mapKitsuAnime, mapKitsuEpisodes } from "./mapper";
 import { findKitsuMatch, isAuthoritativeMatch, type MatchHints } from "./matching";
@@ -180,11 +181,13 @@ async function insertKitsuMapping(
       log.warn(
         `Reassigned stale fuzzy Kitsu mapping ${kitsuData.providerId} from anime ${repairedFromAnimeId} to ${animeId} using Kitsu's AniList mapping`,
       );
+      await electSolePrimaryMapping(db, animeId, "kitsu");
       return;
     }
 
     throw new Error(`Kitsu mapping ${kitsuData.providerId} already belongs to another anime`);
   }
+  await electSolePrimaryMapping(db, animeId, "kitsu");
 }
 
 export async function syncKitsuFromAnilist(
@@ -239,7 +242,19 @@ export async function syncKitsuFromAnilist(
 
 export async function fetchKitsuEpisodeData(kitsuId: string): Promise<MappedEpisode[]> {
   const nodes = await fetchKitsuEpisodes(kitsuId);
-  return mapKitsuEpisodes(nodes);
+  // Titles are optional enrichment: an outage here must not cost the episodes.
+  const titles = await fetchKitsuEpisodeTitles(kitsuId).catch((error: unknown) => {
+    log.warn(
+      `Kitsu episode titles for ${kitsuId} unavailable: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return new Map<string, string>();
+  });
+  return mapKitsuEpisodes(
+    nodes.map((node) => ({
+      ...node,
+      titles: { ...node.titles, canonical: titles.get(node.id) ?? null },
+    })),
+  );
 }
 
 export async function syncKitsuEpisodes(
@@ -281,7 +296,14 @@ export async function syncKitsuEpisodes(
           synopsis: sql`coalesce(episodes.synopsis, excluded.synopsis)`,
           airDate: sql`coalesce(episodes.air_date, excluded.air_date)`,
           thumbnail: sql`coalesce(episodes.thumbnail, excluded.thumbnail)`,
-          lengthMinutes: sql`coalesce(episodes.length_minutes, excluded.length_minutes)`,
+          // Earlier syncs stored Kitsu's seconds as minutes; a stored value far
+          // above Kitsu's own minute figure can only be that mistake.
+          lengthMinutes: sql`case
+            when episodes.length_minutes is null
+              or (excluded.length_minutes is not null and episodes.length_minutes > excluded.length_minutes * 4)
+              then excluded.length_minutes
+            else episodes.length_minutes
+          end`,
           updatedAt: new Date(),
         },
       })

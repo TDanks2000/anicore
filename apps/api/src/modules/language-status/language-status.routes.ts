@@ -10,6 +10,7 @@ import {
   languageMediaTypeEnum,
   paginationQuery,
 } from "../../lib/validators";
+import { syncLanguageStatusForAnime } from "../../scripts/sync-audio-status";
 import { assertAnimeExists } from "../anime/anime.service";
 import {
   addAnimeLanguageEvidence,
@@ -59,6 +60,15 @@ export const languageStatusRoutes = new Elysia({ detail: { tags: ["Language stat
       });
     },
     { params: idParams, query: languageQuery },
+  )
+  .post(
+    "/admin/anime/:id/language-refresh",
+    async ({ params }) => {
+      await assertAnimeExists(params.id);
+      const refresh = await syncLanguageStatusForAnime(params.id);
+      return { ...(await listAnimeLanguageStatus(params.id)), ...refresh };
+    },
+    { params: idParams },
   )
   .post(
     "/admin/anime/:id/language-evidence",

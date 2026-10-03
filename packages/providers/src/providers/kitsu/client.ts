@@ -67,7 +67,24 @@ query($id: ID!) {
 }
 `.trim();
 
+// Kitsu declares `canonical` non-null yet omits it on some records, which nulls
+// the whole record under GraphQL error propagation. Asking for it separately
+// means a bad record can only cost a title, never the episode list itself.
+const ANIME_EPISODE_TITLES_QUERY = `
+query($id: ID!) {
+  findAnimeById(id: $id) {
+    episodes(first: 2000) {
+      nodes {
+        id
+        titles { canonical }
+      }
+    }
+  }
+}
+`.trim();
+
 export interface KitsuTitle {
+  canonical?: string | null;
   romanized?: string | null;
   translated?: string | null;
   original?: string | null;
@@ -145,7 +162,13 @@ async function gql<T>(query: string, variables: Record<string, unknown>): Promis
     if (json.data === undefined || json.data === null) {
       throw new Error(`Kitsu GraphQL: ${message}`);
     }
-    log.warn(`Kitsu GraphQL returned partial data: ${message}`);
+    // Kitsu repeats one error per bad record; collapse identical ones with a count.
+    const counts = new Map<string, number>();
+    for (const error of json.errors) counts.set(error.message, (counts.get(error.message) ?? 0) + 1);
+    const summary = [...counts]
+      .map(([text, count]) => (count > 1 ? `${text} (×${count})` : text))
+      .join(", ");
+    log.warn(`Kitsu GraphQL returned partial data: ${summary}`);
   }
 
   if (!json.data) {
@@ -172,4 +195,19 @@ export async function fetchKitsuEpisodes(kitsuId: string): Promise<KitsuEpisodeN
   return (data?.findAnimeById?.episodes?.nodes ?? []).filter(
     (node): node is KitsuEpisodeNode => node !== null,
   );
+}
+
+/** Canonical episode titles by Kitsu episode id; records Kitsu fails to serialise are absent. */
+export async function fetchKitsuEpisodeTitles(kitsuId: string): Promise<Map<string, string>> {
+  const data = await gql<{
+    findAnimeById: {
+      episodes: { nodes: Array<{ id: string; titles: { canonical: string | null } } | null> };
+    } | null;
+  }>(ANIME_EPISODE_TITLES_QUERY, { id: kitsuId });
+  const titles = new Map<string, string>();
+  for (const node of data?.findAnimeById?.episodes?.nodes ?? []) {
+    const title = node?.titles?.canonical?.trim();
+    if (node && typeof node.id === "string" && title) titles.set(node.id, title);
+  }
+  return titles;
 }

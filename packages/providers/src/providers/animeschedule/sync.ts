@@ -1,7 +1,10 @@
 import { db } from "@anicore/db";
-import { syncAnimeLanguageEvidenceFromEpisodeStatuses } from "@anicore/db/language-status";
-import { animeMappings, episodeLanguageStatus, episodes } from "@anicore/db/schema";
-import { and, eq, sql } from "drizzle-orm";
+import {
+  type ProviderLanguageAssertion,
+  replaceProviderLanguageSnapshot,
+} from "@anicore/db/language-status";
+import { animeMappings, episodes } from "@anicore/db/schema";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { log } from "../../lib/logger";
 import { syncAuthoritativeCrossMappings } from "../authoritative-cross-mappings";
 import { titleSimilarity } from "../title-similarity";
@@ -9,32 +12,32 @@ import type { ProviderAuthoritativeMapping } from "../types";
 import {
   type AnimeScheduleEntry,
   fetchByRoute,
-  hasDub,
-  isFinished,
+  hasLanguageTrack,
   parseAnilistId,
   parseKitsuReference,
   parseMalId,
+  searchByAnilistId,
   searchByTitle,
+  validScheduleDate,
 } from "./client";
 import { assertAnimeScheduleRouteCompatible, assertSingleAnimeScheduleIdentity } from "./identity";
 
 export type DubSyncStatus =
   | "matched-fully-dubbed"
-  | "matched-no-dub"
+  | "matched-unknown"
   | "matched-ongoing-dub"
-  | "unmatched"
-  | "no-episodes";
-
+  | "matched-dub"
+  | "unmatched";
 export interface DubSyncResult {
   status: DubSyncStatus;
   route?: string;
   episodesMarked?: number;
+  subtitlesMarked?: number;
 }
 
-export type AnimeScheduleDubEvidenceAction = "available" | "missing" | "clear";
-
-const RATE_MS = 250;
 export const sleep = (ms: number) => Bun.sleep(ms);
+const RATE_MS = 250;
+const SOURCE_PREFIX = "https://animeschedule.net/anime/";
 
 export function isAnimeScheduleEntryForAnilist(
   entry: AnimeScheduleEntry | null,
@@ -43,359 +46,319 @@ export function isAnimeScheduleEntryForAnilist(
   return Boolean(entry?.websites && parseAnilistId(entry.websites.aniList) === anilistId);
 }
 
-/**
- * Cross-references AnimeSchedule publishes alongside its own route.
- *
- * These are only read from an entry that `isAnimeScheduleEntryForAnilist` has
- * already tied to our AniList id, so the third party's own AniList link is what
- * authorises trusting its sibling links. That verification is what separates
- * this from a guess: an entry whose AniList link does not resolve to us is
- * never reached.
- *
- * Kitsu slug-only references are deliberately skipped rather than guessed at —
- * a provider id must be an id. They are reported by the caller so the remaining
- * gap stays visible.
- */
 export function animeScheduleCrossMappings(entry: AnimeScheduleEntry): {
   mappings: ProviderAuthoritativeMapping[];
   skippedKitsuSlug: string | null;
 } {
   const mappings: ProviderAuthoritativeMapping[] = [];
-
   const malId = parseMalId(entry.websites?.mal);
-  if (malId) {
+  if (malId)
     mappings.push({
       provider: "mal",
       providerId: malId,
       providerUrl: `https://myanimelist.net/anime/${malId}`,
     });
-  }
-
   const { kitsuId, kitsuSlug } = parseKitsuReference(entry.websites?.kitsu);
-  if (kitsuId) {
+  if (kitsuId)
     mappings.push({
       provider: "kitsu",
       providerId: kitsuId,
       providerSlug: kitsuSlug,
       providerUrl: `https://kitsu.io/anime/${kitsuId}`,
     });
-  }
-
   return { mappings, skippedKitsuSlug: kitsuId ? null : kitsuSlug };
 }
 
+export interface ScheduleTrackEvidence {
+  exists: boolean;
+  availableEpisodes: number[];
+}
+
+/** Only explicit, already-aired episode numbers establish episode coverage. */
+export function animeScheduleTrackEvidence(
+  entry: AnimeScheduleEntry,
+  mediaType: "audio" | "subtitle",
+  now = Date.now(),
+): ScheduleTrackEvidence {
+  const premiere = validScheduleDate(mediaType === "audio" ? entry.dubPremier : entry.subPremier);
+  const override = mediaType === "audio" ? entry.dubEpisodeOverride : entry.subEpisodeOverride;
+  const overrideDate = validScheduleDate(override?.overrideDate);
+  const available = new Set<number>();
+  if (premiere !== null && premiere <= now) available.add(1);
+  if (
+    overrideDate !== null &&
+    overrideDate <= now &&
+    Number.isInteger(override?.overrideEpisode) &&
+    override.overrideEpisode > 0 &&
+    Number.isInteger(override.episodesAired) &&
+    override.episodesAired >= 0 &&
+    override.episodesAired < override.overrideEpisode &&
+    override.overrideEpisode <= 10000
+  ) {
+    // episodesAired describes this batch, NOT the total number released.
+    for (
+      let number = override.overrideEpisode - override.episodesAired;
+      number <= override.overrideEpisode;
+      number++
+    )
+      available.add(number);
+  }
+  const exists =
+    available.size > 0 ||
+    (premiere === null &&
+      hasLanguageTrack(entry, mediaType) &&
+      (validScheduleDate(entry.premier) ?? Infinity) <= now);
+  return { exists, availableEpisodes: [...available].sort((a, b) => a - b) };
+}
+
+export type AnimeScheduleDubEvidenceAction = "available" | "clear";
 export function animeScheduleDubEvidenceAction(
   entry: AnimeScheduleEntry,
 ): AnimeScheduleDubEvidenceAction {
-  if (!hasDub(entry)) return "missing";
-  return isFinished(entry) ? "available" : "clear";
+  return animeScheduleTrackEvidence(entry, "audio").exists ? "available" : "clear";
 }
 
-async function findEntry(opts: {
+export function selectVerifiedAnimeScheduleEntry(
+  entries: AnimeScheduleEntry[],
+  anilistId: string,
+): AnimeScheduleEntry | null {
+  const matches = new Map(
+    entries
+      .filter((entry) => isAnimeScheduleEntryForAnilist(entry, anilistId))
+      .map((entry) => [entry.route, entry]),
+  );
+  if (matches.size > 1)
+    throw new Error(
+      `Multiple AnimeSchedule routes claim AniList ${anilistId}: ${[...matches.keys()].join(", ")}`,
+    );
+  return [...matches.values()][0] ?? null;
+}
+
+interface SyncOptions {
+  animeId: number;
   anilistId: string;
   slug: string | null;
   titleRomaji: string;
   titleEnglish: string | null;
-}): Promise<AnimeScheduleEntry | null> {
-  const checkedRoutes = new Set<string>();
+}
 
+async function findEntry(opts: SyncOptions): Promise<AnimeScheduleEntry | null> {
+  // Published IDs avoid title, transliteration, and sequel search ambiguities.
+  await sleep(RATE_MS);
+  const direct = selectVerifiedAnimeScheduleEntry(
+    await searchByAnilistId(opts.anilistId),
+    opts.anilistId,
+  );
+  if (direct) return direct;
+  const checkedRoutes = new Set<string>();
   if (opts.slug) {
     await sleep(RATE_MS);
     const entry = await fetchByRoute(opts.slug);
     checkedRoutes.add(opts.slug);
-    if (entry && isAnimeScheduleEntryForAnilist(entry, opts.anilistId)) {
-      return entry;
-    }
+    if (isAnimeScheduleEntryForAnilist(entry, opts.anilistId)) return entry;
   }
-
-  const searchTitles = [opts.titleRomaji];
-  if (opts.titleEnglish && opts.titleEnglish !== opts.titleRomaji) {
-    searchTitles.push(opts.titleEnglish);
-  }
-
-  for (const title of searchTitles) {
+  for (const title of new Set(
+    [opts.titleRomaji, opts.titleEnglish].filter((title): title is string => Boolean(title)),
+  )) {
     await sleep(RATE_MS);
     const results = await searchByTitle(title);
-    if (!results.length) continue;
-
-    const ranked = results
-      .map((result) => ({
-        result,
-        score: titleSimilarity(result.title, title),
-      }))
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 5);
-
-    for (const { result } of ranked) {
+    const linked = selectVerifiedAnimeScheduleEntry(results, opts.anilistId);
+    if (linked) return linked;
+    const ranked = results.sort(
+      (a, b) => titleSimilarity(b.title, title) - titleSimilarity(a.title, title),
+    );
+    for (const result of ranked) {
       if (checkedRoutes.has(result.route)) continue;
       checkedRoutes.add(result.route);
-
       await sleep(RATE_MS);
       const full = await fetchByRoute(result.route);
-      if (full && isAnimeScheduleEntryForAnilist(full, opts.anilistId)) {
-        return full;
-      }
+      if (isAnimeScheduleEntryForAnilist(full, opts.anilistId)) return full;
     }
   }
-
   return null;
 }
 
-async function loadAnimeScheduleIdentities(animeId: number) {
-  return db
-    .select({
-      providerId: animeMappings.providerId,
-      source: animeMappings.source,
-      confidence: animeMappings.confidence,
-    })
-    .from(animeMappings)
-    .where(and(eq(animeMappings.animeId, animeId), eq(animeMappings.provider, "animeschedule")));
-}
-
 async function storeRoute(animeId: number, route: string): Promise<void> {
-  const existingForAnime = await loadAnimeScheduleIdentities(animeId);
-  assertAnimeScheduleRouteCompatible(existingForAnime, route);
-
-  const [mapping] = await db
-    .insert(animeMappings)
-    .values({
-      animeId,
-      provider: "animeschedule",
-      providerId: route,
-      providerSlug: route,
-      providerUrl: `https://animeschedule.net/anime/${route}`,
-      confidence: 100,
-      source: "api",
-      isPrimary: false,
-    })
-    .onConflictDoUpdate({
-      target: [animeMappings.provider, animeMappings.providerId],
-      set: {
+  await db.transaction(async (tx) => {
+    const existing = await tx
+      .select()
+      .from(animeMappings)
+      .where(and(eq(animeMappings.animeId, animeId), eq(animeMappings.provider, "animeschedule")));
+    assertAnimeScheduleRouteCompatible(existing, route);
+    const [mapping] = await tx
+      .insert(animeMappings)
+      .values({
+        animeId,
+        provider: "animeschedule",
+        providerId: route,
         providerSlug: route,
-        providerUrl: `https://animeschedule.net/anime/${route}`,
-        confidence: sql`max(${animeMappings.confidence}, 100)`,
-        source: sql`case
-          when ${animeMappings.source} in ('manual', 'import', 'system')
-            then ${animeMappings.source}
-          else 'api'
-        end`,
-        isPrimary: animeMappings.isPrimary,
-        updatedAt: new Date(),
-      },
-      setWhere: eq(animeMappings.animeId, animeId),
-    })
-    .returning({ animeId: animeMappings.animeId });
-
-  if (!mapping) {
-    throw new Error(`AnimeSchedule route ${route} already belongs to another anime`);
-  }
+        providerUrl: `${SOURCE_PREFIX}${route}`,
+        confidence: 100,
+        source: "api",
+        isPrimary: true,
+      })
+      .onConflictDoUpdate({
+        target: [animeMappings.provider, animeMappings.providerId],
+        set: {
+          providerSlug: route,
+          providerUrl: `${SOURCE_PREFIX}${route}`,
+          confidence: 100,
+          isPrimary: true,
+          source: sql`case when ${animeMappings.source} in ('manual', 'import', 'system') then ${animeMappings.source} else 'api' end`,
+          updatedAt: new Date(),
+        },
+        setWhere: eq(animeMappings.animeId, animeId),
+      })
+      .returning({ animeId: animeMappings.animeId });
+    if (!mapping) throw new Error(`AnimeSchedule route ${route} already belongs to another anime`);
+  });
 }
 
-async function loadVerifiedCachedEntry(opts: {
-  animeId: number;
-  anilistId: string;
-}): Promise<AnimeScheduleEntry | null> {
+async function clearSnapshot(animeId: number): Promise<void> {
+  await replaceProviderLanguageSnapshot({
+    animeId,
+    provider: "animeschedule",
+    sourceUrlPrefixes: [SOURCE_PREFIX, "urn:anicore:episode-language-status:animeschedule"],
+    evidenceTypes: ["provider_audio", "provider_subtitle"],
+    evidence: [],
+  });
+}
+
+async function loadVerifiedCachedEntry(opts: SyncOptions): Promise<AnimeScheduleEntry | null> {
   const mappings = await db
-    .select({
-      id: animeMappings.id,
-      providerId: animeMappings.providerId,
-      source: animeMappings.source,
-      confidence: animeMappings.confidence,
-    })
+    .select()
     .from(animeMappings)
     .where(
       and(eq(animeMappings.animeId, opts.animeId), eq(animeMappings.provider, "animeschedule")),
     );
-
-  const identity = assertSingleAnimeScheduleIdentity(mappings);
-  if (!identity) return null;
-  const existing = mappings[0]!;
-
-  await sleep(RATE_MS);
-  const entry = await fetchByRoute(existing.providerId);
-  if (entry && isAnimeScheduleEntryForAnilist(entry, opts.anilistId)) {
-    return entry;
+  let identity: ReturnType<typeof assertSingleAnimeScheduleIdentity>;
+  try {
+    identity = assertSingleAnimeScheduleIdentity(mappings);
+  } catch (error) {
+    await clearSnapshot(opts.animeId);
+    throw error;
   }
-
-  if (["manual", "import", "system"].includes(existing.source)) {
+  if (!identity) return null;
+  await sleep(RATE_MS);
+  // Outages throw: never interpret a server failure as identity withdrawal.
+  const entry = await fetchByRoute(identity.providerId);
+  if (isAnimeScheduleEntryForAnilist(entry, opts.anilistId)) return entry;
+  if (["manual", "import", "system"].includes(identity.source)) {
+    await clearSnapshot(opts.animeId);
     throw new Error(
-      `Stored AnimeSchedule mapping ${existing.providerId} does not verify against AniList ${opts.anilistId}; refusing to override ${existing.source} mapping`,
+      `Stored AnimeSchedule mapping ${identity.providerId} does not verify against AniList ${opts.anilistId}; refusing to override ${identity.source} mapping`,
     );
   }
-
-  await db.delete(animeMappings).where(eq(animeMappings.id, existing.id));
+  // A disproved automatic identity cannot keep supplying language evidence.
+  await clearSnapshot(opts.animeId);
+  await db.delete(animeMappings).where(eq(animeMappings.id, mappings[0]!.id));
   return null;
 }
 
-function animeScheduleEvidenceSourceUrl(route: string): string {
-  return `https://animeschedule.net/anime/${route}`;
-}
-
-async function clearDubStatus(animeId: number, sourceUrl: string): Promise<void> {
-  await db
-    .delete(episodeLanguageStatus)
-    .where(
-      and(
-        eq(episodeLanguageStatus.animeId, animeId),
-        eq(episodeLanguageStatus.languageCode, "en"),
-        eq(episodeLanguageStatus.mediaType, "audio"),
-        eq(episodeLanguageStatus.provider, "animeschedule"),
-      ),
-    );
-
-  await syncAnimeLanguageEvidenceFromEpisodeStatuses({
-    animeId,
-    languageCode: "en",
-    mediaType: "audio",
-    provider: "animeschedule",
-    sourceUrl,
-  });
-}
-
-async function upsertDubStatus(
-  animeId: number,
-  dubStatus: "available" | "missing",
-  sourceUrl: string,
-): Promise<number> {
-  const rows = await db
-    .select({ number: episodes.number })
-    .from(episodes)
-    .where(eq(episodes.animeId, animeId));
-
-  if (!rows.length) {
-    await clearDubStatus(animeId, sourceUrl);
-    return 0;
-  }
-
-  const checkedAt = new Date();
-  const CHUNK = 500;
-
-  for (let i = 0; i < rows.length; i += CHUNK) {
-    const chunk = rows.slice(i, i + CHUNK);
-    await db
-      .insert(episodeLanguageStatus)
-      .values(
-        chunk.map((episode) => ({
-          animeId,
-          episodeNumber: episode.number,
-          languageCode: "en",
-          mediaType: "audio" as const,
-          status: dubStatus,
-          provider: "animeschedule",
-          confidence: 90,
-          checkedAt,
-        })),
-      )
-      .onConflictDoUpdate({
-        target: [
-          episodeLanguageStatus.animeId,
-          episodeLanguageStatus.episodeNumber,
-          episodeLanguageStatus.languageCode,
-          episodeLanguageStatus.mediaType,
-          episodeLanguageStatus.provider,
-        ],
-        set: {
-          status: sql`excluded.status`,
-          confidence: sql`excluded.confidence`,
-          checkedAt: sql`excluded.checked_at`,
-          updatedAt: new Date(),
-        },
-      });
-  }
-
-  await syncAnimeLanguageEvidenceFromEpisodeStatuses({
-    animeId,
-    languageCode: "en",
-    mediaType: "audio",
-    provider: "animeschedule",
-    sourceUrl,
-  });
-
-  return rows.length;
-}
-
-/**
- * Persists the Kitsu/MAL cross-references carried by a verified entry.
- *
- * Reached only after `isAnimeScheduleEntryForAnilist` has confirmed the entry's
- * own AniList link resolves to this anime, which is what makes its sibling
- * links trustworthy rather than a guess.
- *
- * Failures are contained: a cross-reference that disagrees with an identity we
- * already hold is worth reporting, but it must not fail the dub sync this
- * function exists to perform. The conflict stays visible in the log and in
- * `db:audit-mappings`.
- */
 async function persistCrossMappings(animeId: number, entry: AnimeScheduleEntry): Promise<void> {
   const { mappings, skippedKitsuSlug } = animeScheduleCrossMappings(entry);
-
-  if (skippedKitsuSlug) {
+  if (skippedKitsuSlug)
     log.warn(
       `AnimeSchedule ${entry.route} references Kitsu by slug (${skippedKitsuSlug}); no numeric id to store`,
     );
-  }
   if (!mappings.length) return;
-
   try {
     await syncAuthoritativeCrossMappings(animeId, mappings);
   } catch (err) {
     log.warn(
-      `AnimeSchedule cross-mapping for anime ${animeId} (${entry.route}) rejected: ${
-        err instanceof Error ? err.message : String(err)
-      }`,
+      `AnimeSchedule cross-mapping for anime ${animeId} (${entry.route}) rejected: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
 }
 
-export async function syncDubStatus(opts: {
-  animeId: number;
-  anilistId: string;
-  slug: string | null;
-  titleRomaji: string;
-  titleEnglish: string | null;
-}): Promise<DubSyncResult> {
-  let entry = await loadVerifiedCachedEntry({
-    animeId: opts.animeId,
-    anilistId: opts.anilistId,
-  });
-
+/** Refreshes BOTH English audio and subtitles from the same verified identity. */
+export async function syncDubStatus(opts: SyncOptions): Promise<DubSyncResult> {
+  const entry = (await loadVerifiedCachedEntry(opts)) ?? (await findEntry(opts));
   if (!entry) {
-    entry = await findEntry(opts);
-    if (entry) {
-      await storeRoute(opts.animeId, entry.route);
-    }
+    await clearSnapshot(opts.animeId);
+    return { status: "unmatched" };
   }
-
-  if (!entry) return { status: "unmatched" };
-
-  if (!isAnimeScheduleEntryForAnilist(entry, opts.anilistId)) {
+  if (!isAnimeScheduleEntryForAnilist(entry, opts.anilistId))
     throw new Error(`AnimeSchedule route ${entry.route} does not match AniList ${opts.anilistId}`);
+  // An explicit sibling MAL conflict invalidates this identity for language evidence too.
+  const mal = await db
+    .select()
+    .from(animeMappings)
+    .where(and(eq(animeMappings.animeId, opts.animeId), eq(animeMappings.provider, "mal")));
+  const publishedMal = parseMalId(entry.websites?.mal);
+  if (
+    publishedMal &&
+    mal.some((mapping) => mapping.providerId !== publishedMal && mapping.source !== "fuzzy")
+  ) {
+    await clearSnapshot(opts.animeId);
+    throw new Error(`AnimeSchedule ${entry.route} conflicts with the stored MAL identity`);
   }
-
+  await storeRoute(opts.animeId, entry.route);
   await persistCrossMappings(opts.animeId, entry);
-
-  const sourceUrl = animeScheduleEvidenceSourceUrl(entry.route);
-  const evidenceAction = animeScheduleDubEvidenceAction(entry);
-
-  if (evidenceAction === "missing") {
-    const count = await upsertDubStatus(opts.animeId, "missing", sourceUrl);
-    return {
-      status: "matched-no-dub",
-      route: entry.route,
-      episodesMarked: count,
-    };
+  const rows = await db
+    .select({ number: episodes.number, kind: episodes.kind })
+    .from(episodes)
+    .where(eq(episodes.animeId, opts.animeId))
+    .orderBy(asc(episodes.number));
+  const evidence: ProviderLanguageAssertion[] = [];
+  const episodeRows: NonNullable<
+    Parameters<typeof replaceProviderLanguageSnapshot>[0]["episodes"]
+  > = [];
+  const tracks = {
+    audio: animeScheduleTrackEvidence(entry, "audio"),
+    subtitle: animeScheduleTrackEvidence(entry, "subtitle"),
+  };
+  let completeDub = false;
+  for (const mediaType of ["audio", "subtitle"] as const) {
+    const track = tracks[mediaType];
+    if (!track.exists) continue;
+    // A numbering/count conflict permits anime-level existence, never per-episode guesses.
+    const compatible =
+      Number.isInteger(entry.episodes) &&
+      entry.episodes! > 0 &&
+      rows.length === entry.episodes &&
+      rows.every((row, index) => row.kind === "normal" && row.number === index + 1);
+    const numbers = compatible
+      ? new Set(track.availableEpisodes.filter((number) => number <= entry.episodes!))
+      : new Set<number>();
+    const complete = compatible && numbers.size === entry.episodes;
+    if (mediaType === "audio") completeDub = complete;
+    const value = numbers.size > 0 && !complete ? "partial" : "available";
+    evidence.push({
+      languageCode: "en",
+      mediaType,
+      evidenceType: mediaType === "audio" ? "provider_audio" : "provider_subtitle",
+      sourceUrl: `${SOURCE_PREFIX}${entry.route}`,
+      value,
+      confidence: 90,
+    });
+    for (const episodeNumber of numbers)
+      episodeRows.push({
+        episodeNumber,
+        languageCode: "en",
+        mediaType,
+        status: "available",
+        confidence: 90,
+      });
   }
-
-  if (evidenceAction === "available") {
-    const count = await upsertDubStatus(opts.animeId, "available", sourceUrl);
-    if (!count) return { status: "no-episodes" };
-    return {
-      status: "matched-fully-dubbed",
-      route: entry.route,
-      episodesMarked: count,
-    };
-  }
-
-  await clearDubStatus(opts.animeId, sourceUrl);
-  return { status: "matched-ongoing-dub", route: entry.route, episodesMarked: 0 };
+  await replaceProviderLanguageSnapshot({
+    animeId: opts.animeId,
+    provider: "animeschedule",
+    sourceUrlPrefixes: [SOURCE_PREFIX, "urn:anicore:episode-language-status:animeschedule"],
+    evidenceTypes: ["provider_audio", "provider_subtitle"],
+    evidence,
+    episodes: episodeRows,
+  });
+  return {
+    status: completeDub
+      ? "matched-fully-dubbed"
+      : tracks.audio.exists
+        ? tracks.audio.availableEpisodes.length
+          ? "matched-ongoing-dub"
+          : "matched-dub"
+        : "matched-unknown",
+    route: entry.route,
+    episodesMarked: episodeRows.filter((row) => row.mediaType === "audio").length,
+    subtitlesMarked: episodeRows.filter((row) => row.mediaType === "subtitle").length,
+  };
 }

@@ -14,6 +14,7 @@ import type {
   SyncMonitorControlCommand,
   SyncMonitorControlState,
   SyncMonitorEvent,
+  SyncMonitorFileInfo,
   SyncMonitorProgress,
   SyncMonitorPublicConfig,
   SyncMonitorRuntimeConfig,
@@ -32,6 +33,7 @@ export type {
   SyncMonitorControlCommand,
   SyncMonitorControlState,
   SyncMonitorEvent,
+  SyncMonitorFileInfo,
   SyncMonitorProgress,
   SyncMonitorPublicConfig,
   SyncMonitorRuntimeConfig,
@@ -50,6 +52,11 @@ const MAX_PARALLEL = 32;
 const MAX_CHECKPOINT_EVERY = 10_000;
 const MAX_RATE_LIMIT_MS = 60_000;
 const MAX_START_LIMIT = 1_000_000;
+/**
+ * Stable timestamp for the unsaved default config. A real clock value here would
+ * change on every read, churning snapshot revisions and the dashboard's form.
+ */
+const DEFAULT_RUNTIME_CONFIG_UPDATED_AT = new Date(0).toISOString();
 
 function monitorDir(): string {
   return process.env.ANICORE_SYNC_MONITOR_DIR ?? "data/sync-monitor";
@@ -151,7 +158,7 @@ function defaultRuntimeConfig(): SyncMonitorRuntimeConfig {
     resetAll: false,
     autoSyncEnabled: true,
     autoSyncIntervalMinutes: DEFAULT_AUTO_SYNC_INTERVAL_MINUTES,
-    updatedAt: nowIso(),
+    updatedAt: DEFAULT_RUNTIME_CONFIG_UPDATED_AT,
     updatedBy: "default",
   };
 }
@@ -163,6 +170,7 @@ function defaultControlState(): SyncMonitorControlState {
     requestedAt: null,
     requestedBy: null,
     message: null,
+    acknowledgedAt: null,
   };
 }
 
@@ -181,6 +189,7 @@ function normalizeControlState(value: unknown): SyncMonitorControlState {
     requestedBy:
       input.requestedBy === "api" || input.requestedBy === "sync" ? input.requestedBy : null,
     message: typeof input.message === "string" ? input.message : null,
+    acknowledgedAt: typeof input.acknowledgedAt === "string" ? input.acknowledgedAt : null,
   };
 }
 
@@ -263,7 +272,21 @@ export function writeSyncMonitorControlState(
     requestedAt: command ? nowIso() : null,
     requestedBy: command ? requestedBy : null,
     message,
+    acknowledgedAt: null,
   };
+  atomicWriteJson(controlFile(), next);
+  return next;
+}
+
+/**
+ * Marks the current command as acted on by the sync loop. The command stays in
+ * place (so repeated polls are idempotent) but `acknowledgedAt` records that the
+ * loop saw and applied it, which lets the UI stop showing a pending spinner.
+ */
+export function acknowledgeSyncMonitorControlState(): SyncMonitorControlState {
+  const current = readSyncMonitorControlState();
+  if (!current.command || current.acknowledgedAt) return current;
+  const next: SyncMonitorControlState = { ...current, acknowledgedAt: nowIso() };
   atomicWriteJson(controlFile(), next);
   return next;
 }
@@ -757,13 +780,7 @@ function calculateProgress(input: {
   };
 }
 
-export function getSyncMonitorFileInfo(): {
-  statusExists: boolean;
-  eventsExists: boolean;
-  controlExists: boolean;
-  runtimeConfigExists: boolean;
-  statusUpdatedAt: string | null;
-} {
+export function getSyncMonitorFileInfo(): SyncMonitorFileInfo {
   const path = statusFile();
   const statusExists = existsSync(path);
   const eventsExists = existsSync(eventsFile());

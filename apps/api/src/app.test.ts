@@ -170,6 +170,7 @@ describe("app contract", () => {
         requestedAt: null,
         requestedBy: null,
         message: null,
+        acknowledgedAt: null,
       },
       files: {
         statusExists: false,
@@ -179,6 +180,47 @@ describe("app contract", () => {
         statusUpdatedAt: null,
       },
     });
+
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("serves one consistent snapshot for the dashboard", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "anicore-monitor-"));
+    process.env.ANICORE_SYNC_MONITOR_DIR = dir;
+    process.env.ANICORE_SYNC_MONITOR_CODE = "test-code";
+
+    const first = await app.handle(
+      new Request("http://localhost/sync-monitor/snapshot?eventLimit=5", {
+        headers: { Authorization: "Bearer test-code" },
+      }),
+    );
+    expect(first.status).toBe(200);
+    const body = (await json(first)) as {
+      revision: string;
+      serverTime: string;
+      active: boolean;
+      status: unknown;
+      control: { command: string | null };
+      files: { runtimeConfigExists: boolean };
+      config: { runtime: { autoSyncEnabled: boolean } };
+      automation: { state: string };
+      events: unknown[];
+    };
+    expect(body.status).toBeNull();
+    expect(body.active).toBe(false);
+    expect(body.control.command).toBeNull();
+    expect(body.config.runtime.autoSyncEnabled).toBe(true);
+    expect(body.automation.state).toBe("not-started");
+    expect(body.events).toEqual([]);
+    expect(typeof body.serverTime).toBe("string");
+
+    // Idle reads must not churn the revision, or the client re-renders forever.
+    const second = await app.handle(
+      new Request("http://localhost/sync-monitor/snapshot?eventLimit=5", {
+        headers: { Authorization: "Bearer test-code" },
+      }),
+    );
+    expect(((await json(second)) as { revision: string }).revision).toBe(body.revision);
 
     rmSync(dir, { recursive: true, force: true });
   });

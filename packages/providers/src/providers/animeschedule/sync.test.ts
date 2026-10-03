@@ -4,7 +4,9 @@ import type { AnimeScheduleEntry } from "./client";
 import {
   animeScheduleCrossMappings,
   animeScheduleDubEvidenceAction,
+  animeScheduleTrackEvidence,
   isAnimeScheduleEntryForAnilist,
+  selectVerifiedAnimeScheduleEntry,
 } from "./sync";
 
 function entry(aniList: string | undefined): AnimeScheduleEntry {
@@ -54,21 +56,76 @@ describe("AnimeSchedule mapping verification", () => {
 });
 
 describe("AnimeSchedule dub evidence lifecycle", () => {
-  test("marks every canonical episode available only for a finished dub", () => {
+  test("a premiere proves existence without proving all episodes", () => {
     const value = entry("https://anilist.co/anime/151807/Example/");
+    expect(animeScheduleDubEvidenceAction(value)).toBe("available");
+    expect(animeScheduleTrackEvidence(value, "audio", Date.parse("2026-10-01"))).toEqual({
+      exists: true,
+      availableEpisodes: [1],
+    });
+  });
+
+  test("missing schedule data withdraws evidence instead of asserting absence", () => {
+    const value = entry("https://anilist.co/anime/151807/Example/");
+    value.dubPremier = "0001-01-01T00:00:00Z";
+    expect(animeScheduleDubEvidenceAction(value)).toBe("clear");
+  });
+
+  test("an ongoing original broadcast does not erase an already aired dub premiere", () => {
+    const value = entry("https://anilist.co/anime/151807/Example/");
+    value.status = "Ongoing";
     expect(animeScheduleDubEvidenceAction(value)).toBe("available");
   });
 
-  test("replaces stale positive evidence with missing when no dub premiere exists", () => {
-    const value = entry("https://anilist.co/anime/151807/Example/");
-    value.dubPremier = "0001-01-01T00:00:00Z";
-    expect(animeScheduleDubEvidenceAction(value)).toBe("missing");
+  test("Cowboy Bebop's time markers prove English tracks despite zero premieres", () => {
+    const value = entry("anilist.co/anime/1");
+    value.premier = "1998-04-02T16:00:00Z";
+    value.dubPremier = value.subPremier = "0001-01-01T00:00:00Z";
+    value.jpnTime = "2020-06-14T16:00:00Z";
+    value.dubTime = value.subTime = "2023-03-18T16:01:00Z";
+    for (const mediaType of ["audio", "subtitle"] as const)
+      expect(animeScheduleTrackEvidence(value, mediaType)).toEqual({
+        exists: true,
+        availableEpisodes: [],
+      });
   });
 
-  test("withdraws all-available evidence while a known dub is still ongoing", () => {
-    const value = entry("https://anilist.co/anime/151807/Example/");
-    value.status = "Ongoing";
-    expect(animeScheduleDubEvidenceAction(value)).toBe("clear");
+  test("future premiere and override do not establish released audio", () => {
+    const value = entry("anilist.co/anime/1");
+    value.dubTime = "2023-03-18T16:01:00Z";
+    value.dubEpisodeOverride = {
+      overrideDate: "2026-01-02T00:00:00Z",
+      overrideEpisode: 12,
+      episodesAired: 11,
+    };
+    expect(animeScheduleTrackEvidence(value, "audio", Date.parse("2025-12-31"))).toEqual({
+      exists: false,
+      availableEpisodes: [],
+    });
+  });
+
+  test("an override records exactly its batch, never preceding episodes", () => {
+    const value = entry("anilist.co/anime/1");
+    value.dubPremier = "0001-01-01T00:00:00Z";
+    value.dubEpisodeOverride = {
+      overrideDate: "2026-01-02T00:00:00Z",
+      overrideEpisode: 12,
+      episodesAired: 5,
+    };
+    expect(animeScheduleTrackEvidence(value, "audio", Date.parse("2026-02-01"))).toEqual({
+      exists: true,
+      availableEpisodes: [7, 8, 9, 10, 11, 12],
+    });
+  });
+
+  test("refuses multiple routes claiming the same AniList identity", () => {
+    const first = entry("anilist.co/anime/1");
+    expect(() =>
+      selectVerifiedAnimeScheduleEntry([first, { ...first, route: "another" }], "1"),
+    ).toThrow("Multiple AnimeSchedule routes");
+    expect(selectVerifiedAnimeScheduleEntry([first, entry("anilist.co/anime/2")], "1")).toEqual(
+      first,
+    );
   });
 });
 

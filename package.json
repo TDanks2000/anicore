@@ -47,6 +47,7 @@
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
     "db:audit-mappings": "cd apps/api && bun run db:audit-mappings --",
+    "db:audit-languages": "cd apps/api && bun run db:audit-languages --",
     "db:check-shape": "cd apps/api && bun run db:check-shape --",
     "db:empty": "cd apps/api && bun run db:empty --",
     "db:generate": "cd apps/api && bun run db:generate --",

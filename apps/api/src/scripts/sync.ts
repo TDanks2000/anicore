@@ -8,7 +8,7 @@ import {
   previewEpisodeTitleEnrichment,
 } from "@anicore/providers/episode-titles";
 import { kitsuPlugin } from "@anicore/providers/kitsu/plugin";
-import { withAnilistRetry } from "@anicore/providers/lib/anilist-rate-limit";
+import { isNotFoundError, withAnilistRetry } from "@anicore/providers/lib/anilist-rate-limit";
 import {
   appendUnmatched,
   clearAllUnmatched,
@@ -31,6 +31,7 @@ import { DEFAULT_AUTO_SYNC_INTERVAL_MINUTES } from "@anicore/sync-monitor";
 import { and, eq } from "drizzle-orm";
 import { parseIntegerFlag } from "../lib/sync-cli";
 import {
+  acknowledgeSyncMonitorControlState,
   createSyncMonitorBatch,
   ensureSyncMonitorAccessCode,
   ensureSyncMonitorRuntimeConfig,
@@ -43,7 +44,7 @@ import {
   writeSyncMonitorControlState,
 } from "../lib/sync-monitor";
 import { advanceSyncCheckpoint, createSyncCheckpointState } from "../lib/sync-progress";
-import { syncDubStatusForAnime, syncSubStatusForAnime } from "./sync-audio-status";
+import { syncLanguageStatusForAnime } from "./sync-audio-status";
 
 // ── CLI flags ─────────────────────────────────────────────────────────────────
 
@@ -175,6 +176,7 @@ async function waitForControlRelease(monitor?: SyncMonitor | null): Promise<bool
         stopRequested = true;
         monitor.stopping(control.message ?? "Stop requested from monitor");
       }
+      acknowledgeSyncMonitorControlState();
       return false;
     }
 
@@ -183,6 +185,7 @@ async function waitForControlRelease(monitor?: SyncMonitor | null): Promise<bool
         paused = true;
         monitor.pause(control.message ?? "Pause requested from monitor");
       }
+      acknowledgeSyncMonitorControlState();
       await Bun.sleep(1000);
       refreshRuntimeConfig(monitor);
       continue;
@@ -449,7 +452,7 @@ async function runDryRun(): Promise<void> {
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         monitor?.recordError(message, index, id);
-        reportIssue("error");
+        if (!isNotFoundError(err)) reportIssue("error");
         return { status: "error" as const, message };
       }
     },
@@ -594,17 +597,12 @@ async function processFetchedAnime(
 
   bar.setStage("audio");
   monitor?.stage("audio-sub", index, id);
-  await syncSubStatusForAnime(result.animeId).catch((err) =>
-    log.warn(
-      `Audio status sync failed for ID ${id}: ${err instanceof Error ? err.message : String(err)}`,
-    ),
-  );
   monitor?.stage("audio-dub", index, id);
-  await syncDubStatusForAnime(result.animeId).catch((err) =>
-    log.warn(
-      `Audio status sync failed for ID ${id}: ${err instanceof Error ? err.message : String(err)}`,
-    ),
-  );
+  const languageSync = await syncLanguageStatusForAnime(result.animeId);
+  for (const error of languageSync.errors)
+    log.warn(`Language status sync failed for ID ${id}: ${error}`);
+  for (const warning of languageSync.warnings)
+    log.warn(`Optional language provider for ID ${id}: ${warning}`);
 
   return { outcome: result.created ? "created" : "updated" };
 }

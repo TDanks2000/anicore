@@ -104,4 +104,33 @@ describe("SyncEngine.iterateParallel", () => {
     expect(calls.indexOf("process-3")).toBeGreaterThan(calls.indexOf("fetch-start-3"));
     expect(calls.indexOf("fetch-start-4")).toBeGreaterThan(calls.indexOf("process-3"));
   });
+
+  test("does not back off when AniList reports missing IDs", async () => {
+    const engine = new SyncEngine([]);
+    const calls: string[] = [];
+
+    const stats = await engine.iterateParallel(
+      {
+        ids: [1, 2, 3, 4],
+        startIndex: 0,
+        endIndex: 4,
+        label: "test",
+        concurrency: 2,
+        rateLimitMs: 0,
+      },
+      async (id) => {
+        calls.push(`fetch-start-${id}`);
+        if (id <= 2) throw new Error("Request failed with status 404");
+        return id;
+      },
+      async (id) => {
+        calls.push(`process-${id}`);
+        return { outcome: "updated" };
+      },
+    );
+
+    expect(stats.failed).toBe(2);
+    // Still parallel: ID 4 starts fetching before ID 3 is processed.
+    expect(calls.indexOf("fetch-start-4")).toBeLessThan(calls.indexOf("process-3"));
+  });
 });

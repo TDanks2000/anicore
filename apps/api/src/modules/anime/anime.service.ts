@@ -20,9 +20,26 @@ import {
   type AnimeMappingInput,
   insertAnimeMappings,
   listAnimeMappings,
+  listAnimeSegmentMappings,
   prepareNewAnimeMappings,
 } from "../mappings/mappings.service";
 import { formatAnime } from "./anime.format";
+
+/** Fields the public anime list can be ordered by. */
+export const animeSortFields = [
+  "id",
+  "title",
+  "format",
+  "status",
+  "seasonYear",
+  "episodes",
+  "score",
+  "popularity",
+] as const;
+export type AnimeSortField = (typeof animeSortFields)[number];
+
+export const animeSortOrders = ["asc", "desc"] as const;
+export type AnimeSortOrder = (typeof animeSortOrders)[number];
 
 export interface AnimeListQuery {
   limit: number;
@@ -32,6 +49,8 @@ export interface AnimeListQuery {
   season?: string;
   seasonYear?: number;
   status?: string;
+  sort?: AnimeSortField;
+  order?: AnimeSortOrder;
 }
 
 /** Escapes LIKE metacharacters so user input only ever matches literally. */
@@ -72,6 +91,43 @@ function searchConditions(search: string): { where: SQL; rank: SQL } {
   return { where, rank };
 }
 
+const animeSortColumns: Record<AnimeSortField, AnyColumn | SQL> = {
+  id: anime.id,
+  title: sql`lower(${anime.titleRomaji})`,
+  format: anime.format,
+  status: anime.status,
+  seasonYear: anime.seasonYear,
+  episodes: anime.episodeCount,
+  score: anime.averageScore,
+  popularity: anime.popularity,
+};
+
+/** Fields that can be absent; missing values sort after real ones either way. */
+const nullableSortFields: ReadonlySet<AnimeSortField> = new Set([
+  "format",
+  "status",
+  "seasonYear",
+  "episodes",
+  "score",
+  "popularity",
+]);
+
+function listOrder(query: AnimeListQuery, ranked: { rank: SQL } | null): SQL[] {
+  if (!query.sort) {
+    // Without an explicit sort, search results stay relevance-ranked and plain
+    // lists stay in id order, matching the original contract.
+    return ranked
+      ? [ranked.rank, sql`${anime.popularity} desc nulls last`, asc(anime.id)]
+      : [asc(anime.id)];
+  }
+
+  const column = animeSortColumns[query.sort];
+  const primary = query.order === "desc" ? desc(column) : asc(column);
+  const ordered = nullableSortFields.has(query.sort) ? sql`${primary} nulls last` : primary;
+  // Ids are unique, so they keep pagination stable when the sorted values tie.
+  return query.sort === "id" ? [ordered] : [ordered, asc(anime.id)];
+}
+
 export async function listAnime(query: AnimeListQuery) {
   const conditions: SQL[] = [];
   const search = query.q?.trim();
@@ -83,19 +139,20 @@ export async function listAnime(query: AnimeListQuery) {
   if (query.status) conditions.push(eq(anime.status, query.status.toUpperCase()));
   if (query.seasonYear !== undefined) conditions.push(eq(anime.seasonYear, query.seasonYear));
 
-  const order = ranked
-    ? [ranked.rank, sql`${anime.popularity} desc nulls last`, asc(anime.id)]
-    : [asc(anime.id)];
+  const where = conditions.length ? and(...conditions) : undefined;
 
-  const rows = await db
-    .select()
-    .from(anime)
-    .where(conditions.length ? and(...conditions) : undefined)
-    .orderBy(...order)
-    .limit(query.limit)
-    .offset(query.offset);
+  const [rows, countRows] = await Promise.all([
+    db
+      .select()
+      .from(anime)
+      .where(where)
+      .orderBy(...listOrder(query, ranked))
+      .limit(query.limit)
+      .offset(query.offset),
+    db.select({ total: sql<number>`count(*)` }).from(anime).where(where),
+  ]);
 
-  return rows.map(formatAnime);
+  return { items: rows.map(formatAnime), total: countRows[0]?.total ?? 0 };
 }
 
 async function findAnimeRow(id: number) {
@@ -174,18 +231,21 @@ export async function getAnimeFull(id: number) {
   const row = await findAnimeRow(id);
   if (!row) throw notFound("Anime not found");
 
-  const [mappings, episodeRows, studioRows, tagRows, externalLinks, relations] = await Promise.all([
-    listAnimeMappings(id),
-    listAnimeEpisodes(id),
-    getStudiosForAnime(id),
-    getTagsForAnime(id),
-    listAnimeExternalLinks(id),
-    listAnimeRelations(id),
-  ]);
+  const [mappings, segmentMappings, episodeRows, studioRows, tagRows, externalLinks, relations] =
+    await Promise.all([
+      listAnimeMappings(id),
+      listAnimeSegmentMappings(id),
+      listAnimeEpisodes(id),
+      getStudiosForAnime(id),
+      getTagsForAnime(id),
+      listAnimeExternalLinks(id),
+      listAnimeRelations(id),
+    ]);
 
   return {
     ...formatAnime(row),
     mappings,
+    segmentMappings,
     episodes: episodeRows,
     studios: studioRows,
     tags: tagRows,

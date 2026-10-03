@@ -12,6 +12,12 @@ export function isRateLimitError(err: unknown): boolean {
   );
 }
 
+/** AniList has gaps in its ID space; a 404 means the entry is gone, not that the API is struggling. */
+export function isNotFoundError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /\b404\b|returned no media/i.test(msg);
+}
+
 export function isTransientAnilistError(err: unknown): boolean {
   const message = err instanceof Error ? err.message : String(err);
   return (

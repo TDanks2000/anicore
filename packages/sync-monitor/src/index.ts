@@ -104,6 +104,13 @@ export interface SyncMonitorControlState {
   requestedAt: string | null;
   requestedBy: "api" | "sync" | null;
   message: string | null;
+  /** Set by the sync loop once it has acted on the command; null while pending. */
+  acknowledgedAt: string | null;
+}
+
+/** A command the API has queued but the sync loop has not acted on yet. */
+export function isControlPending(control: SyncMonitorControlState | null | undefined): boolean {
+  return Boolean(control?.command) && !control?.acknowledgedAt;
 }
 
 export interface SyncMonitorControlResponse {
@@ -153,13 +160,15 @@ export interface SyncMonitorStatusResponse {
   status: SyncMonitorStatus | null;
   active: boolean;
   control: SyncMonitorControlState;
-  files: {
-    statusExists: boolean;
-    eventsExists: boolean;
-    controlExists: boolean;
-    runtimeConfigExists: boolean;
-    statusUpdatedAt: string | null;
-  };
+  files: SyncMonitorFileInfo;
+}
+
+export interface SyncMonitorFileInfo {
+  statusExists: boolean;
+  eventsExists: boolean;
+  controlExists: boolean;
+  runtimeConfigExists: boolean;
+  statusUpdatedAt: string | null;
 }
 
 export interface SyncMonitorEventsResponse {
@@ -170,11 +179,80 @@ export interface SyncMonitorConfigResponse extends SyncMonitorPublicConfig {
   automation: SyncMonitorAutomationStatus;
 }
 
+/**
+ * Everything the dashboard needs for one poll, read together so the pieces are
+ * consistent. `revision` changes only when the underlying data changes, letting
+ * the client skip re-renders on idle ticks.
+ */
+export interface SyncMonitorSnapshotResponse {
+  revision: string;
+  serverTime: string;
+  status: SyncMonitorStatus | null;
+  active: boolean;
+  control: SyncMonitorControlState;
+  files: SyncMonitorFileInfo;
+  config: SyncMonitorPublicConfig;
+  automation: SyncMonitorAutomationStatus;
+  events: SyncMonitorEvent[];
+}
+
+export interface DashboardProxyPatch {
+  mode?: "environment" | "direct" | "custom" | "free";
+  url?: string;
+  noProxy?: string;
+  maxAttempts?: number;
+  timeoutMs?: number;
+}
+export interface DashboardResources {
+  proxy: {
+    mode: "environment" | "direct" | "custom" | "free";
+    noProxy: string;
+    maxAttempts: number;
+    timeoutMs: number;
+    hasCustomUrl: boolean;
+    address: string | null;
+    effectiveMode: "direct" | "custom" | "free";
+    effectiveAddress: string | null;
+    pools: { untested: number; working: number; dead: number };
+  };
+  cache: {
+    files: { name: string; bytes: number; modifiedAt: string; clearable: boolean }[];
+    offset: number;
+    totalFiles: number;
+    totalBytes: number;
+  };
+}
+
 export interface SyncMonitorClientOptions {
   baseUrl: string;
   accessCode: string;
   fetcher?: typeof fetch;
   timeoutMs?: number;
+}
+
+/**
+ * A non-2xx monitor response. Carries the HTTP status so callers can react to
+ * a specific condition (for example a 409 conflict raised because the sync
+ * process changed state between a poll and a command) instead of parsing the
+ * message text.
+ */
+export class SyncMonitorRequestError extends Error {
+  readonly status: number;
+  readonly statusText: string;
+  readonly detail: string | null;
+
+  constructor(response: Response, detail: string | null) {
+    const status = `${response.status}${response.statusText ? ` ${response.statusText}` : ""}`;
+    super(
+      detail
+        ? `Sync monitor request failed (${status}): ${detail}`
+        : `Sync monitor request failed (${status})`,
+    );
+    this.name = "SyncMonitorRequestError";
+    this.status = response.status;
+    this.statusText = response.statusText;
+    this.detail = detail;
+  }
 }
 
 export class SyncMonitorClient {
@@ -204,6 +282,33 @@ export class SyncMonitorClient {
     return this.getJson<SyncMonitorConfigResponse>("/sync-monitor/config");
   }
 
+  async getResources(offset = 0, signal?: AbortSignal): Promise<DashboardResources> {
+    return this.getJson(`/sync-monitor/resources?offset=${encodeURIComponent(offset)}`, signal);
+  }
+
+  async updateProxy(patch: DashboardProxyPatch): Promise<DashboardResources> {
+    return this.requestJson("/sync-monitor/resources/proxy", {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    });
+  }
+
+  async previewCache(name: string): Promise<{ name: string; content: string; truncated: boolean }> {
+    return this.getJson(`/sync-monitor/resources/cache?name=${encodeURIComponent(name)}`);
+  }
+
+  async clearCache(name: string): Promise<{ cleared: string }> {
+    return this.postJson("/sync-monitor/resources/cache/clear", { name });
+  }
+
+  /** One atomic read of status, control, config, automation and events. */
+  async getSnapshot(eventLimit = 100, signal?: AbortSignal): Promise<SyncMonitorSnapshotResponse> {
+    return this.getJson<SyncMonitorSnapshotResponse>(
+      `/sync-monitor/snapshot?eventLimit=${encodeURIComponent(String(eventLimit))}`,
+      signal,
+    );
+  }
+
   async updateConfig(patch: SyncMonitorRuntimeConfigPatch): Promise<SyncMonitorConfigResponse> {
     return this.requestJson<SyncMonitorConfigResponse>("/sync-monitor/config", {
       method: "PATCH",
@@ -227,8 +332,8 @@ export class SyncMonitorClient {
     return this.postJson<SyncMonitorStartResponse>("/sync-monitor/control/start", options);
   }
 
-  private async getJson<T>(path: string): Promise<T> {
-    return this.requestJson<T>(path);
+  private async getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
+    return this.requestJson<T>(path, {}, signal);
   }
 
   private async postJson<T>(path: string, body?: unknown): Promise<T> {
@@ -238,10 +343,14 @@ export class SyncMonitorClient {
     });
   }
 
-  private async requestJson<T>(path: string, init: Omit<RequestInit, "headers"> = {}): Promise<T> {
+  private async requestJson<T>(
+    path: string,
+    init: Omit<RequestInit, "headers" | "signal"> = {},
+    signal?: AbortSignal,
+  ): Promise<T> {
     const response = await this.fetcher(`${this.baseUrl}${path}`, {
       ...init,
-      signal: init.signal ?? AbortSignal.timeout(this.timeoutMs),
+      signal: combineSignals(signal, AbortSignal.timeout(this.timeoutMs)),
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${this.accessCode}`,
@@ -249,7 +358,7 @@ export class SyncMonitorClient {
     });
 
     if (!response.ok) {
-      throw new Error(await formatErrorResponse(response));
+      throw new SyncMonitorRequestError(response, await readErrorDetail(response));
     }
 
     return response.json() as Promise<T>;
@@ -265,12 +374,20 @@ function hasErrorMessage(value: unknown): value is { error: string } {
   );
 }
 
-async function formatErrorResponse(response: Response): Promise<string> {
-  const status = `${response.status}${response.statusText ? ` ${response.statusText}` : ""}`;
-  const detail = await readErrorDetail(response);
-  return detail
-    ? `Sync monitor request failed (${status}): ${detail}`
-    : `Sync monitor request failed (${status})`;
+/** Merges abort signals so a caller's cancel and the request timeout both apply. */
+function combineSignals(...signals: (AbortSignal | undefined)[]): AbortSignal {
+  const active = signals.filter((signal): signal is AbortSignal => Boolean(signal));
+  if (active.length === 1) return active[0]!;
+
+  const controller = new AbortController();
+  for (const signal of active) {
+    if (signal.aborted) {
+      controller.abort(signal.reason);
+      break;
+    }
+    signal.addEventListener("abort", () => controller.abort(signal.reason), { once: true });
+  }
+  return controller.signal;
 }
 
 async function readErrorDetail(response: Response): Promise<string | null> {

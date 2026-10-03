@@ -4,6 +4,7 @@ import type { SyncMonitorRuntimeConfig } from "@anicore/sync-monitor";
 import {
   DEFAULT_DRAFT,
   draftFromRuntime,
+  draftsEqual,
   isAutoSyncIntervalValid,
   parseRuntimeConfigDraft,
 } from "./runtime-config-draft";
@@ -69,5 +70,12 @@ describe("runtime config draft", () => {
       expect(parsed.ok).toBe(false);
       expect(!parsed.ok && parsed.error.startsWith(prefix)).toBe(true);
     }
+  });
+
+  test("draftsEqual compares every field", () => {
+    expect(draftsEqual(DEFAULT_DRAFT, { ...DEFAULT_DRAFT })).toBe(true);
+    expect(draftsEqual(DEFAULT_DRAFT, { ...DEFAULT_DRAFT, parallel: "5" })).toBe(false);
+    expect(draftsEqual(DEFAULT_DRAFT, { ...DEFAULT_DRAFT, refreshIds: true })).toBe(false);
+    expect(draftsEqual(DEFAULT_DRAFT, { ...DEFAULT_DRAFT, startFromIndex: "0" })).toBe(false);
   });
 });

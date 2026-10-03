@@ -1,69 +1,234 @@
 @import "tailwindcss";
 
+/* ── Design tokens ───────────────────────────────────────────────────────────
+   A restrained, tool-like palette: cool neutrals, a single teal brand accent,
+   and semantic status colors. Light is the default; `.dark` overrides. */
 @theme {
-  --font-sans: "IBM Plex Sans", "Aptos", "Segoe UI", sans-serif;
-  --color-background: hsl(210 20% 98%);
-  --color-foreground: hsl(216 28% 12%);
+  --font-sans: "Inter", "IBM Plex Sans", "Aptos", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+
+  --color-background: hsl(220 20% 97%);
+  --color-foreground: hsl(222 24% 11%);
   --color-card: hsl(0 0% 100%);
-  --color-card-foreground: hsl(216 28% 12%);
+  --color-card-foreground: hsl(222 24% 11%);
   --color-popover: hsl(0 0% 100%);
-  --color-popover-foreground: hsl(216 28% 12%);
-  --color-primary: hsl(171 76% 30%);
+  --color-popover-foreground: hsl(222 24% 11%);
+  --color-primary: hsl(173 80% 27%);
   --color-primary-foreground: hsl(0 0% 100%);
-  --color-secondary: hsl(206 33% 91%);
-  --color-secondary-foreground: hsl(216 28% 16%);
-  --color-muted: hsl(204 30% 94%);
-  --color-muted-foreground: hsl(215 16% 43%);
-  --color-accent: hsl(43 86% 63%);
-  --color-accent-foreground: hsl(216 28% 12%);
-  --color-destructive: hsl(356 74% 45%);
+  --color-secondary: hsl(220 16% 93%);
+  --color-secondary-foreground: hsl(222 24% 16%);
+  --color-muted: hsl(220 16% 94%);
+  --color-muted-foreground: hsl(220 12% 44%);
+  --color-accent: hsl(220 16% 93%);
+  --color-accent-foreground: hsl(222 24% 13%);
+  --color-destructive: hsl(0 68% 46%);
   --color-destructive-foreground: hsl(0 0% 100%);
-  --color-warning: hsl(35 92% 52%);
-  --color-border: hsl(205 24% 84%);
-  --color-input: hsl(205 24% 84%);
-  --color-ring: hsl(171 76% 30%);
+  --color-success: hsl(152 62% 34%);
+  --color-warning: hsl(32 88% 44%);
+  --color-border: hsl(220 16% 87%);
+  --color-input: hsl(220 16% 85%);
+  --color-ring: hsl(173 80% 32%);
+
+  --radius-xs: 0.375rem;
+  --radius-sm: 0.5rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 0.875rem;
+  --radius-xl: 1.125rem;
+
+  --shadow-xs: 0 1px 2px 0 hsl(220 30% 12% / 0.05);
+  --shadow-sm: 0 1px 2px 0 hsl(220 30% 12% / 0.05), 0 1px 3px 0 hsl(220 30% 12% / 0.06);
+  --shadow-md: 0 4px 12px -2px hsl(220 30% 12% / 0.08), 0 2px 6px -2px hsl(220 30% 12% / 0.06);
+  --shadow-lg: 0 12px 32px -8px hsl(220 30% 12% / 0.14), 0 4px 12px -4px hsl(220 30% 12% / 0.08);
 }
 
 .dark {
-  --color-background: hsl(220 24% 9%);
-  --color-foreground: hsl(204 28% 94%);
-  --color-card: hsl(220 22% 12%);
-  --color-card-foreground: hsl(204 28% 94%);
-  --color-popover: hsl(220 22% 12%);
-  --color-popover-foreground: hsl(204 28% 94%);
-  --color-primary: hsl(171 72% 42%);
-  --color-primary-foreground: hsl(220 24% 8%);
-  --color-secondary: hsl(217 20% 18%);
-  --color-secondary-foreground: hsl(204 28% 92%);
-  --color-muted: hsl(218 18% 16%);
-  --color-muted-foreground: hsl(211 15% 66%);
-  --color-accent: hsl(43 84% 58%);
-  --color-accent-foreground: hsl(220 24% 8%);
-  --color-destructive: hsl(356 70% 52%);
+  --color-background: hsl(222 26% 8%);
+  --color-foreground: hsl(216 24% 94%);
+  --color-card: hsl(222 24% 11%);
+  --color-card-foreground: hsl(216 24% 94%);
+  --color-popover: hsl(222 24% 11%);
+  --color-popover-foreground: hsl(216 24% 94%);
+  --color-primary: hsl(172 72% 44%);
+  --color-primary-foreground: hsl(222 30% 8%);
+  --color-secondary: hsl(222 20% 17%);
+  --color-secondary-foreground: hsl(216 24% 92%);
+  --color-muted: hsl(222 18% 15%);
+  --color-muted-foreground: hsl(218 14% 64%);
+  --color-accent: hsl(222 20% 18%);
+  --color-accent-foreground: hsl(216 24% 92%);
+  --color-destructive: hsl(0 72% 58%);
   --color-destructive-foreground: hsl(0 0% 100%);
-  --color-warning: hsl(35 88% 56%);
-  --color-border: hsl(217 18% 24%);
-  --color-input: hsl(217 18% 24%);
-  --color-ring: hsl(171 72% 42%);
+  --color-success: hsl(152 58% 46%);
+  --color-warning: hsl(32 90% 58%);
+  --color-border: hsl(222 18% 20%);
+  --color-input: hsl(222 18% 24%);
+  --color-ring: hsl(172 72% 46%);
+
+  --shadow-xs: 0 1px 2px 0 hsl(0 0% 0% / 0.3);
+  --shadow-sm: 0 1px 2px 0 hsl(0 0% 0% / 0.35), 0 1px 3px 0 hsl(0 0% 0% / 0.3);
+  --shadow-md: 0 4px 14px -2px hsl(0 0% 0% / 0.45), 0 2px 6px -2px hsl(0 0% 0% / 0.4);
+  --shadow-lg: 0 16px 40px -10px hsl(0 0% 0% / 0.6), 0 6px 16px -6px hsl(0 0% 0% / 0.5);
 }
 
 * {
   box-sizing: border-box;
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
   margin: 0;
   min-width: 320px;
-  background: linear-gradient(
-    135deg,
-    var(--color-background) 0%,
-    color-mix(in oklab, var(--color-background) 86%, var(--color-secondary)) 48%,
-    color-mix(in oklab, var(--color-background) 88%, var(--color-accent)) 100%
-  );
+  background-color: var(--color-background);
+  color: var(--color-foreground);
   font-family: var(--font-sans);
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+@supports not (font-variation-settings: normal) {
+  body {
+    font-family: "IBM Plex Sans", "Aptos", "Segoe UI", system-ui, sans-serif;
+  }
+}
+
+::selection {
+  background: color-mix(in oklab, var(--color-primary) 26%, transparent);
+}
+
+:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--color-ring) 70%, transparent);
+  outline-offset: 2px;
+}
+
+/* Subtle, theme-aware scrollbars for the scrollable log/event panes. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--color-foreground) 22%, transparent) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-clip: padding-box;
+  background-color: color-mix(in oklab, var(--color-foreground) 20%, transparent);
+  border: 3px solid transparent;
+  border-radius: 9999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in oklab, var(--color-foreground) 32%, transparent);
+}
+
+/* Numeric readouts line up cleanly. */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
 }
 
 svg {
   width: 1rem;
   height: 1rem;
+}
+
+@keyframes anicore-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.82);
+  }
+}
+
+.live-dot {
+  animation: anicore-pulse 1.8s ease-in-out infinite;
+}
+
+/* Thin indeterminate bar shown while a catalog page refreshes in the background. */
+@keyframes anicore-indeterminate {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(420%);
+  }
+}
+
+.indeterminate-bar {
+  animation: anicore-indeterminate 1.1s ease-in-out infinite;
+}
+
+/* Native modal: dim and blur the backdrop, ease the panel in. */
+dialog::backdrop {
+  background-color: color-mix(in oklab, hsl(222 26% 8%) 55%, transparent);
+  backdrop-filter: blur(3px);
+}
+
+dialog[open] {
+  animation: anicore-dialog-in 150ms ease-out;
+}
+
+dialog[open]::backdrop {
+  animation: anicore-backdrop-in 150ms ease-out;
+}
+
+@keyframes anicore-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes anicore-backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes anicore-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.anicore-toast-in {
+  animation: anicore-toast-in 160ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-dot {
+    animation: none;
+  }
+
+  .indeterminate-bar {
+    animation: none;
+    width: 100%;
+  }
+
+  dialog[open],
+  dialog[open]::backdrop,
+  .anicore-toast-in {
+    animation: none;
+  }
 }

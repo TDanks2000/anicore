@@ -3,6 +3,29 @@ import { animeMappings } from "@anicore/db/schema";
 import { and, eq, sql } from "drizzle-orm";
 import type { ProviderAuthoritativeMapping } from "./types";
 
+type MappingExecutor = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * Marks a provider's only mapping for an anime as primary, the same default
+ * manual creation applies. Single-mapping reads otherwise found no primary and
+ * fell back to arbitrary ordering. Several mappings stay for a human to decide.
+ */
+export async function electSolePrimaryMapping(
+  executor: MappingExecutor,
+  animeId: number,
+  provider: ProviderAuthoritativeMapping["provider"],
+): Promise<void> {
+  const rows = await executor
+    .select({ id: animeMappings.id, isPrimary: animeMappings.isPrimary })
+    .from(animeMappings)
+    .where(and(eq(animeMappings.animeId, animeId), eq(animeMappings.provider, provider)));
+  if (rows.length !== 1 || rows[0]!.isPrimary) return;
+  await executor
+    .update(animeMappings)
+    .set({ isPrimary: true, updatedAt: new Date() })
+    .where(eq(animeMappings.id, rows[0]!.id));
+}
+
 export function normalizeAuthoritativeMappings(
   mappings: ProviderAuthoritativeMapping[],
 ): ProviderAuthoritativeMapping[] {
@@ -102,6 +125,7 @@ export async function syncAuthoritativeCrossMappings(
           `Authoritative ${mapping.provider} mapping ${mapping.providerId} already belongs to another anime`,
         );
       }
+      await electSolePrimaryMapping(tx, animeId, mapping.provider);
     }
   });
 }

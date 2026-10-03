@@ -5,7 +5,10 @@ import { cn } from "@/lib/utils";
 export function Alert({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn("rounded-lg border border-border bg-card p-4 text-sm", className)}
+      className={cn(
+        "relative grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 rounded-lg border border-border bg-card p-4 text-sm [&>svg]:mt-0.5 [&>svg]:size-4 [&>svg]:text-muted-foreground",
+        className,
+      )}
       role="alert"
       {...props}
     />
@@ -13,12 +16,17 @@ export function Alert({ className, ...props }: React.HTMLAttributes<HTMLDivEleme
 }
 
 export function AlertTitle({ className, ...props }: React.HTMLAttributes<HTMLHeadingElement>) {
-  return <h5 className={cn("mb-1 font-medium leading-none", className)} {...props} />;
+  return <h5 className={cn("font-medium leading-5 tracking-tight", className)} {...props} />;
 }
 
 export function AlertDescription({
   className,
   ...props
 }: React.HTMLAttributes<HTMLParagraphElement>) {
-  return <div className={cn("text-muted-foreground", className)} {...props} />;
+  return (
+    <div
+      className={cn("col-start-2 text-sm leading-relaxed text-muted-foreground", className)}
+      {...props}
+    />
+  );
 }

@@ -1,5 +1,5 @@
 import type { DryPluginResult, ProviderAnimeData, ProviderPlugin } from "../providers/types";
-import { ANILIST_RATE_MS, isRateLimitError } from "./anilist-rate-limit";
+import { ANILIST_RATE_MS, isNotFoundError, isRateLimitError } from "./anilist-rate-limit";
 import { appendUnmatched, loadUnmatched } from "./cache";
 import { log, type ProgressBar } from "./logger";
 
@@ -386,7 +386,11 @@ export class SyncEngine {
         if (result.status === "rejected") {
           if (!issueReported.has(j)) {
             const enteredBackoff = ctrl.record(
-              isRateLimitError(result.reason) ? "rate-limit" : "error",
+              isRateLimitError(result.reason)
+                ? "rate-limit"
+                : isNotFoundError(result.reason)
+                  ? "ok"
+                  : "error",
             );
             if (enteredBackoff) {
               log.warn(

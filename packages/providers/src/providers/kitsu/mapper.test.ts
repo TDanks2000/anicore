@@ -14,7 +14,7 @@ describe("Kitsu mapper", () => {
       subtype: "TV",
       status: "FINISHED",
       episodeCount: 26,
-      episodeLength: 24,
+      episodeLength: 1440,
       averageRating: 82.4,
       userCount: 1000,
       userCountRank: null,
@@ -41,6 +41,7 @@ describe("Kitsu mapper", () => {
       seasonYear: 1998,
       endDate: "1999-04-24",
       status: "FINISHED",
+      durationMinutes: 24,
     });
   });
 
@@ -50,7 +51,7 @@ describe("Kitsu mapper", () => {
         id: "ep-1",
         number: 1,
         releasedAt: "1998-04-03T00:00:00.000Z",
-        length: 24,
+        length: 1480,
         createdAt: "1998-04-01T00:00:00.000Z",
         titles: {
           romanized: "Asteroid Blues",
@@ -88,7 +89,7 @@ describe("Kitsu mapper", () => {
         titleEnglish: null,
         description: "The first episode.",
         airDate: "1998-04-03",
-        lengthMinutes: 24,
+        lengthMinutes: 25,
         thumbnail: "https://example.com/ep-1.jpg",
         kitsuId: "ep-1",
         providerId: "ep-1",

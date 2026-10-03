@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { SyncMonitorClient } from "./index";
+import { SyncMonitorClient, SyncMonitorRequestError } from "./index";
 
 describe("SyncMonitorClient", () => {
   test("includes API error details in rejected requests", async () => {
@@ -22,8 +22,37 @@ describe("SyncMonitorClient", () => {
       fetcher,
     });
 
-    await expect(client.pause()).rejects.toThrow(
-      "Sync monitor request failed (409 Conflict): No active sync process to pause",
+    const error = await client.pause().catch((err: unknown) => err);
+    expect(error).toBeInstanceOf(SyncMonitorRequestError);
+    expect(error).toMatchObject({
+      status: 409,
+      statusText: "Conflict",
+      detail: "No active sync process to pause",
+      message: "Sync monitor request failed (409 Conflict): No active sync process to pause",
+    });
+  });
+
+  test("reads the unified snapshot with an event limit", async () => {
+    let requestedUrl = "";
+    const fetcher: typeof fetch = Object.assign(
+      async (input: RequestInfo | URL) => {
+        requestedUrl = String(input);
+        return new Response(JSON.stringify({ revision: "r1", events: [] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      },
+      { preconnect: () => undefined },
     );
+
+    const client = new SyncMonitorClient({
+      baseUrl: "http://localhost:3000/",
+      accessCode: "test-code",
+      fetcher,
+    });
+
+    const snapshot = await client.getSnapshot(25);
+    expect(requestedUrl).toBe("http://localhost:3000/sync-monitor/snapshot?eventLimit=25");
+    expect(snapshot.revision).toBe("r1");
   });
 });

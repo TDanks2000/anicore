@@ -2,6 +2,15 @@
 
 All notable changes to this project, newest first.
 
+- ✨ Map dubs and subtitles onto individual episodes from Crunchyroll's per-episode audio versions and subtitle locales. Each anime is aligned to its slice of the Crunchyroll series (split cours, sequels numbered on from earlier seasons, long runners spanning many seasons) and recorded as a segment mapping plus per-episode mappings. Alignments must be anchored on the premiere date or an exact season fit and abstain on any ambiguity. Cowboy Bebop now has English audio, Japanese audio and English subtitles on all 26 episodes.
+- ✨ `dub-status` and `subtitle-status` return `coverage`, one resolved status per canonical episode across every provider plus available/missing/unknown totals.
+- ✨ Anime detail responses include `segmentMappings`, provider seasons shared between anime with the episode range each one occupies; the dashboard shows them under provider mappings.
+- ✨ The language audit checks Crunchyroll identities and episode mappings, rejects absence claims from regional catalogues, and flags noncanonical language codes.
+- ⚠️ Language codes are stored by primary subtag (`pt-br` → `pt`, `zh-cmn` → `zh`), so one dub reported with different regional precision is one row. A migration folds existing rows.
+- 🐛 Store Kitsu episode lengths in minutes; Kitsu reports seconds, so a 24-minute episode was stored as 1,440 minutes. A migration repairs existing rows, and later syncs replace any value still in seconds.
+- 🐛 Fill episode titles from Kitsu's canonical title, fetched separately so a record Kitsu cannot serialise costs only its title.
+- 🐛 Make a provider's only sync-created mapping primary (every Kitsu and MAL mapping had none). A migration elects existing ones.
+- 🐛 Treat a free proxy's own error page as a failed proxy instead of the API's reply. AniList fetches were failing whole anime with 400 and 405 and the proxy was kept as working.
 - ⚠️ Replace Postgres with a local SQLite file (`apps/api/data/anicore.db`), created and migrated automatically on first use. `DATABASE_URL` is now optional and takes a file path; a Postgres URL is rejected, and `ANICORE_DATABASE_SSL`, `TEST_DATABASE_URL` and `db:push` are gone. Existing Postgres data is not carried over — run a sync to repopulate.
 - ⚠️ Search ignores case only for ASCII letters, since SQLite's `LIKE` does not fold accented characters.
 - 🔥 Remove the one-off mapping diagnose, plan, repair and backfill scripts written for the old Postgres dataset. `db:audit-mappings` and the Kitsu matching evaluator remain.

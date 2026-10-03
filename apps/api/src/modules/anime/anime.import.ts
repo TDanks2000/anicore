@@ -4,12 +4,14 @@ import { withAnilistRetry } from "@anicore/providers/lib/anilist-rate-limit";
 import { appendAnilistId } from "@anicore/providers/lib/cache";
 
 import { HttpError, notFound } from "../../lib/errors";
+import { syncLanguageStatusForAnime } from "../../scripts/sync-audio-status";
 import type { AnimeResponse } from "./anime.format";
 import { getAnime } from "./anime.service";
 
 export interface AnimeImportResult {
   created: boolean;
   anime: AnimeResponse;
+  languageSync: { errors: string[]; warnings?: string[] };
 }
 
 // Concurrent imports of the same ID share one AniList round-trip and upsert.
@@ -25,7 +27,12 @@ async function runImport(anilistId: number): Promise<AnimeImportResult> {
     const result = await withAnilistRetry(() => syncAnilistAnime(anilistId));
     // Queue the ID so the scheduled sync keeps it fresh and runs provider plugins.
     appendAnilistId(anilistId);
-    return { created: result.created, anime: await getAnime(result.animeId) };
+    const languageSync = await syncLanguageStatusForAnime(result.animeId);
+    for (const error of languageSync.errors)
+      console.warn(`Language enrichment for AniList ${anilistId}: ${error}`);
+    for (const warning of languageSync.warnings)
+      console.warn(`Optional language provider for AniList ${anilistId}: ${warning}`);
+    return { created: result.created, anime: await getAnime(result.animeId), languageSync };
   } catch (error) {
     if (error instanceof HttpError) throw error;
     if (isMissingMediaError(error)) throw notFound(`AniList has no anime with ID ${anilistId}`);

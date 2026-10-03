@@ -24,6 +24,8 @@ import {
   type LegacyAudioStatusValue,
   mapLegacyAudioStatusToEpisodeStatus,
   normalizeLanguageCode,
+  resolveEpisodeStatuses,
+  summarizeEpisodeCoverage,
   toLegacyEpisodeAudioResponse,
 } from "./language-status.scoring";
 
@@ -38,6 +40,10 @@ export interface AnimeLanguageStatusResult {
   checkedAt: Date | null;
   evidence: AnimeLanguageEvidence[];
   episodes: EpisodeLanguageStatus[];
+  /** Every provider's episode rows resolved to one status per canonical episode. */
+  coverage: ReturnType<typeof summarizeEpisodeCoverage> & {
+    episodes: ReturnType<typeof resolveEpisodeStatuses>;
+  };
 }
 
 export async function getEpisodeById(episodeId: number): Promise<Episode | null> {
@@ -126,7 +132,7 @@ export async function getResolvedAnimeLanguageStatus(input: {
 }): Promise<AnimeLanguageStatusResult> {
   const languageCode = normalizeLanguageCode(input.languageCode);
 
-  const [statusRow, evidenceRows, episodeRows] = await Promise.all([
+  const [statusRow, evidenceRows, episodeRows, canonicalRows] = await Promise.all([
     db
       .select()
       .from(animeLanguageStatus)
@@ -160,9 +166,25 @@ export async function getResolvedAnimeLanguageStatus(input: {
         ),
       )
       .orderBy(asc(episodeLanguageStatus.episodeNumber)),
+    db
+      .select({ number: episodes.number })
+      .from(episodes)
+      .where(and(eq(episodes.animeId, input.animeId), eq(episodes.kind, "normal"))),
   ]);
 
   const row = statusRow[0];
+  const episodeNumbers = canonicalRows.map((episode) => episode.number);
+  const canonical = new Set(episodeNumbers);
+  const resolved = resolveEpisodeStatuses(
+    episodeRows
+      .filter((episode) => canonical.has(episode.episodeNumber))
+      .map((episode) => ({
+        episodeNumber: episode.episodeNumber,
+        status: episode.status as EpisodeLanguageStatusValue,
+        confidence: episode.confidence,
+        provider: episode.provider,
+      })),
+  );
   return {
     animeId: input.animeId,
     languageCode,
@@ -174,6 +196,7 @@ export async function getResolvedAnimeLanguageStatus(input: {
     checkedAt: row?.checkedAt ?? null,
     evidence: evidenceRows,
     episodes: episodeRows,
+    coverage: { ...summarizeEpisodeCoverage(resolved, episodeNumbers), episodes: resolved },
   };
 }
 

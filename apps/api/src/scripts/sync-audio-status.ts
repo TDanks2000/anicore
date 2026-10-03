@@ -1,10 +1,14 @@
 import { closeDb, db, type SyncLease, tryAcquireSyncLease } from "@anicore/db";
 import { syncAnimeLanguageEvidenceFromEpisodeStatuses } from "@anicore/db/language-status";
 import { anime, animeMappings, episodeLanguageStatus, episodes } from "@anicore/db/schema";
-import { syncDubStatus } from "@anicore/providers/animeschedule/sync";
+import { syncAnilistCastLanguages } from "@anicore/providers/anilist/languages";
+import { type DubSyncResult, syncDubStatus } from "@anicore/providers/animeschedule/sync";
+import { syncCrunchyrollLanguages } from "@anicore/providers/crunchyroll/sync";
+import { syncVoiceCastLanguages } from "@anicore/providers/jikan/sync";
+import { syncKitsuLanguages } from "@anicore/providers/kitsu/languages";
 import { log } from "@anicore/providers/lib/logger";
 import { installProxyFetch } from "@anicore/providers/lib/proxy";
-import { and, eq, isNotNull, lte, sql } from "drizzle-orm";
+import { and, asc, eq, isNotNull, lte, sql } from "drizzle-orm";
 import { derivedAirdateLanguageAssertions } from "../lib/derived-airdate-language";
 import { parseIntegerFlag } from "../lib/sync-cli";
 
@@ -89,8 +93,8 @@ export async function syncSubStatusForAnime(animeId: number): Promise<number> {
   return assertions.length ? rows.length : 0;
 }
 
-export async function syncDubStatusForAnime(animeId: number): Promise<void> {
-  const [row] = await db
+export async function syncDubStatusForAnime(animeId: number): Promise<DubSyncResult> {
+  const rows = await db
     .select({
       animeId: animeMappings.animeId,
       anilistId: animeMappings.providerId,
@@ -100,20 +104,51 @@ export async function syncDubStatusForAnime(animeId: number): Promise<void> {
     })
     .from(animeMappings)
     .innerJoin(anime, eq(animeMappings.animeId, anime.id))
-    .where(and(eq(animeMappings.provider, "anilist"), eq(animeMappings.animeId, animeId)))
-    .limit(1);
+    .where(and(eq(animeMappings.provider, "anilist"), eq(animeMappings.animeId, animeId)));
 
-  if (!row) {
-    throw new Error(`AniList mapping not found for anime ${animeId}`);
+  if (rows.length !== 1) {
+    throw new Error(`Expected one AniList mapping for anime ${animeId}; found ${rows.length}`);
   }
+  const row = rows[0]!;
 
-  await syncDubStatus({
+  return syncDubStatus({
     animeId: row.animeId,
     anilistId: row.anilistId,
     slug: row.slug,
     titleRomaji: row.titleRomaji,
     titleEnglish: row.titleEnglish ?? null,
   });
+}
+
+/** Providers fail independently so a schedule outage cannot suppress cast evidence. */
+export async function syncLanguageStatusForAnime(
+  animeId: number,
+): Promise<{ errors: string[]; warnings: string[] }> {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  for (const [name, sync] of [
+    ["original-audio", syncSubStatusForAnime],
+    ["animeschedule", syncDubStatusForAnime],
+    ["crunchyroll", syncCrunchyrollLanguages],
+    ["anilist-cast", syncAnilistCastLanguages],
+    ["jikan", syncVoiceCastLanguages],
+    ["kitsu-languages", syncKitsuLanguages],
+  ] as const) {
+    try {
+      await sync(animeId);
+    } catch (error) {
+      const message = `${name}: ${error instanceof Error ? error.message : String(error)}`;
+      if (name === "jikan" && isOptionalJikanFailure(message)) warnings.push(message);
+      else errors.push(message);
+    }
+  }
+  return { errors, warnings };
+}
+
+function isOptionalJikanFailure(message: string): boolean {
+  return /\b(429|5\d\d)\b|timed out|timeout|connection|temporarily unavailable|failed to fetch/i.test(
+    message,
+  );
 }
 
 // ── Pass 1: Derived original audio ────────────────────────────────────────────
@@ -205,9 +240,13 @@ export async function runSubPass(): Promise<void> {
 
 // ── Pass 2: Dub ───────────────────────────────────────────────────────────────
 
-export async function runDubPass(fromIndex = readFromIndex()): Promise<void> {
+export async function runDubPass(
+  fromIndex = readFromIndex(),
+): Promise<{ errors: number; processed: number }> {
   log.divider();
-  log.info("Dub pass — fetching dub status from anime-schedule.net…");
+  log.info(
+    "Language pass — AnimeSchedule, Crunchyroll episode tracks, AniList/MAL voice cast and Kitsu streaming links…",
+  );
 
   const rows = await db
     .select({
@@ -219,49 +258,58 @@ export async function runDubPass(fromIndex = readFromIndex()): Promise<void> {
     })
     .from(animeMappings)
     .innerJoin(anime, eq(animeMappings.animeId, anime.id))
-    .where(eq(animeMappings.provider, "anilist"));
+    .where(
+      and(
+        eq(animeMappings.provider, "anilist"),
+        parseIntegerFlag(args, "--anime-id=", 1)
+          ? eq(anime.id, parseIntegerFlag(args, "--anime-id=", 1)!)
+          : undefined,
+      ),
+    )
+    .orderBy(asc(anime.id), asc(animeMappings.providerId));
 
   const total = rows.length;
+  const limit = parseIntegerFlag(args, "--limit=", 1);
+  const endIndex = limit ? Math.min(total, fromIndex + limit) : total;
   log.info(`${total.toLocaleString()} anime to process (starting at index ${fromIndex})`);
 
   let fullyDubbed = 0;
-  let noDub = 0;
+  let unknown = 0;
+  let knownDub = 0;
+  let castMatched = 0;
   let ongoingDub = 0;
   let unmatched = 0;
   let errors = 0;
-  let noEpisodes = 0;
+  let warnings = 0;
+  let anilistCastMatched = 0;
+  let crunchyrollEpisodes = 0;
+  let crunchyrollSeriesOnly = 0;
 
-  const bar = log.progress(Math.max(0, total - fromIndex), "Dub");
+  const bar = log.progress(Math.max(0, endIndex - fromIndex), "Languages");
 
-  for (let i = fromIndex; i < rows.length; i++) {
+  for (let i = fromIndex; i < endIndex; i++) {
     const row = rows[i]!;
 
     bar.setStage(row.titleEnglish ?? row.titleRomaji ?? String(row.anilistId));
 
     try {
-      const result = await syncDubStatus({
-        animeId: row.animeId,
-        anilistId: row.anilistId,
-        slug: row.slug,
-        titleRomaji: row.titleRomaji,
-        titleEnglish: row.titleEnglish ?? null,
-      });
+      const result = await syncDubStatusForAnime(row.animeId);
 
       switch (result.status) {
         case "matched-fully-dubbed":
           fullyDubbed++;
           break;
-        case "matched-no-dub":
-          noDub++;
+        case "matched-unknown":
+          unknown++;
+          break;
+        case "matched-dub":
+          knownDub++;
           break;
         case "matched-ongoing-dub":
           ongoingDub++;
           break;
         case "unmatched":
           unmatched++;
-          break;
-        case "no-episodes":
-          noEpisodes++;
           break;
       }
     } catch (err) {
@@ -271,19 +319,75 @@ export async function runDubPass(fromIndex = readFromIndex()): Promise<void> {
       );
     }
 
-    bar.tick().setStats({ dubbed: fullyDubbed, noDub, ongoing: ongoingDub, errors });
+    try {
+      const result = await syncCrunchyrollLanguages(row.animeId);
+      if (result.status === "matched") crunchyrollEpisodes++;
+      if (result.status === "series-only") crunchyrollSeriesOnly++;
+    } catch (err) {
+      errors++;
+      log.error(
+        `Crunchyroll animeId=${row.animeId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    try {
+      const result = await syncAnilistCastLanguages(row.animeId);
+      if (result.status === "matched") anilistCastMatched++;
+    } catch (err) {
+      errors++;
+      log.error(
+        `AniList cast animeId=${row.animeId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    try {
+      const cast = await syncVoiceCastLanguages(row.animeId);
+      if (cast.status === "matched") castMatched++;
+    } catch (err) {
+      const message = `Jikan animeId=${row.animeId}: ${err instanceof Error ? err.message : String(err)}`;
+      if (isOptionalJikanFailure(message)) {
+        warnings++;
+        log.warn(message);
+      } else {
+        errors++;
+        log.error(message);
+      }
+    }
+    try {
+      await syncKitsuLanguages(row.animeId);
+    } catch (err) {
+      errors++;
+      log.error(
+        `Kitsu languages animeId=${row.animeId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+
+    bar.tick().setStats({
+      dubbed: fullyDubbed + knownDub,
+      unknown,
+      ongoing: ongoingDub,
+      cast: castMatched,
+      crunchyroll: crunchyrollEpisodes,
+      errors,
+      warnings,
+    });
   }
 
   bar.finish();
   log.divider();
   log.success("Dub pass complete.");
   log.info(`  Fully dubbed     : ${fullyDubbed.toLocaleString()}`);
-  log.info(`  No dub           : ${noDub.toLocaleString()}`);
-  log.info(`  Ongoing dub      : ${ongoingDub.toLocaleString()} (no per-episode assertion)`);
+  log.info(`  Dub exists       : ${knownDub.toLocaleString()} (episode coverage unknown)`);
+  log.info(`  Unknown dub      : ${unknown.toLocaleString()}`);
+  log.info(`  Partial coverage : ${ongoingDub.toLocaleString()}`);
+  log.info(`  Voice cast       : ${castMatched.toLocaleString()}`);
+  log.info(`  AniList cast     : ${anilistCastMatched.toLocaleString()}`);
+  log.info(
+    `  Crunchyroll      : ${crunchyrollEpisodes.toLocaleString()} per episode, ${crunchyrollSeriesOnly.toLocaleString()} series only`,
+  );
+  log.info(`  Provider warnings: ${warnings.toLocaleString()}`);
   log.info(`  Unmatched        : ${unmatched.toLocaleString()}`);
-  log.info(`  No episodes yet  : ${noEpisodes.toLocaleString()}`);
   log.info(`  Errors           : ${errors.toLocaleString()}`);
   log.divider();
+  return { errors, processed: Math.max(0, endIndex - fromIndex) };
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -299,10 +403,16 @@ if (import.meta.main) {
     }
     log.info(JSON.stringify({ event: "sync.audio.lease.acquired" }));
 
-    if (RUN_SUB) await runSubPass();
-    if (RUN_DUB) await runDubPass();
-    syncSucceeded = true;
-    log.success("Done.");
+    if (SUB_ONLY && DUB_ONLY) throw new Error("--sub-only and --dub-only cannot be combined");
+    const animeId = parseIntegerFlag(args, "--anime-id=", 1);
+    if (RUN_SUB) {
+      if (animeId) await syncSubStatusForAnime(animeId);
+      else await runSubPass();
+    }
+    const languagePass = RUN_DUB ? await runDubPass() : { errors: 0 };
+    syncSucceeded = languagePass.errors === 0;
+    if (!syncSucceeded) process.exitCode = 1;
+    else log.success("Done.");
   } catch (err) {
     log.error(`Fatal: ${err instanceof Error ? err.message : String(err)}`);
     process.exitCode = 1;

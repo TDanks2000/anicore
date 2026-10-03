@@ -15,6 +15,8 @@ import {
 import { findAnimeByMapping, listAnimeMappings } from "../mappings/mappings.service";
 import { importAnilistAnime, importAnilistAnimeBySearch } from "./anime.import";
 import {
+  animeSortFields,
+  animeSortOrders,
   assertAnimeExists,
   createAnime,
   getAnime,
@@ -28,6 +30,11 @@ import {
 } from "./anime.service";
 
 const optionalString = t.Optional(t.String());
+
+// `t.UnionEnum` injects `default: values[0]`, which would make an omitted
+// `sort` look like `sort=id` and silently drop search relevance ordering.
+const optionalAnimeSort = t.Optional(t.Union(animeSortFields.map((field) => t.Literal(field))));
+const optionalAnimeOrder = t.Optional(t.Union(animeSortOrders.map((order) => t.Literal(order))));
 
 const createAnimeBody = t.Object({
   slug: optionalString,
@@ -79,16 +86,28 @@ const createAnimeBody = t.Object({
 });
 
 export const animeRoutes = new Elysia({ prefix: "/anime", detail: { tags: ["Anime"] } })
-  .get("/", ({ query }) => listAnime(query), {
-    query: t.Object({
-      ...paginationQuery,
-      q: t.Optional(t.String({ maxLength: 200 })),
-      format: optionalString,
-      season: optionalString,
-      seasonYear: t.Optional(nonNegativeInteger),
-      status: optionalString,
-    }),
-  })
+  .get(
+    "/",
+    async ({ query, set }) => {
+      const { items, total } = await listAnime(query);
+      // The body stays a bare array for compatibility; the dashboard reads the
+      // total from this header to render pagination.
+      set.headers["X-Total-Count"] = String(total);
+      return items;
+    },
+    {
+      query: t.Object({
+        ...paginationQuery,
+        q: t.Optional(t.String({ maxLength: 200 })),
+        format: optionalString,
+        season: optionalString,
+        seasonYear: t.Optional(nonNegativeInteger),
+        status: optionalString,
+        sort: optionalAnimeSort,
+        order: optionalAnimeOrder,
+      }),
+    },
+  )
   .post("/", ({ body }) => createAnime(body), { body: createAnimeBody })
   .post(
     "/import/anilist",

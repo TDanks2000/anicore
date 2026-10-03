@@ -3,6 +3,7 @@ import { openapi } from "@elysia/openapi";
 import { Elysia } from "elysia";
 
 import { authorizeAdminRequest } from "./lib/admin-auth";
+import { logCors } from "./lib/cors-log";
 import { HttpError, isForeignKeyViolation, isUniqueViolation } from "./lib/errors";
 import { animeRoutes } from "./modules/anime/anime.routes";
 import { episodeRoutes } from "./modules/episodes/episodes.routes";
@@ -50,6 +51,20 @@ function validationIssues(error: unknown): ValidationIssue[] {
 }
 
 export const app = new Elysia()
+  // Log blocked cross-origin requests only, so misconfigured origins are visible
+  // without drowning the log in normal traffic.
+  .onRequest(({ request }) => {
+    const origin = request.headers.get("origin");
+    if (!origin) return;
+    const allowed = corsOrigins();
+    if (allowed.includes(origin)) return;
+    const url = new URL(request.url);
+    const isPreflight = request.method === "OPTIONS";
+    logCors(
+      `[cors] BLOCKED ${isPreflight ? "preflight " : ""}${request.method} ${url.pathname} ` +
+        `origin=${origin} allowed=[${allowed.join(", ")}]`,
+    );
+  })
   // CORS must run first so that early rejections still carry CORS headers.
   .use(
     cors({
@@ -61,6 +76,9 @@ export const app = new Elysia()
         "X-Sync-Monitor-Code",
       ],
       methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+      // The dashboard reads list totals from this header, so browsers must be
+      // allowed to expose it on cross-origin reads.
+      exposeHeaders: ["X-Total-Count"],
       credentials: false,
       preflight: true,
     }),

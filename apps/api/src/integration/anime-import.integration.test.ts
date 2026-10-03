@@ -33,6 +33,13 @@ mock.module("@anicore/providers/lib/cache", () => ({
   ...realCache,
   appendAnilistId: (id: number) => queuedIds.push(id),
 }));
+const enrichedIds: number[] = [];
+mock.module("../scripts/sync-audio-status", () => ({
+  syncLanguageStatusForAnime: async (animeId: number) => {
+    enrichedIds.push(animeId);
+    return { errors: [], warnings: [] };
+  },
+}));
 
 const { app } = await import("../app");
 
@@ -51,6 +58,7 @@ describeWithDatabase("AniList import", () => {
     await resetTestDatabase();
     fetchCalls.length = 0;
     queuedIds.length = 0;
+    enrichedIds.length = 0;
     process.env.ANICORE_ADMIN_TOKEN = TOKEN;
   });
 
@@ -75,6 +83,7 @@ describeWithDatabase("AniList import", () => {
     const second = await importAnime({ id: 1 });
     expect(await second.json()).toMatchObject({ created: false });
     expect(queuedIds).toEqual([1, 1]);
+    expect(enrichedIds).toEqual([1, 1]);
 
     const lookup = await app.handle(new Request("http://localhost/anime/by/anilist/1"));
     expect(lookup.status).toBe(200);
@@ -84,6 +93,7 @@ describeWithDatabase("AniList import", () => {
     const responses = await Promise.all([importAnime({ id: 1 }), importAnime({ id: 1 })]);
     expect(responses.map((response) => response.status)).toEqual([200, 200]);
     expect(fetchCalls).toEqual([1]);
+    expect(enrichedIds).toEqual([1]);
   });
 
   test("reports unknown AniList IDs as 404 without queuing them", async () => {
@@ -91,6 +101,31 @@ describeWithDatabase("AniList import", () => {
     expect(response.status).toBe(404);
     expect(await response.json()).toEqual({ error: "AniList has no anime with ID 2" });
     expect(queuedIds).toEqual([]);
+  });
+
+  test("language refresh is authenticated and returns statuses plus provider diagnostics", async () => {
+    await importAnime({ id: 1 });
+    const response = await app.handle(
+      new Request("http://localhost/admin/anime/1/language-refresh", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${TOKEN}` },
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      animeId: 1,
+      statuses: [],
+      errors: [],
+      warnings: [],
+    });
+    expect(enrichedIds).toEqual([1, 1]);
+    expect(
+      (
+        await app.handle(
+          new Request("http://localhost/admin/anime/1/language-refresh", { method: "POST" }),
+        )
+      ).status,
+    ).toBe(401);
   });
 
   test("validates the request body", async () => {

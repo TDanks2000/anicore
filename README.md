@@ -39,13 +39,14 @@ Reads are public. Every write, and every route under `/admin`, requires the admi
 
 | Method | Path | Description |
 | --- | --- | --- |
-| `GET` | `/anime` | List anime. `q` searches titles, synonyms and slugs (exact and prefix matches first); filter with `format`, `season`, `seasonYear`, `status`; paginate with `limit` (1–100, default 50) and `offset`. |
+| `GET` | `/anime` | List anime. `q` searches titles, synonyms and slugs (exact and prefix matches first); filter with `format`, `season`, `seasonYear`, `status`; sort with `sort` (`id`, `title`, `format`, `status`, `seasonYear`, `episodes`, `score`, `popularity`) and `order` (`asc`, default, or `desc`; missing values sort last); paginate with `limit` (1–100, default 50) and `offset`. The body is an array and `X-Total-Count` reports the number of matching rows. |
 | `GET` | `/anime/:id` | One anime. `/full` adds mappings, episodes, studios, tags, external links and relations. |
 | `GET` | `/anime/:id/{mappings,episodes,studios,tags,external-links,relations}` | Child collections of an anime. |
 | `GET` | `/anime/by/:provider/:providerId` | The anime a provider ID maps to, with that mapping. |
 | `GET` | `/anime/:id/{language-status,dub-status,subtitle-status}` | Resolved language availability with its evidence. |
 | `POST` | `/anime` | Create an anime, optionally with mappings. A slug is generated from the title when omitted. |
 | `POST` | `/anime/import/anilist` | Import or refresh from AniList by `{ "id": 1 }` or `{ "search": "Cowboy Bebop" }`. |
+| `POST` | `/admin/anime/:id/language-refresh` | Refresh language providers for a stored anime; returns statuses, evidence, errors and optional-provider warnings. |
 | `GET` | `/episodes`, `/episodes/:id`, `/episodes/:id/{full,mappings,audio}` | Episodes and their mappings and language status. |
 | `POST` | `/episodes`, `/episodes/:id/audio` | Create an episode, record audio status. |
 | `GET` `POST` `PATCH` `DELETE` | `/mappings/{anime,episode}/...` | Look up, create, update and delete provider mappings. |
@@ -135,7 +136,41 @@ bun run sync --parallel=1
 
 Parallel mode batches external fetches, waits out the equivalent AniList request budget after each batch, and temporarily falls back to sequential fetches when rate-limit or fetch errors become frequent.
 
-### Mapping quality
+### Dub and subtitle evidence
+
+Language refreshes use five sources independently: Crunchyroll's per-episode audio and subtitle tracks, AnimeSchedule's English audio/subtitle tracks, AniList voice cast, MAL voice cast through Jikan, and explicit Kitsu streaming-link language metadata. Importing an anime refreshes its language evidence immediately, and normal scheduled syncs refresh it again. Jikan's upstream outages are reported as warnings while the other providers continue; repeated failures open a short cooldown. Cached MAL cast data is valid for 24 hours.
+
+Identity must be proven before attaching languages. AnimeSchedule searches by published AniList ID and verifies cross-reference hosts and IDs. Voice cast and streaming metadata require one authoritative mapping at confidence 100; fuzzy mappings cannot supply language evidence. Conflicting identities are reported and their automatic evidence is withdrawn. Successful provider snapshots replace that provider's previous evidence transactionally, including retired URLs; failed requests preserve the last successful snapshot. Manual overrides are preserved.
+
+`confirmed` establishes language-track existence, not complete episode coverage. AnimeSchedule's missing premiere date does not mean there is no dub: its documented release-time markers also identify tracks. Empty schedules and missing cast credits remain unknown. Cast credits and Kitsu catalogue metadata produce `likely` evidence at confidence 75; direct schedule track evidence scores 90 and Crunchyroll's own track listing 95. These scores are evidence weights, not measured probabilities. Streaming catalogue evidence describes historical language existence, not current licensing or availability in a particular country.
+
+Episode availability requires a past explicit premiere or release batch and compatible episode numbering. A finished Japanese broadcast does not prove that every dubbed episode has released. Release-time timestamps only describe the clock time; their date portion is never interpreted as a release date. The dashboard shows source evidence and unknown episode coverage as `?`, and deduplicates overlapping provider rows. `dub-status` and `subtitle-status` return the same resolution as `coverage`: one status per canonical episode and the available/missing/unknown totals.
+
+Language codes are stored by their primary subtag (`pt-BR`, `Portuguese (BR)` and `Portuguese` are all `pt`), because providers disagree on regional precision for the same track and keeping it would split one dub into several partial-looking rows.
+
+#### Crunchyroll episode tracks
+
+Crunchyroll lists every audio version and subtitle locale per episode, so it is the only source that maps dubs and subtitles onto individual episodes of finished shows. Its seasons rarely match AniList entries one to one (Attack on Titan's 22-episode third season is two AniList entries; One Piece spans 24 arc seasons numbered absolutely), so each anime is aligned to a slice of the Crunchyroll series and recorded as a segment mapping (`anime_provider_mappings` + `anime_provider_segments`, e.g. Crunchyroll 50–59 → local 1–10) with a `crunchyroll` episode mapping per episode.
+
+- The series comes from the anime's own Crunchyroll link (modern `/series/<id>` links directly, pre-2022 slug links by matching `slug_title`). Without a link, only a series whose title matches exactly, that launched no later than the anime, and whose episode aired on the anime's premiere date is accepted, recorded with `fuzzy` provenance and confidence 90.
+- An alignment must be anchored, by the premiere date (a mid-season match only if everything before it aired earlier) or by an exact fit of a whole season, and complete for finished anime. Recaps (`13.5`), specials (`SP1`) and PVs never take an episode number. Seasons whose dates are bulk upload dates are treated as undated. Episode titles veto alignments that are clearly shifted. Any tie, contradiction or gap abstains.
+- When several anime publish the same Crunchyroll link and its seasons are otherwise indistinguishable (Vandread and its second stage: two 13-episode seasons with only upload dates), each anime takes the season at its premiere-ordered position, but only if the anime and the numbered seasons pair one to one with equal episode counts.
+- A linked single-season series that cannot be aligned still supplies anime-level tracks, with no per-episode claims, if the season is plausibly the same work: not a film, about the same episode count, and from the same years.
+- The catalogue is regional (requests bypass rotating proxies), so Crunchyroll only ever records presence: a track it lacks is unknown, never missing.
+- Missing English episode titles and lengths are filled from aligned Crunchyroll episodes; existing values are never overwritten, and numbered placeholders ("Episode 12") are neither stored nor used to veto an alignment.
+
+```sh
+bun run sync:audio                        # refresh all stored anime languages
+bun run sync:audio --anime-id=1           # refresh one internal anime ID
+bun run sync:audio --dub-only --limit=50  # refresh provider evidence without rebuilding original audio
+bun run db:audit-languages --write=data/cache/language-audit.json
+```
+
+The audit checks evidence/status agreement, authoritative identity ownership (including Crunchyroll segment and episode mappings), unsupported schedule and regional-catalogue negatives, noncanonical episode rows and noncanonical language codes. It measures database consistency; it does not guarantee upstream accuracy or fill gaps with guessed data. See [the live validation results](docs/language-mapping-validation.md).
+
+Provider semantics: [Crunchyroll](https://www.crunchyroll.com) public catalogue API (anonymous web client, metadata only), [AnimeSchedule track documentation](https://animeschedule.net/api/v3/documentation/anime), [AniList character voice actors](https://docs.anilist.co/reference/object/characteredge), [Jikan character/cast API](https://docs.api.jikan.moe/), [Kitsu streaming-link attributes](https://github.com/hummingbird-me/kitsu-server/blob/master/app/resources/streaming_link_resource.rb).
+
+### Cross-provider matching
 
 Provider matching prefers published cross-references over fuzzy matching, and leaves near-tied candidates unmatched. Kitsu exposes both AniList and MyAnimeList cross-references on the payload the search already returns, and either one proves identity, so a record Kitsu links only to MyAnimeList is still recorded with `api` provenance rather than as a guess. AnimeSchedule entries carry Kitsu and MyAnimeList links too; those are only trusted after the entry's own AniList link has been confirmed to resolve to the same anime.
 
@@ -230,6 +265,8 @@ VITE_ANICORE_API_URL=http://<api-ip>:3000 bun run dev:web
 
 Paste the monitor code into the dashboard after it loads. The dashboard keeps it in session storage, so the code is not compiled into the public web bundle or persisted across browser sessions.
 
+Cross-origin requests are logged (allowed or blocked) with the origin and the configured allow-list. Lines are printed to the API console and appended to `apps/api/data/logs/cors.log`; override the path with `ANICORE_CORS_LOG`.
+
 For Windows PowerShell:
 
 ```powershell
@@ -238,6 +275,10 @@ $env:VITE_ANICORE_API_URL="http://<api-ip>:3000"; bun run dev:web
 ```
 
 ## Proxy support
+
+The dashboard's **Cache & proxies** card shows managed cache files, file sizes, update times and bounded content previews, plus working, untested and dead proxy counts. Clear individual Jikan or unmatched-provider caches while sync is idle; checkpoints, ID lists and proxy pools remain read-only.
+
+Choose **Disabled (direct)**, **Custom proxy**, **Enable free proxy pool**, or **Use environment**, then save. Proxy mode, bypass hosts, free-pool attempt limit and timeout persist in `apps/api/data/sync-monitor/proxy-config.json` and apply to new API and sync requests without a restart. Existing requests keep their routing. Custom URLs accept HTTP(S), including credentials; responses redact credentials, and leaving the URL field blank preserves the saved URL. Environment mode restores the environment-variable behavior described below.
 
 Provider HTTP calls can run through a proxy when the API or sync scripts are started with one of these environment variables:
 
@@ -255,7 +296,7 @@ For disposable public proxies, set:
 ANICORE_USE_FREE_PROXY=1 bun run sync
 ```
 
-That loads and rotates the free HTTP proxy list from ProxyScrape's raw text endpoint. Because public proxies are unreliable, AniCore tries multiple proxies for each request and falls back to a normal direct fetch if none of the attempted proxies work.
+That loads and rotates the free HTTP proxy list from ProxyScrape's raw text endpoint. Because public proxies are unreliable, AniCore tries multiple proxies for each request and falls back to a normal direct fetch if none of the attempted proxies work. A proxy that answers with its own error page (a non-JSON 4xx/5xx other than 404) counts as dead rather than as the API's reply. Kitsu, TheTVDB, TMDB, AnimeSchedule and Crunchyroll always bypass the free pool.
 
 Proxy state is cached under `data/cache`:
 

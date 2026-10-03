@@ -11,7 +11,7 @@ export function Progress({
 
   return (
     <div
-      className={cn("h-2 w-full overflow-hidden rounded-full bg-secondary", className)}
+      className={cn("relative h-2 w-full overflow-hidden rounded-full bg-secondary", className)}
       role="progressbar"
       aria-valuemin={0}
       aria-valuemax={100}
@@ -19,7 +19,7 @@ export function Progress({
       {...props}
     >
       <div
-        className="h-full rounded-full bg-primary transition-all"
+        className="h-full rounded-full bg-primary transition-[width] duration-500 ease-out"
         style={{ width: `${bounded}%` }}
       />
     </div>

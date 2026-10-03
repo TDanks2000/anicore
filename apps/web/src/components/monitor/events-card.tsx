@@ -1,28 +1,64 @@
 import type { SyncMonitorEvent } from "@anicore/sync-monitor";
-import { TerminalSquare } from "lucide-react";
+import { AlertTriangle, CircleAlert, Info, TerminalSquare } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
+const LEVEL_STYLES = {
+  error: {
+    icon: CircleAlert,
+    iconClass: "text-destructive",
+    badgeClass: "bg-destructive/12 text-destructive",
+    rowClass: "border-destructive/30 bg-destructive/[0.04]",
+  },
+  warn: {
+    icon: AlertTriangle,
+    iconClass: "text-warning",
+    badgeClass: "bg-warning/16 text-warning",
+    rowClass: "border-warning/30 bg-warning/[0.04]",
+  },
+  info: {
+    icon: Info,
+    iconClass: "text-muted-foreground",
+    badgeClass: "bg-secondary text-secondary-foreground",
+    rowClass: "border-border bg-muted/30",
+  },
+} as const;
+
 export function EventsCard({ events }: { events: SyncMonitorEvent[] }) {
-  // Newest first. Timestamps and messages can repeat, so the key includes the position.
+  // Newest first. Identical events (same timestamp and text) can legitimately
+  // repeat, so the key is content-based with an occurrence suffix.
+  const occurrences = new Map<string, number>();
   const newestFirst = events
-    .map((event, index) => ({ event, key: `${index}-${event.at}` }))
+    .map((event) => {
+      const base = `${event.at}|${event.pid ?? ""}|${event.event ?? ""}|${event.message}`;
+      const seen = occurrences.get(base) ?? 0;
+      occurrences.set(base, seen + 1);
+      return { event, key: `${base}#${seen}` };
+    })
     .reverse();
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Recent Events</CardTitle>
-        <CardDescription>Latest entries from `events.jsonl`.</CardDescription>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-col gap-1">
+            <CardTitle>Recent Events</CardTitle>
+            <CardDescription>Latest entries from `events.jsonl`.</CardDescription>
+          </div>
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-xs font-medium text-muted-foreground [&_svg]:size-3.5">
+            <TerminalSquare />
+            {events.length}
+          </span>
+        </div>
       </CardHeader>
       <CardContent>
-        <div className="flex max-h-[420px] flex-col gap-2 overflow-auto pr-1">
+        <div className="flex max-h-[460px] flex-col gap-1.5 overflow-auto pr-1">
           {newestFirst.length === 0 ? (
-            <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">
-              No events loaded.
+            <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border py-12 text-center">
+              <TerminalSquare className="size-5 text-muted-foreground/60" />
+              <p className="text-sm text-muted-foreground">No events yet</p>
             </div>
           ) : (
             newestFirst.map(({ event, key }) => <EventRow key={key} event={event} />)
@@ -34,26 +70,33 @@ export function EventsCard({ events }: { events: SyncMonitorEvent[] }) {
 }
 
 function EventRow({ event }: { event: SyncMonitorEvent }) {
+  const style = LEVEL_STYLES[event.level ?? "info"];
+  const Icon = style.icon;
+
   return (
-    <div
-      className={cn(
-        "rounded-md border bg-muted/30 p-3 text-sm",
-        event.level === "error" && "border-destructive/40",
-        event.level === "warn" && "border-warning/50",
-        event.level === "info" && "border-border",
-      )}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <TerminalSquare />
-          <span className="truncate font-medium">{event.message}</span>
+    <div className={cn("rounded-md border px-3 py-2.5 text-sm transition-colors", style.rowClass)}>
+      <div className="flex items-start gap-2.5">
+        <Icon className={cn("mt-0.5 size-4 shrink-0", style.iconClass)} />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-3">
+            <span className="min-w-0 flex-1 break-words font-medium leading-snug">
+              {event.message}
+            </span>
+            <span
+              className={cn(
+                "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                style.badgeClass,
+              )}
+            >
+              {event.level}
+            </span>
+          </div>
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+            <span className="tabular-nums">{formatDate(event.at)}</span>
+            {event.anilistId ? <span className="font-mono">ID {event.anilistId}</span> : null}
+            {event.stage ? <span>{event.stage}</span> : null}
+          </div>
         </div>
-        <Badge variant={event.level === "error" ? "destructive" : "outline"}>{event.level}</Badge>
-      </div>
-      <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
-        <span>{formatDate(event.at)}</span>
-        {event.anilistId ? <span>ID {event.anilistId}</span> : null}
-        {event.stage ? <span>{event.stage}</span> : null}
       </div>
     </div>
   );
