@@ -4,6 +4,7 @@ All notable changes to this project, newest first.
 
 - ⚠️ Replace Postgres with a local SQLite file (`apps/api/data/anicore.db`), created and migrated automatically on first use. `DATABASE_URL` is now optional and takes a file path; a Postgres URL is rejected, and `ANICORE_DATABASE_SSL`, `TEST_DATABASE_URL` and `db:push` are gone. Existing Postgres data is not carried over — run a sync to repopulate.
 - ⚠️ Search ignores case only for ASCII letters, since SQLite's `LIKE` does not fold accented characters.
+- 🔥 Remove the one-off mapping diagnose, plan, repair and backfill scripts written for the old Postgres dataset. `db:audit-mappings` and the Kitsu matching evaluator remain.
 - ✨ Integration tests run in every `bun run test` against a throwaway database, with no database server needed.
 - ⚠️ GET requests no longer import from AniList. Use `POST /anime/import/anilist` with `{ "id": … }` or `{ "search": "…" }` and the admin token; this replaces the admin-token-on-GET behavior.
 - ⚠️ Lookups of missing records return `404` instead of `200` with `null` (`/anime/by/…`, `/mappings/anime/…`, `/mappings/episode/…`), and child lists of a missing anime return `404` instead of `[]`.

@@ -16,18 +16,3 @@ export type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 export async function queryRows<T>(query: SQL): Promise<T[]> {
   return db.all<T>(query);
 }
-
-/** Transaction-scoped counterpart to {@link queryRows}. */
-export async function transactionRows<T>(tx: DbTransaction, query: SQL): Promise<T[]> {
-  return tx.all<T>(query);
-}
-
-/** Turns SQLite's 0/1 flags in raw rows back into booleans. */
-export function withBooleans<T>(...keys: (keyof T)[]) {
-  return (rows: T[]): T[] =>
-    rows.map((row) => {
-      const copy = { ...row };
-      for (const key of keys) copy[key] = Boolean(copy[key]) as T[keyof T];
-      return copy;
-    });
-}
