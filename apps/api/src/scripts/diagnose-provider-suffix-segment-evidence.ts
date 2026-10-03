@@ -115,8 +115,8 @@ async function loadEpisodeMappings(): Promise<EpisodeMappingRow[]> {
       e.anime_id as "animeId",
       e.number as "localEpisodeNumber",
       e.kind as "localKind"
-    from public.episode_mappings em
-    join public.episodes e on e.id = em.episode_id
+    from episode_mappings em
+    join episodes e on e.id = em.episode_id
     where em.provider in ('thetvdb', 'tmdb')
     order by em.provider, em.provider_id
   `);
@@ -125,7 +125,7 @@ async function loadEpisodeMappings(): Promise<EpisodeMappingRow[]> {
 async function loadLocalNormalEpisodes(): Promise<LocalNormalEpisodeRow[]> {
   return queryRows<LocalNormalEpisodeRow>(sql`
     select anime_id as "animeId", number as "episodeNumber"
-    from public.episodes
+    from episodes
     where kind = 'normal'
     order by anime_id, number
   `);
@@ -140,7 +140,7 @@ async function loadAnimeMeta(): Promise<AnimeMetaRow[]> {
       episode_count as "episodeCount",
       start_date as "startDate",
       end_date as "endDate"
-    from public.anime
+    from anime
     order by id
   `);
 }
@@ -151,7 +151,7 @@ async function loadRelations(): Promise<RelationRow[]> {
       anime_id as "animeId",
       related_anime_id as "relatedAnimeId",
       relation_type as "relationType"
-    from public.anime_relation_links
+    from anime_relation_links
     order by anime_id, related_anime_id
   `);
 }

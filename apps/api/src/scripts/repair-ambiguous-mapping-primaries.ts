@@ -118,7 +118,7 @@ async function main(): Promise<void> {
       // that already elected a primary is never overwritten.
       const result = await queryRows<{ id: number }>(sql`
         update anime_mappings
-        set is_primary = true, updated_at = now()
+        set is_primary = true, updated_at = ${Date.now()}
         where id = ${group.winner.id}
           and not exists (
             select 1 from anime_mappings other

@@ -12,7 +12,7 @@ import {
   episodeLanguageStatus,
   episodes,
 } from "@anicore/db/schema";
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import {
   type AnimeLanguageStatusValue,
   clampConfidence,
@@ -256,8 +256,8 @@ export async function applyAnimeLanguageOverride(input: {
         confidence,
         isManualOverride: true,
         notes: input.notes,
-        checkedAt: sql`now()`,
-        updatedAt: sql`now()`,
+        checkedAt: new Date(),
+        updatedAt: new Date(),
       },
     })
     .returning();
@@ -303,8 +303,8 @@ export async function upsertEpisodeLanguageStatus(input: {
       set: {
         status: input.status,
         confidence,
-        checkedAt: input.checkedAt ?? sql`now()`,
-        updatedAt: sql`now()`,
+        checkedAt: input.checkedAt ?? new Date(),
+        updatedAt: new Date(),
       },
     })
     .returning();

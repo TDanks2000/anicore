@@ -1,15 +1,6 @@
 import { relations, sql } from "drizzle-orm";
-import {
-  boolean,
-  index,
-  integer,
-  pgTable,
-  real,
-  serial,
-  text,
-  timestamp,
-  uniqueIndex,
-} from "drizzle-orm/pg-core";
+import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { boolean, serial, timestamp } from "./columns";
 import {
   animeLanguageStatuses,
   episodeKinds,
@@ -24,7 +15,7 @@ import {
   syncRunStatuses,
 } from "./enums";
 
-export const anime = pgTable(
+export const anime = sqliteTable(
   "anime",
   {
     id: serial("id").primaryKey(),
@@ -75,9 +66,9 @@ export const anime = pgTable(
 
     hashtag: text("hashtag"),
 
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
 
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
   (table) => ({
     slugIdx: uniqueIndex("anime_slug_idx").on(table.slug),
@@ -93,7 +84,7 @@ export const anime = pgTable(
   }),
 );
 
-export const animeMappings = pgTable(
+export const animeMappings = sqliteTable(
   "anime_mappings",
   {
     id: serial("id").primaryKey(),
@@ -120,9 +111,9 @@ export const animeMappings = pgTable(
 
     isPrimary: boolean("is_primary").notNull().default(false),
 
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
 
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
   (table) => ({
     providerIdIdx: uniqueIndex("anime_mappings_provider_id_idx").on(
@@ -154,7 +145,7 @@ export const animeMappings = pgTable(
   }),
 );
 
-export const animeRelationLinks = pgTable(
+export const animeRelationLinks = sqliteTable(
   "anime_relation_links",
   {
     id: serial("id").primaryKey(),
@@ -169,7 +160,7 @@ export const animeRelationLinks = pgTable(
 
     relationType: text("relation_type").notNull(),
 
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (table) => ({
     pairIdx: uniqueIndex("anime_relation_links_pair_idx").on(table.animeId, table.relatedAnimeId),
@@ -178,7 +169,7 @@ export const animeRelationLinks = pgTable(
   }),
 );
 
-export const studios = pgTable(
+export const studios = sqliteTable(
   "studios",
   {
     id: serial("id").primaryKey(),
@@ -194,7 +185,7 @@ export const studios = pgTable(
   }),
 );
 
-export const animeStudioLinks = pgTable(
+export const animeStudioLinks = sqliteTable(
   "anime_studio_links",
   {
     id: serial("id").primaryKey(),
@@ -219,7 +210,7 @@ export const animeStudioLinks = pgTable(
   }),
 );
 
-export const tags = pgTable(
+export const tags = sqliteTable(
   "tags",
   {
     id: serial("id").primaryKey(),
@@ -237,7 +228,7 @@ export const tags = pgTable(
   }),
 );
 
-export const animeTagLinks = pgTable(
+export const animeTagLinks = sqliteTable(
   "anime_tag_links",
   {
     id: serial("id").primaryKey(),
@@ -260,7 +251,7 @@ export const animeTagLinks = pgTable(
   }),
 );
 
-export const animeExternalLinks = pgTable(
+export const animeExternalLinks = sqliteTable(
   "anime_external_links",
   {
     id: serial("id").primaryKey(),
@@ -283,7 +274,7 @@ export const animeExternalLinks = pgTable(
   }),
 );
 
-export const episodes = pgTable(
+export const episodes = sqliteTable(
   "episodes",
   {
     id: serial("id").primaryKey(),
@@ -319,9 +310,9 @@ export const episodes = pgTable(
       .notNull()
       .default("normal"),
 
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
 
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
   (table) => ({
     animeNumberKindIdx: uniqueIndex("episodes_anime_number_kind_idx").on(
@@ -336,7 +327,7 @@ export const episodes = pgTable(
   }),
 );
 
-export const episodeMappings = pgTable(
+export const episodeMappings = sqliteTable(
   "episode_mappings",
   {
     id: serial("id").primaryKey(),
@@ -363,9 +354,9 @@ export const episodeMappings = pgTable(
       .notNull()
       .default("manual"),
 
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
 
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
   (table) => ({
     providerEpisodeIdIdx: uniqueIndex("episode_mappings_provider_episode_id_idx").on(
@@ -386,7 +377,7 @@ export const episodeMappings = pgTable(
   }),
 );
 
-export const animeLanguageStatus = pgTable(
+export const animeLanguageStatus = sqliteTable(
   "anime_language_status",
   {
     id: serial("id").primaryKey(),
@@ -413,11 +404,11 @@ export const animeLanguageStatus = pgTable(
 
     notes: text("notes"),
 
-    checkedAt: timestamp("checked_at", { withTimezone: true }).notNull().defaultNow(),
+    checkedAt: timestamp("checked_at").notNull().defaultNow(),
 
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
 
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
   (table) => ({
     animeLanguageMediaIdx: uniqueIndex("anime_language_status_anime_language_media_idx").on(
@@ -434,7 +425,7 @@ export const animeLanguageStatus = pgTable(
   }),
 );
 
-export const animeLanguageEvidence = pgTable(
+export const animeLanguageEvidence = sqliteTable(
   "anime_language_evidence",
   {
     id: serial("id").primaryKey(),
@@ -463,9 +454,9 @@ export const animeLanguageEvidence = pgTable(
 
     confidence: integer("confidence").notNull().default(0),
 
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
 
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
   (table) => ({
     animeLanguageMediaIdx: index("anime_language_evidence_anime_language_media_idx").on(
@@ -480,7 +471,7 @@ export const animeLanguageEvidence = pgTable(
   }),
 );
 
-export const episodeLanguageStatus = pgTable(
+export const episodeLanguageStatus = sqliteTable(
   "episode_language_status",
   {
     id: serial("id").primaryKey(),
@@ -507,11 +498,11 @@ export const episodeLanguageStatus = pgTable(
 
     confidence: integer("confidence").notNull().default(0),
 
-    checkedAt: timestamp("checked_at", { withTimezone: true }).notNull().defaultNow(),
+    checkedAt: timestamp("checked_at").notNull().defaultNow(),
 
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
 
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
   (table) => ({
     animeEpisodeLanguageMediaIdx: uniqueIndex(
@@ -524,7 +515,7 @@ export const episodeLanguageStatus = pgTable(
   }),
 );
 
-export const syncRuns = pgTable(
+export const syncRuns = sqliteTable(
   "sync_runs",
   {
     id: serial("id").primaryKey(),
@@ -543,9 +534,9 @@ export const syncRuns = pgTable(
       .notNull()
       .default("running"),
 
-    startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+    startedAt: timestamp("started_at").notNull().defaultNow(),
 
-    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    finishedAt: timestamp("finished_at"),
 
     itemsScanned: integer("items_scanned").notNull().default(0),
     itemsCreated: integer("items_created").notNull().default(0),

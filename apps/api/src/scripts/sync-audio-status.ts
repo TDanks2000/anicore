@@ -148,7 +148,7 @@ export async function runSubPass(): Promise<void> {
   );
 
   const [countRow] = await db
-    .select({ n: sql<number>`count(*)::int` })
+    .select({ n: sql<number>`count(*)` })
     .from(episodes)
     .innerJoin(anime, eq(episodes.animeId, anime.id))
     .where(airedJapaneseWhere);

@@ -12,7 +12,7 @@ import {
 import { insertAnimeWithUniqueSlug } from "@anicore/providers";
 import { toJsonArray } from "@anicore/providers/lib/json";
 import { slugCandidates } from "@anicore/providers/lib/slug";
-import { and, asc, desc, eq, ilike, or, type SQL, sql } from "drizzle-orm";
+import { type AnyColumn, and, asc, desc, eq, or, type SQL, sql } from "drizzle-orm";
 
 import { conflict, notFound } from "../../lib/errors";
 import { optionalText } from "../../lib/validators";
@@ -39,24 +39,33 @@ export function escapeLikePattern(value: string): string {
   return value.replace(/[\\%_]/g, (character) => `\\${character}`);
 }
 
+/**
+ * Case-insensitive match against an {@link escapeLikePattern} pattern. SQLite's
+ * LIKE ignores ASCII case but has no default escape character, so it is set
+ * explicitly.
+ */
+function likeEscaped(column: AnyColumn, pattern: string): SQL {
+  return sql`${column} like ${pattern} escape '\\'`;
+}
+
 function searchConditions(search: string): { where: SQL; rank: SQL } {
   const contains = `%${escapeLikePattern(search)}%`;
   const prefix = `${escapeLikePattern(search)}%`;
   const exact = search.toLowerCase();
 
   const where = or(
-    ilike(anime.titleRomaji, contains),
-    ilike(anime.titleEnglish, contains),
-    ilike(anime.titleNative, contains),
-    ilike(anime.titleUserPreferred, contains),
-    ilike(anime.synonymsJson, contains),
-    ilike(anime.slug, contains),
+    likeEscaped(anime.titleRomaji, contains),
+    likeEscaped(anime.titleEnglish, contains),
+    likeEscaped(anime.titleNative, contains),
+    likeEscaped(anime.titleUserPreferred, contains),
+    likeEscaped(anime.synonymsJson, contains),
+    likeEscaped(anime.slug, contains),
   )!;
 
   // Exact title matches first, then prefix matches, then everything else.
   const rank = sql`case
     when lower(${anime.titleRomaji}) = ${exact} or lower(${anime.titleEnglish}) = ${exact} then 0
-    when ${anime.titleRomaji} ilike ${prefix} or ${anime.titleEnglish} ilike ${prefix} then 1
+    when ${likeEscaped(anime.titleRomaji, prefix)} or ${likeEscaped(anime.titleEnglish, prefix)} then 1
     else 2
   end`;
 

@@ -8,7 +8,7 @@ import {
 } from "@anicore/providers/thetvdb/client";
 import { TMDB } from "@api-wrappers/tmdb-wrapper";
 import { sql } from "drizzle-orm";
-import { queryRows } from "../lib/query-rows";
+import { queryRows, withBooleans } from "../lib/query-rows";
 
 import {
   buildTvdbSlugResolutionGroups,
@@ -153,18 +153,18 @@ async function loadNormalOrphanRows(): Promise<CollisionEpisodeMappingRow[]> {
       em.confidence,
       e.number as "localEpisodeNumber",
       (
-        select count(*)::int
-        from public.episodes local_episode
+        select count(*)
+        from episodes local_episode
         where local_episode.anime_id = e.anime_id
           and local_episode.kind = 'normal'
       ) as "localNormalEpisodeCount"
-    from public.episode_mappings em
-    join public.episodes e on e.id = em.episode_id
+    from episode_mappings em
+    join episodes e on e.id = em.episode_id
     where em.provider in ('thetvdb', 'tmdb')
       and e.kind = 'normal'
       and not exists (
         select 1
-        from public.anime_mappings am
+        from anime_mappings am
         where am.anime_id = e.anime_id
           and am.provider = em.provider
       )
@@ -183,12 +183,12 @@ async function loadProviderEntityMappings(): Promise<ProviderEntityMappingRow[]>
       apm.confidence,
       apm.source,
       apm.is_primary as "isPrimary"
-    from public.provider_entities pe
-    join public.anime_provider_mappings apm
+    from provider_entities pe
+    join anime_provider_mappings apm
       on apm.provider_entity_id = pe.id
     where pe.provider in ('thetvdb', 'tmdb')
     order by pe.provider, pe.provider_id, apm.anime_id
-  `);
+  `).then(withBooleans<ProviderEntityMappingRow>("isPrimary"));
 }
 
 async function loadEpisodeMappings(): Promise<EpisodeMappingRow[]> {
@@ -199,8 +199,8 @@ async function loadEpisodeMappings(): Promise<EpisodeMappingRow[]> {
       em.provider_id as "providerEpisodeId",
       e.number as "localEpisodeNumber",
       e.kind as "localKind"
-    from public.episode_mappings em
-    join public.episodes e on e.id = em.episode_id
+    from episode_mappings em
+    join episodes e on e.id = em.episode_id
     where em.provider in ('thetvdb', 'tmdb')
     order by em.provider, em.provider_id
   `);
@@ -209,7 +209,7 @@ async function loadEpisodeMappings(): Promise<EpisodeMappingRow[]> {
 async function loadLocalNormalEpisodes(): Promise<LocalNormalEpisodeRow[]> {
   return queryRows<LocalNormalEpisodeRow>(sql`
     select anime_id as "animeId", number as "episodeNumber"
-    from public.episodes
+    from episodes
     where kind = 'normal'
     order by anime_id, number
   `);
@@ -226,7 +226,7 @@ async function loadAnimeMeta(): Promise<AnimeMetaRow[]> {
       synonyms_json as "synonymsJson",
       format,
       episode_count as "episodeCount"
-    from public.anime
+    from anime
     order by id
   `);
 }

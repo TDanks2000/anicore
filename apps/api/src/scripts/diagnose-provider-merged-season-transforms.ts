@@ -97,18 +97,18 @@ async function loadNormalOrphanRows(): Promise<CollisionEpisodeMappingRow[]> {
       em.confidence,
       e.number as "localEpisodeNumber",
       (
-        select count(*)::int
-        from public.episodes local_episode
+        select count(*)
+        from episodes local_episode
         where local_episode.anime_id = e.anime_id
           and local_episode.kind = 'normal'
       ) as "localNormalEpisodeCount"
-    from public.episode_mappings em
-    join public.episodes e on e.id = em.episode_id
+    from episode_mappings em
+    join episodes e on e.id = em.episode_id
     where em.provider in ('thetvdb', 'tmdb')
       and e.kind = 'normal'
       and not exists (
         select 1
-        from public.anime_mappings am
+        from anime_mappings am
         where am.anime_id = e.anime_id
           and am.provider = em.provider
       )
@@ -123,12 +123,12 @@ async function loadProviderEntityMappings(): Promise<ProviderEntityMappingRow[]>
       pe.provider_id as "providerId",
       apm.anime_id as "animeId",
       (
-        select count(*)::int
-        from public.anime_provider_segments aps
+        select count(*)
+        from anime_provider_segments aps
         where aps.anime_provider_mapping_id = apm.id
       ) as "segmentCount"
-    from public.provider_entities pe
-    join public.anime_provider_mappings apm
+    from provider_entities pe
+    join anime_provider_mappings apm
       on apm.provider_entity_id = pe.id
     where pe.provider in ('thetvdb', 'tmdb')
     order by pe.provider, pe.provider_id, apm.anime_id
@@ -138,7 +138,7 @@ async function loadProviderEntityMappings(): Promise<ProviderEntityMappingRow[]>
 async function loadLegacyParents(): Promise<LegacyParentRow[]> {
   return queryRows<LegacyParentRow>(sql`
     select anime_id as "animeId", provider, provider_id as "providerId"
-    from public.anime_mappings
+    from anime_mappings
     where provider in ('thetvdb', 'tmdb')
     order by provider, provider_id, anime_id
   `);
@@ -147,8 +147,8 @@ async function loadLegacyParents(): Promise<LegacyParentRow[]> {
 async function loadEpisodeMappings(): Promise<EpisodeMappingRow[]> {
   return queryRows<EpisodeMappingRow>(sql`
     select e.anime_id as "animeId", em.provider, em.provider_id as "providerEpisodeId"
-    from public.episode_mappings em
-    join public.episodes e on e.id = em.episode_id
+    from episode_mappings em
+    join episodes e on e.id = em.episode_id
     where em.provider in ('thetvdb', 'tmdb')
     order by e.anime_id, em.provider, em.provider_id
   `);
@@ -157,7 +157,7 @@ async function loadEpisodeMappings(): Promise<EpisodeMappingRow[]> {
 async function loadLocalNormalEpisodes(): Promise<LocalNormalEpisodeRow[]> {
   return queryRows<LocalNormalEpisodeRow>(sql`
     select anime_id as "animeId", number as "episodeNumber"
-    from public.episodes
+    from episodes
     where kind = 'normal'
     order by anime_id, number
   `);
@@ -171,7 +171,7 @@ async function loadAnimeMeta(): Promise<AnimeMetaRow[]> {
       format,
       episode_count as "episodeCount",
       start_date as "startDate"
-    from public.anime
+    from anime
     order by id
   `);
 }

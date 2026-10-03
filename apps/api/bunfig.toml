@@ -1,0 +1,3 @@
+[test]
+# Points every test run at a throwaway SQLite file so no test can touch the real database.
+preload = ["./src/test/preload.ts"]

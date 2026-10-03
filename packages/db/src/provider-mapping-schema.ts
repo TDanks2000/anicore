@@ -1,15 +1,7 @@
 import { sql } from "drizzle-orm";
-import {
-  boolean,
-  check,
-  index,
-  integer,
-  pgTable,
-  serial,
-  text,
-  timestamp,
-  uniqueIndex,
-} from "drizzle-orm/pg-core";
+import { check, index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+
+import { boolean, serial, timestamp } from "./columns";
 
 import { mappingSources, providers } from "./enums";
 import { anime } from "./schema";
@@ -21,7 +13,7 @@ import { anime } from "./schema";
  * one real TVDB/TMDB season can be associated with multiple AniCore anime
  * entries without inventing synthetic provider IDs.
  */
-export const providerEntities = pgTable(
+export const providerEntities = sqliteTable(
   "provider_entities",
   {
     id: serial("id").primaryKey(),
@@ -29,8 +21,8 @@ export const providerEntities = pgTable(
     providerId: text("provider_id").notNull(),
     providerSlug: text("provider_slug"),
     providerUrl: text("provider_url"),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
   (table) => ({
     providerIdentityIdx: uniqueIndex("provider_entities_provider_id_idx").on(
@@ -51,7 +43,7 @@ export const providerEntities = pgTable(
  * this table. That many-to-many cardinality is required for split cours and
  * provider seasons that span multiple AniList entries.
  */
-export const animeProviderMappings = pgTable(
+export const animeProviderMappings = sqliteTable(
   "anime_provider_mappings",
   {
     id: serial("id").primaryKey(),
@@ -64,8 +56,8 @@ export const animeProviderMappings = pgTable(
     confidence: integer("confidence").notNull().default(100),
     source: text("source", { enum: mappingSources }).notNull().default("manual"),
     isPrimary: boolean("is_primary").notNull().default(false),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
   (table) => ({
     animeEntityIdx: uniqueIndex("anime_provider_mappings_anime_entity_idx").on(
@@ -89,7 +81,7 @@ export const animeProviderMappings = pgTable(
  * case. Each segment maps an inclusive provider range to an equally sized
  * inclusive local range, e.g. provider 13-24 -> local 1-12.
  */
-export const animeProviderSegments = pgTable(
+export const animeProviderSegments = sqliteTable(
   "anime_provider_segments",
   {
     id: serial("id").primaryKey(),
@@ -100,8 +92,8 @@ export const animeProviderSegments = pgTable(
     providerEpisodeEnd: integer("provider_episode_end").notNull(),
     localEpisodeStart: integer("local_episode_start").notNull(),
     localEpisodeEnd: integer("local_episode_end").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
   (table) => ({
     segmentIdx: uniqueIndex("anime_provider_segments_range_idx").on(

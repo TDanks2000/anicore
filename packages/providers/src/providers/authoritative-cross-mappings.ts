@@ -84,14 +84,14 @@ export async function syncAuthoritativeCrossMappings(
           set: {
             providerSlug: sql`coalesce(excluded.provider_slug, ${animeMappings.providerSlug})`,
             providerUrl: sql`coalesce(excluded.provider_url, ${animeMappings.providerUrl})`,
-            confidence: sql`greatest(${animeMappings.confidence}, 100)`,
+            confidence: sql`max(${animeMappings.confidence}, 100)`,
             source: sql`case
               when ${animeMappings.source} in ('manual', 'import', 'system')
                 then ${animeMappings.source}
               else 'api'
             end`,
             isPrimary: animeMappings.isPrimary,
-            updatedAt: sql`now()`,
+            updatedAt: new Date(),
           },
           setWhere: eq(animeMappings.animeId, animeId),
         })

@@ -1,41 +1,25 @@
 import { describe } from "bun:test";
-import { resolve } from "node:path";
-import { closeDb, db } from "@anicore/db";
+import { db, migrateDatabase } from "@anicore/db";
 import { sql } from "drizzle-orm";
-import { migrate } from "drizzle-orm/postgres-js/migrator";
 
 /**
- * Database integration tests run only when TEST_DATABASE_URL is set, so the
- * default `bun test` stays hermetic. CI provides a disposable Postgres.
- *
- * The harness truncates every table between tests, so it refuses to touch a
- * database whose name does not contain "test". Bun loads `.env` automatically,
- * which can point DATABASE_URL at a real database; this guard is what keeps a
- * misconfigured run from wiping it.
+ * Database integration tests run against the throwaway SQLite file the test
+ * preload (`src/test/preload.ts`) points DATABASE_URL at, so they need no
+ * external service and run as part of the default `bun test`.
  */
-const testDatabaseUrl = process.env.TEST_DATABASE_URL?.trim();
+export const describeWithDatabase = describe;
 
-export const describeWithDatabase = testDatabaseUrl ? describe : describe.skip;
-
-const migrationsFolder = resolve(import.meta.dir, "../../drizzle");
 let prepared: Promise<void> | null = null;
 
 async function prepare(): Promise<void> {
-  if (!testDatabaseUrl) throw new Error("TEST_DATABASE_URL is not set");
-
-  // Drop any connection opened against DATABASE_URL before the override.
-  await closeDb();
-  process.env.DATABASE_URL = testDatabaseUrl;
-  process.env.ANICORE_DATABASE_SSL ??= "disable";
-
-  const [row] = await db.execute<{ name: string }>(sql`select current_database() as name`);
-  if (!row?.name.includes("test")) {
+  // Defence in depth: the harness wipes every table, so refuse to run unless
+  // the preload has redirected DATABASE_URL to its temporary directory.
+  if (!process.env.DATABASE_URL?.includes("anicore-test-")) {
     throw new Error(
-      `Refusing to run integration tests against database "${row?.name}": its name must contain "test"`,
+      `Refusing to run integration tests against "${process.env.DATABASE_URL}": run them through \`bun test\` in apps/api`,
     );
   }
-
-  await migrate(db, { migrationsFolder });
+  await migrateDatabase();
 }
 
 /** Migrates the test database once per process. */
@@ -44,15 +28,19 @@ export function prepareTestDatabase(): Promise<void> {
   return prepared;
 }
 
-/** Empties every application table and resets identity sequences. */
+/** Empties every application table and resets id sequences. */
 export async function resetTestDatabase(): Promise<void> {
   await prepareTestDatabase();
-  const tables = await db.execute<{ name: string }>(sql`
-    select quote_ident(tablename) as name
-    from pg_tables
-    where schemaname = 'public'
+  const tables = await db.all<{ name: string }>(sql`
+    select name
+    from sqlite_master
+    where type = 'table'
+      and name not glob 'sqlite_*'
+      and name <> '__drizzle_migrations'
   `);
-  if (tables.length === 0) return;
-  const list = [...tables].map((table) => table.name).join(", ");
-  await db.execute(sql.raw(`truncate table ${list} restart identity cascade`));
+  // Every foreign key cascades on delete, so the order does not matter.
+  await db.transaction(async (tx) => {
+    for (const { name } of tables) await tx.run(sql`delete from ${sql.identifier(name)}`);
+    await tx.run(sql`delete from sqlite_sequence`);
+  });
 }

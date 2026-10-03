@@ -8,7 +8,7 @@ import {
 } from "@anicore/providers/thetvdb/client";
 import { TMDB } from "@api-wrappers/tmdb-wrapper";
 import { type SQL, sql } from "drizzle-orm";
-import { queryRows, transactionRows } from "../lib/query-rows";
+import { queryRows, transactionRows, withBooleans } from "../lib/query-rows";
 
 import {
   buildTvdbSlugResolutionGroups,
@@ -181,9 +181,9 @@ async function assertProviderMappingTablesExist(): Promise<void> {
     animeProviderSegments: string | null;
   }>(sql`
     select
-      to_regclass('public.provider_entities')::text as "providerEntities",
-      to_regclass('public.anime_provider_mappings')::text as "animeProviderMappings",
-      to_regclass('public.anime_provider_segments')::text as "animeProviderSegments"
+      (select name from sqlite_master where type = 'table' and name = 'provider_entities') as "providerEntities",
+      (select name from sqlite_master where type = 'table' and name = 'anime_provider_mappings') as "animeProviderMappings",
+      (select name from sqlite_master where type = 'table' and name = 'anime_provider_segments') as "animeProviderSegments"
   `);
   if (!row?.providerEntities || !row.animeProviderMappings || !row.animeProviderSegments) {
     throw new Error(
@@ -207,18 +207,18 @@ async function loadNormalOrphanRows(): Promise<CollisionEpisodeMappingRow[]> {
       em.confidence,
       e.number as "localEpisodeNumber",
       (
-        select count(*)::int
-        from public.episodes local_episode
+        select count(*)
+        from episodes local_episode
         where local_episode.anime_id = e.anime_id
           and local_episode.kind = 'normal'
       ) as "localNormalEpisodeCount"
-    from public.episode_mappings em
-    join public.episodes e on e.id = em.episode_id
+    from episode_mappings em
+    join episodes e on e.id = em.episode_id
     where em.provider in ('thetvdb', 'tmdb')
       and e.kind = 'normal'
       and not exists (
         select 1
-        from public.anime_mappings am
+        from anime_mappings am
         where am.anime_id = e.anime_id
           and am.provider = em.provider
       )
@@ -238,16 +238,16 @@ async function loadProviderEntityMappings(): Promise<ProviderEntityMappingRow[]>
       apm.source,
       apm.is_primary as "isPrimary",
       (
-        select count(*)::int
-        from public.anime_provider_segments aps
+        select count(*)
+        from anime_provider_segments aps
         where aps.anime_provider_mapping_id = apm.id
       ) as "segmentCount"
-    from public.provider_entities pe
-    join public.anime_provider_mappings apm
+    from provider_entities pe
+    join anime_provider_mappings apm
       on apm.provider_entity_id = pe.id
     where pe.provider in ('thetvdb', 'tmdb')
     order by pe.provider, pe.provider_id, apm.anime_id
-  `);
+  `).then(withBooleans<ProviderEntityMappingRow>("isPrimary"));
 }
 
 async function loadLegacyParents(): Promise<LegacyParentRow[]> {
@@ -257,7 +257,7 @@ async function loadLegacyParents(): Promise<LegacyParentRow[]> {
       anime_id as "animeId",
       provider,
       provider_id as "providerId"
-    from public.anime_mappings
+    from anime_mappings
     where provider in ('thetvdb', 'tmdb')
     order by provider, provider_id, anime_id
   `);
@@ -273,8 +273,8 @@ async function loadEpisodeMappings(): Promise<EpisodeMappingRow[]> {
       em.provider_id as "providerEpisodeId",
       e.number as "localEpisodeNumber",
       e.kind as "localKind"
-    from public.episode_mappings em
-    join public.episodes e on e.id = em.episode_id
+    from episode_mappings em
+    join episodes e on e.id = em.episode_id
     where em.provider in ('thetvdb', 'tmdb')
     order by em.provider, em.provider_id
   `);
@@ -287,7 +287,7 @@ async function loadLocalEpisodes(): Promise<LocalEpisodeRow[]> {
       anime_id as "animeId",
       number as "episodeNumber",
       kind
-    from public.episodes
+    from episodes
     order by anime_id, number, kind, id
   `);
 }
@@ -304,7 +304,7 @@ async function loadAnimeMeta(): Promise<AnimeMetaRow[]> {
       format,
       episode_count as "episodeCount",
       start_date as "startDate"
-    from public.anime
+    from anime
     order by id
   `);
 }
@@ -787,11 +787,11 @@ function episodeMoveValues(candidates: RepairCandidate[]): SQL[] {
   return candidates.flatMap((candidate) =>
     candidate.episodeMoves.map(
       (move) => sql`(
-      ${move.episodeMappingId}::int,
-      ${move.fromEpisodeId}::int,
-      ${move.toEpisodeId}::int,
-      ${candidate.provider}::text,
-      ${move.providerEpisodeId}::text
+      ${move.episodeMappingId},
+      ${move.fromEpisodeId},
+      ${move.toEpisodeId},
+      ${candidate.provider},
+      ${move.providerEpisodeId}
     )`,
     ),
   );
@@ -800,11 +800,11 @@ function episodeMoveValues(candidates: RepairCandidate[]): SQL[] {
 function parentTransferValues(candidates: RepairCandidate[]): SQL[] {
   return candidates.map(
     (candidate) => sql`(
-    ${candidate.legacyMappingId}::int,
-    ${candidate.currentOwnerAnimeId}::int,
-    ${candidate.targetAnimeId}::int,
-    ${candidate.provider}::text,
-    ${candidate.providerId}::text
+    ${candidate.legacyMappingId},
+    ${candidate.currentOwnerAnimeId},
+    ${candidate.targetAnimeId},
+    ${candidate.provider},
+    ${candidate.providerId}
   )`,
   );
 }
@@ -812,11 +812,11 @@ function parentTransferValues(candidates: RepairCandidate[]): SQL[] {
 function v2TransferValues(candidates: RepairCandidate[]): SQL[] {
   return candidates.map(
     (candidate) => sql`(
-    ${candidate.animeProviderMappingId}::int,
-    ${candidate.providerEntityId}::int,
-    ${candidate.currentOwnerAnimeId}::int,
-    ${candidate.targetAnimeId}::int,
-    ${candidate.provider}::text
+    ${candidate.animeProviderMappingId},
+    ${candidate.providerEntityId},
+    ${candidate.currentOwnerAnimeId},
+    ${candidate.targetAnimeId},
+    ${candidate.provider}
   )`,
   );
 }
@@ -846,15 +846,13 @@ async function verifyExpectedState(
   };
 
   const episodeValues = candidates.flatMap((candidate) =>
-    candidate.episodeMoves.map(
-      (move) => sql`(${move.episodeMappingId}::int, ${move.toEpisodeId}::int)`,
-    ),
+    candidate.episodeMoves.map((move) => sql`(${move.episodeMappingId}, ${move.toEpisodeId})`),
   );
   const legacyValues = candidates.map(
-    (candidate) => sql`(${candidate.legacyMappingId}::int, ${candidate.targetAnimeId}::int)`,
+    (candidate) => sql`(${candidate.legacyMappingId}, ${candidate.targetAnimeId})`,
   );
   const v2Values = candidates.map(
-    (candidate) => sql`(${candidate.animeProviderMappingId}::int, ${candidate.targetAnimeId}::int)`,
+    (candidate) => sql`(${candidate.animeProviderMappingId}, ${candidate.targetAnimeId})`,
   );
   const mappingIds = candidates.map((candidate) => candidate.animeProviderMappingId);
 
@@ -863,11 +861,11 @@ async function verifyExpectedState(
       ? 0
       : await runCount(sql`
           with expected(id, episode_id) as (values ${sql.join(episodeValues, sql`, `)})
-          select count(*)::int as count
+          select count(*) as count
           from expected
           where not exists (
             select 1
-            from public.episode_mappings em
+            from episode_mappings em
             where em.id = expected.id
               and em.episode_id = expected.episode_id
           )
@@ -875,11 +873,11 @@ async function verifyExpectedState(
 
   const wrongLegacyParents = await runCount(sql`
     with expected(id, anime_id) as (values ${sql.join(legacyValues, sql`, `)})
-    select count(*)::int as count
+    select count(*) as count
     from expected
     where not exists (
       select 1
-      from public.anime_mappings am
+      from anime_mappings am
       where am.id = expected.id
         and am.anime_id = expected.anime_id
         and am.source = 'system'
@@ -889,11 +887,11 @@ async function verifyExpectedState(
 
   const wrongV2Associations = await runCount(sql`
     with expected(id, anime_id) as (values ${sql.join(v2Values, sql`, `)})
-    select count(*)::int as count
+    select count(*) as count
     from expected
     where not exists (
       select 1
-      from public.anime_provider_mappings apm
+      from anime_provider_mappings apm
       where apm.id = expected.id
         and apm.anime_id = expected.anime_id
         and apm.source = 'system'
@@ -902,8 +900,8 @@ async function verifyExpectedState(
   `);
 
   const transferredAssociationsWithSegments = await runCount(sql`
-    select count(*)::int as count
-    from public.anime_provider_segments aps
+    select count(*) as count
+    from anime_provider_segments aps
     where aps.anime_provider_mapping_id in (
       ${sql.join(
         mappingIds.map((id) => sql`${id}`),
@@ -949,16 +947,16 @@ async function applyCandidates(candidates: RepairCandidate[]): Promise<{
             with moves(id, from_episode_id, to_episode_id, provider, provider_id) as (
               values ${sql.join(episodeValues, sql`, `)}
             )
-            update public.episode_mappings em
+            update episode_mappings as em
             set
               episode_id = moves.to_episode_id,
-              updated_at = now()
+              updated_at = ${Date.now()}
             from moves
             where em.id = moves.id
               and em.episode_id = moves.from_episode_id
               and em.provider = moves.provider
               and em.provider_id = moves.provider_id
-            returning em.id
+            returning id
           `,
           );
 
@@ -969,12 +967,12 @@ async function applyCandidates(candidates: RepairCandidate[]): Promise<{
       with transfers(id, from_anime_id, to_anime_id, provider, provider_id) as (
         values ${sql.join(legacyValues, sql`, `)}
       )
-      update public.anime_mappings am
+      update anime_mappings as am
       set
         anime_id = transfers.to_anime_id,
         source = 'system',
-        confidence = greatest(am.confidence, 95),
-        updated_at = now()
+        confidence = max(am.confidence, 95),
+        updated_at = ${Date.now()}
       from transfers
       where am.id = transfers.id
         and am.anime_id = transfers.from_anime_id
@@ -982,11 +980,11 @@ async function applyCandidates(candidates: RepairCandidate[]): Promise<{
         and am.provider_id = transfers.provider_id
         and not exists (
           select 1
-          from public.anime_mappings target
+          from anime_mappings target
           where target.anime_id = transfers.to_anime_id
             and target.provider = transfers.provider
         )
-      returning am.id
+      returning id
     `,
     );
 
@@ -997,30 +995,30 @@ async function applyCandidates(candidates: RepairCandidate[]): Promise<{
       with transfers(id, provider_entity_id, from_anime_id, to_anime_id, provider) as (
         values ${sql.join(v2Values, sql`, `)}
       )
-      update public.anime_provider_mappings apm
+      update anime_provider_mappings as apm
       set
         anime_id = transfers.to_anime_id,
         source = 'system',
-        confidence = greatest(apm.confidence, 95),
-        updated_at = now()
+        confidence = max(apm.confidence, 95),
+        updated_at = ${Date.now()}
       from transfers
       where apm.id = transfers.id
         and apm.provider_entity_id = transfers.provider_entity_id
         and apm.anime_id = transfers.from_anime_id
         and not exists (
           select 1
-          from public.anime_provider_segments aps
+          from anime_provider_segments aps
           where aps.anime_provider_mapping_id = apm.id
         )
         and not exists (
           select 1
-          from public.anime_provider_mappings target
-          join public.provider_entities target_pe
+          from anime_provider_mappings target
+          join provider_entities target_pe
             on target_pe.id = target.provider_entity_id
           where target.anime_id = transfers.to_anime_id
             and target_pe.provider = transfers.provider
         )
-      returning apm.id
+      returning id
     `,
     );
 
@@ -1040,7 +1038,7 @@ async function applyCandidates(candidates: RepairCandidate[]): Promise<{
       );
     }
 
-    const verified = await verifyExpectedState((query) => tx.execute(query), candidates);
+    const verified = await verifyExpectedState((query) => tx.all(query), candidates);
     if (
       verified.wrongEpisodeMoves !== 0 ||
       verified.wrongLegacyParents !== 0 ||
@@ -1087,7 +1085,7 @@ async function run(mode: Mode): Promise<Record<string, unknown>> {
   };
   if (mode === "apply") {
     applied = await applyCandidates(plan.candidates);
-    const postCommit = await verifyExpectedState((query) => db.execute(query), plan.candidates);
+    const postCommit = await verifyExpectedState((query) => db.all(query), plan.candidates);
     if (
       postCommit.wrongEpisodeMoves !== 0 ||
       postCommit.wrongLegacyParents !== 0 ||

@@ -28,7 +28,10 @@ apps/api/data/eval/
 repair-diagnostics.txt
 tvdb-repair-dry-run.txt
 
-# SQLite (if ever used locally)
+# SQLite database (apps/api/data/anicore.db by default)
+*.db
+*.db-shm
+*.db-wal
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal

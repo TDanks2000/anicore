@@ -20,8 +20,7 @@
     "db:check-shape": "bun src/scripts/check-db-shape.ts",
     "db:empty": "bun src/scripts/empty-db.ts",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
-    "db:push": "drizzle-kit push",
+    "db:migrate": "bun src/scripts/migrate.ts",
     "db:seed": "bun src/scripts/seed.ts",
     "db:studio": "drizzle-kit studio",
     "dev": "bun --cwd ../.. --watch --preload ./scripts/api-cwd.ts apps/api/src/index.ts",
@@ -43,9 +42,9 @@
     "@api-wrappers/tmdb-wrapper": "catalog:",
     "@elysia/cors": "catalog:",
     "@elysia/openapi": "catalog:",
+    "@libsql/client": "catalog:",
     "drizzle-orm": "catalog:",
-    "elysia": "catalog:",
-    "postgres": "catalog:"
+    "elysia": "catalog:"
   },
   "devDependencies": {
     "bun-types": "catalog:",

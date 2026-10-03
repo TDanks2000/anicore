@@ -155,14 +155,14 @@ async function insertKitsuMapping(
       set: {
         providerSlug: sql`coalesce(excluded.provider_slug, ${animeMappings.providerSlug})`,
         providerUrl: sql`coalesce(excluded.provider_url, ${animeMappings.providerUrl})`,
-        confidence: sql`greatest(${animeMappings.confidence}, excluded.confidence)`,
+        confidence: sql`max(${animeMappings.confidence}, excluded.confidence)`,
         source: sql`case
           when ${animeMappings.source} in ('manual', 'api', 'import', 'system')
             then ${animeMappings.source}
           else excluded.source
         end`,
         isPrimary: sql`${animeMappings.isPrimary} or excluded.is_primary`,
-        updatedAt: sql`now()`,
+        updatedAt: new Date(),
       },
       setWhere: eq(animeMappings.animeId, animeId),
     })
@@ -282,7 +282,7 @@ export async function syncKitsuEpisodes(
           airDate: sql`coalesce(episodes.air_date, excluded.air_date)`,
           thumbnail: sql`coalesce(episodes.thumbnail, excluded.thumbnail)`,
           lengthMinutes: sql`coalesce(episodes.length_minutes, excluded.length_minutes)`,
-          updatedAt: sql`now()`,
+          updatedAt: new Date(),
         },
       })
       .returning({ id: episodes.id, number: episodes.number });
@@ -322,7 +322,7 @@ export async function syncKitsuEpisodes(
           providerEpisodeNumber: sql`excluded.provider_episode_number`,
           confidence: sql`case
             when ${episodeMappings.source} in ('manual', 'import', 'system')
-              then greatest(${episodeMappings.confidence}, excluded.confidence)
+              then max(${episodeMappings.confidence}, excluded.confidence)
             else excluded.confidence
           end`,
           source: sql`case
@@ -330,7 +330,7 @@ export async function syncKitsuEpisodes(
               then ${episodeMappings.source}
             else excluded.source
           end`,
-          updatedAt: sql`now()`,
+          updatedAt: new Date(),
         },
         setWhere: sql`${episodeMappings.episodeId} = excluded.episode_id`,
       })

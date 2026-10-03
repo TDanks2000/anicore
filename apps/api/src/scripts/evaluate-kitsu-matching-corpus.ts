@@ -98,12 +98,21 @@ export function parseCorpusCommandArgs(args: string[], cwd = process.cwd()): Cor
  * recover the true AniList id (`anime.id` is a local surrogate key, not the
  * AniList media id — see the report for the verification trail).
  *
- * `distinct on (a.id)` plus a deterministic tiebreak keeps the query stable
- * even if an anime were ever to carry more than one row for a provider.
+ * Taking the first row per anime under a deterministic tiebreak keeps the
+ * query stable even if an anime were ever to carry more than one row for a
+ * provider.
  */
 async function loadAuthoritativeRows(): Promise<AuthoritativeKitsuMappingRow[]> {
   return queryRows<AuthoritativeKitsuMappingRow>(sql`
-    select distinct on (a.id)
+    select
+      "animeId", "titleRomaji", "titleEnglish", "titleNative", "synonymsJson", season,
+      "seasonYear", "startDate", "episodeCount", format, "anilistId", "expectedKitsuId"
+    from (
+    select
+      row_number() over (
+        partition by a.id
+        order by anilist.is_primary desc, anilist.id, kitsu.is_primary desc, kitsu.id
+      ) as rn,
       a.id as "animeId",
       a.title_romaji as "titleRomaji",
       a.title_english as "titleEnglish",
@@ -121,7 +130,9 @@ async function loadAuthoritativeRows(): Promise<AuthoritativeKitsuMappingRow[]> 
       on anilist.anime_id = a.id and anilist.provider = 'anilist'
     join anime_mappings kitsu
       on kitsu.anime_id = a.id and kitsu.provider = 'kitsu' and kitsu.source = 'api'
-    order by a.id, anilist.is_primary desc, anilist.id, kitsu.is_primary desc, kitsu.id
+    ) ranked
+    where rn = 1
+    order by "animeId"
   `);
 }
 

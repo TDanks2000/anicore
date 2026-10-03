@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 import { db } from "./index";
 import {
@@ -108,8 +108,8 @@ export async function recalculateAnimeLanguageStatus(input: {
         status: resolved.status,
         confidence: resolved.confidence,
         isManualOverride: false,
-        checkedAt: sql`now()`,
-        updatedAt: sql`now()`,
+        checkedAt: new Date(),
+        updatedAt: new Date(),
       },
       setWhere: eq(animeLanguageStatus.isManualOverride, false),
     })
@@ -198,7 +198,7 @@ export async function syncAnimeLanguageEvidenceFromEpisodeStatuses(input: {
     .set({
       value: evidenceValue,
       confidence,
-      updatedAt: sql`now()`,
+      updatedAt: new Date(),
     })
     .where(evidenceMatch)
     .returning();

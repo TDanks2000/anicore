@@ -8,7 +8,7 @@ export const healthRoutes = new Elysia({ prefix: "/health", detail: { tags: ["He
   // Readiness: the database is reachable, so requests can actually be served.
   .get("/ready", async ({ set }) => {
     try {
-      await db.execute(sql`select 1`);
+      await db.run(sql`select 1`);
       return { ok: true, database: "up" };
     } catch (error) {
       console.error("Readiness check failed", error);

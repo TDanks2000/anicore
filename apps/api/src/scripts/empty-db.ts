@@ -1,4 +1,5 @@
 import { db } from "@anicore/db";
+import { animeProviderMappings, animeProviderSegments } from "@anicore/db/provider-mapping-schema";
 import {
   anime,
   animeExternalLinks,
@@ -17,12 +18,12 @@ import {
 } from "@anicore/db/schema";
 import { clearAllUnmatched, resetProgress } from "@anicore/providers/lib/cache";
 import { log } from "@anicore/providers/lib/logger";
-import { sql } from "drizzle-orm";
-import type { PgTable } from "drizzle-orm/pg-core";
+import { getTableName, sql } from "drizzle-orm";
+import type { SQLiteTable } from "drizzle-orm/sqlite-core";
 
-const n = sql<number>`count(*)::int`;
+const n = sql<number>`count(*)`;
 
-async function rowCount(table: PgTable): Promise<number> {
+async function rowCount(table: SQLiteTable): Promise<number> {
   const [row] = await db.select({ n }).from(table);
   return row?.n ?? 0;
 }
@@ -54,16 +55,39 @@ if (total === 0) {
 }
 
 log.info(`Found ${total.toLocaleString()} rows across ${Object.keys(counts).length} tables.`);
-log.warn("Truncating all tables (CASCADE) and resetting sequences…");
+log.warn("Deleting all rows and resetting id sequences…");
 
-await db.execute(sql`
-  TRUNCATE
-    anime,
-    studios,
-    tags,
-    sync_runs
-  RESTART IDENTITY CASCADE
-`);
+// Children before parents. provider_entities is kept: it is shared provider
+// identity, not per-anime data, matching the old TRUNCATE ... CASCADE scope.
+const wipeOrder: SQLiteTable[] = [
+  animeProviderSegments,
+  animeProviderMappings,
+  episodeLanguageStatus,
+  episodeMappings,
+  episodes,
+  animeLanguageEvidence,
+  animeLanguageStatus,
+  animeExternalLinks,
+  animeTagLinks,
+  animeStudioLinks,
+  animeRelationLinks,
+  animeMappings,
+  anime,
+  tags,
+  studios,
+  syncRuns,
+];
+
+await db.transaction(async (tx) => {
+  for (const table of wipeOrder) await tx.delete(table);
+  const names = wipeOrder.map((table) => getTableName(table));
+  await tx.run(
+    sql`delete from sqlite_sequence where name in (${sql.join(
+      names.map((name) => sql`${name}`),
+      sql`, `,
+    )})`,
+  );
+});
 
 log.info("Resetting progress cache and unmatched files…");
 await resetProgress();

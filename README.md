@@ -4,14 +4,16 @@ AniCore is a unified anime metadata API. It maps anime and episodes across AniLi
 
 ## Quick start
 
-Requires [Bun](https://bun.sh) 1.3 and a Postgres database (Supabase works).
+Requires [Bun](https://bun.sh) 1.3. Data lives in a local SQLite file (`apps/api/data/anicore.db`), so there is no database server to run or pay for.
 
 ```sh
 bun install
-cp apps/api/.env.example apps/api/.env   # set DATABASE_URL and ANICORE_ADMIN_TOKEN
-bun run db:migrate
+cp apps/api/.env.example apps/api/.env   # set ANICORE_ADMIN_TOKEN
 bun run dev                              # API on :3000, dashboard on :5173
+bun run sync                             # populate the database from AniList and friends
 ```
+
+The database file is created and migrated automatically the first time anything opens it. Set `DATABASE_URL` to a file path to keep it elsewhere; to back it up, stop the API and any sync, then copy `anicore.db` along with its `-wal` and `-shm` files if present.
 
 Interactive API docs are served at `http://localhost:3000/docs` (OpenAPI JSON at `/docs/json`).
 
@@ -27,7 +29,7 @@ AniCore is a Bun workspace driven by Turborepo:
 | `packages/providers` | Provider clients, mappers, matching, and the idempotent provider upsert |
 | `packages/sync-monitor` | Sync monitor types and the browser client used by the dashboard |
 
-Inside the API, each module under `src/modules` has routes (validation and HTTP shape only) and a service (queries, transactions and business rules). Services throw `HttpError` for client errors; the global error handler turns those into responses and classifies database constraint violations by SQLSTATE.
+Inside the API, each module under `src/modules` has routes (validation and HTTP shape only) and a service (queries, transactions and business rules). Services throw `HttpError` for client errors; the global error handler turns those into responses and classifies database constraint violations by their SQLite result code.
 
 The sync pulls every AniList ID, upserts the anime, then runs provider plugins (Kitsu matching, episode title enrichment from TheTVDB/TMDB, and dub/sub status) for it. A database lease in `sync_runs` ensures only one sync process runs at a time; provider upserts are safe to run concurrently with API imports.
 
@@ -95,12 +97,7 @@ Root commands force Turbo's stream UI so Windows shells avoid the interactive UI
 
 ### Integration tests
 
-API integration tests run against a real Postgres when `TEST_DATABASE_URL` is set, and are skipped otherwise. The harness applies migrations and truncates every table between tests, so it refuses any database whose name does not contain `test`.
-
-```sh
-createdb anicore_test
-TEST_DATABASE_URL=postgresql://localhost/anicore_test ANICORE_DATABASE_SSL=disable bun run test
-```
+API integration tests run as part of `bun run test` against a throwaway SQLite file: a test preload (`apps/api/src/test/preload.ts`) points `DATABASE_URL` at a temporary directory, so tests never touch your real database.
 
 CI runs lint, typecheck, and the full test suite, including integration tests, on every push and pull request.
 

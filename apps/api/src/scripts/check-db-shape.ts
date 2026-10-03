@@ -1,11 +1,11 @@
+import { closeDb } from "@anicore/db";
 import { getDatabaseConfig } from "@anicore/db/db-config";
-
 import { analyzeDbShape } from "@anicore/db/db-shape";
 import { log } from "@anicore/providers/lib/logger";
-import postgres from "postgres";
+import { sql } from "drizzle-orm";
+import { queryRows } from "../lib/query-rows";
 
 interface TableRow {
-  tableSchema: string;
   tableName: string;
 }
 
@@ -14,59 +14,38 @@ interface IndexRow {
   indexName: string;
 }
 
-interface MigrationTableRow {
-  tableSchema: string;
-  tableName: string;
-}
-
 interface CountRow {
   count: number;
 }
 
-function quoteIdentifier(identifier: string): string {
-  return `"${identifier.replaceAll('"', '""')}"`;
-}
-
-const databaseConfig = (() => {
-  try {
-    return getDatabaseConfig();
-  } catch (err) {
-    log.error(err instanceof Error ? err.message : String(err));
-    process.exit(1);
-  }
-})();
-
-const sql = postgres(databaseConfig.url, {
-  max: 1,
-  ssl: databaseConfig.ssl,
-});
+const MIGRATIONS_TABLE = "__drizzle_migrations";
 
 try {
-  const tableRows = await sql<TableRow[]>`
-    select table_schema as "tableSchema", table_name as "tableName"
-    from information_schema.tables
-    where table_schema = 'public'
-      and table_type = 'BASE TABLE'
-    order by table_name
-  `;
+  log.info(`Database: ${getDatabaseConfig().path}`);
+} catch (err) {
+  log.error(err instanceof Error ? err.message : String(err));
+  process.exit(1);
+}
 
-  const indexRows = await sql<IndexRow[]>`
-    select tablename as "tableName", indexname as "indexName"
-    from pg_indexes
-    where schemaname = 'public'
-    order by tablename, indexname
-  `;
+try {
+  const tableRows = await queryRows<TableRow>(sql`
+    select name as "tableName"
+    from sqlite_master
+    where type = 'table'
+      and name not glob 'sqlite_*'
+    order by name
+  `);
 
-  const migrationTables = await sql<MigrationTableRow[]>`
-    select table_schema as "tableSchema", table_name as "tableName"
-    from information_schema.tables
-    where table_name = '__drizzle_migrations'
-      and table_type = 'BASE TABLE'
-    order by table_schema, table_name
-  `;
+  const indexRows = await queryRows<IndexRow>(sql`
+    select tbl_name as "tableName", name as "indexName"
+    from sqlite_master
+    where type = 'index'
+    order by tbl_name, name
+  `);
 
   const report = analyzeDbShape(tableRows, indexRows);
-  let migrationHistoryReadable = migrationTables.length > 0;
+  const hasMigrationTable = tableRows.some((row) => row.tableName === MIGRATIONS_TABLE);
+  let migrationHistoryReadable = hasMigrationTable;
 
   log.divider();
   log.info("AniCore DB shape check");
@@ -102,36 +81,31 @@ try {
     }
   }
 
-  if (migrationTables.length === 0) {
-    log.error("Drizzle migration table missing: __drizzle_migrations");
+  if (!hasMigrationTable) {
+    log.error(`Drizzle migration table missing: ${MIGRATIONS_TABLE}`);
   } else {
-    for (const table of migrationTables) {
-      const qualifiedName = `${quoteIdentifier(table.tableSchema)}.${quoteIdentifier(table.tableName)}`;
-      try {
-        const [countRow] = await sql.unsafe<CountRow[]>(
-          `select count(*)::int as "count" from ${qualifiedName}`,
-        );
-        log.success(
-          `Drizzle migration table present: ${table.tableSchema}.${table.tableName} (${countRow?.count ?? 0} rows)`,
-        );
-      } catch (err) {
-        migrationHistoryReadable = false;
-        const message = err instanceof Error ? err.message : String(err);
-        log.error(
-          `Drizzle migration table present but unreadable: ${table.tableSchema}.${table.tableName} (${message})`,
-        );
-      }
+    try {
+      const [countRow] = await queryRows<CountRow>(
+        sql`select count(*) as "count" from ${sql.identifier(MIGRATIONS_TABLE)}`,
+      );
+      log.success(
+        `Drizzle migration table present: ${MIGRATIONS_TABLE} (${countRow?.count ?? 0} rows)`,
+      );
+    } catch (err) {
+      migrationHistoryReadable = false;
+      const message = err instanceof Error ? err.message : String(err);
+      log.error(`Drizzle migration table present but unreadable: ${MIGRATIONS_TABLE} (${message})`);
     }
   }
 
   log.divider();
 
-  if (!report.ok || migrationTables.length === 0 || !migrationHistoryReadable) {
+  if (!report.ok || !migrationHistoryReadable) {
     log.error("DB shape does not match the normalized AniCore schema.");
     process.exit(1);
   }
 
   log.success("DB shape matches the normalized AniCore schema.");
 } finally {
-  await sql.end();
+  await closeDb();
 }

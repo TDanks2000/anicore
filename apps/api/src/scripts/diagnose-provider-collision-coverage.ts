@@ -33,19 +33,19 @@ async function loadRows(): Promise<CoverageDiagnosticRow[]> {
       em.provider,
       e.number as "localEpisodeNumber",
       (
-        select count(*)::int
-        from public.episodes local_episode
+        select count(*)
+        from episodes local_episode
         where local_episode.anime_id = e.anime_id
           and local_episode.kind = 'normal'
       ) as "localNormalEpisodeCount",
       em.provider_episode_number as "providerEpisodeNumber"
-    from public.episode_mappings em
-    join public.episodes e on e.id = em.episode_id
+    from episode_mappings em
+    join episodes e on e.id = em.episode_id
     where em.provider in ('thetvdb', 'tmdb')
       and e.kind = 'normal'
       and not exists (
         select 1
-        from public.anime_mappings am
+        from anime_mappings am
         where am.anime_id = e.anime_id
           and am.provider = em.provider
       )

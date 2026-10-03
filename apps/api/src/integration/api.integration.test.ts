@@ -35,7 +35,7 @@ async function createAnime(body: Record<string, unknown>): Promise<number> {
   return response.body.id!;
 }
 
-describeWithDatabase("API against Postgres", () => {
+describeWithDatabase("API against SQLite", () => {
   beforeEach(async () => {
     await resetTestDatabase();
     process.env.ANICORE_ADMIN_TOKEN = TOKEN;

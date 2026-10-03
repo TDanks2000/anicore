@@ -1,20 +1,30 @@
 import { describe, expect, test } from "bun:test";
 
-import { isForeignKeyViolation, isUniqueViolation, postgresErrorCode } from "./errors";
+import { isBusyError, isForeignKeyViolation, isUniqueViolation, sqliteErrorCode } from "./errors";
 
-describe("postgresErrorCode", () => {
-  test("reads the SQLSTATE from the error or its causes", () => {
-    const pg = Object.assign(new Error("duplicate key"), { code: "23505" });
-    expect(postgresErrorCode(pg)).toBe("23505");
-    expect(postgresErrorCode(new Error("wrapped", { cause: pg }))).toBe("23505");
-    expect(isUniqueViolation(new Error("wrapped", { cause: pg }))).toBe(true);
-    expect(isForeignKeyViolation(pg)).toBe(false);
+function libsqlError(code: string, extendedCode: string): Error {
+  return Object.assign(new Error(`${code}: constraint failed`), { code, extendedCode });
+}
+
+describe("sqliteErrorCode", () => {
+  test("reads the extended result code from the error or its causes", () => {
+    const unique = libsqlError("SQLITE_CONSTRAINT", "SQLITE_CONSTRAINT_UNIQUE");
+    expect(sqliteErrorCode(unique)).toBe("SQLITE_CONSTRAINT_UNIQUE");
+    expect(sqliteErrorCode(new Error("wrapped", { cause: unique }))).toBe(
+      "SQLITE_CONSTRAINT_UNIQUE",
+    );
+    expect(isUniqueViolation(new Error("wrapped", { cause: unique }))).toBe(true);
+    expect(isForeignKeyViolation(unique)).toBe(false);
+    expect(
+      isForeignKeyViolation(libsqlError("SQLITE_CONSTRAINT", "SQLITE_CONSTRAINT_FOREIGNKEY")),
+    ).toBe(true);
+    expect(isBusyError(libsqlError("SQLITE_BUSY", "SQLITE_BUSY"))).toBe(true);
   });
 
-  test("ignores non-SQLSTATE codes and plain values", () => {
-    expect(postgresErrorCode(Object.assign(new Error("x"), { code: "ECONNRESET" }))).toBeNull();
-    expect(postgresErrorCode(new Error("unique constraint"))).toBeNull();
-    expect(postgresErrorCode("23505")).toBeNull();
-    expect(postgresErrorCode(null)).toBeNull();
+  test("ignores non-SQLite codes and plain values", () => {
+    expect(sqliteErrorCode(Object.assign(new Error("x"), { code: "ECONNRESET" }))).toBeNull();
+    expect(sqliteErrorCode(new Error("unique constraint"))).toBeNull();
+    expect(sqliteErrorCode("SQLITE_CONSTRAINT_UNIQUE")).toBeNull();
+    expect(sqliteErrorCode(null)).toBeNull();
   });
 });

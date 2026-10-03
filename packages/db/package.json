@@ -21,8 +21,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "drizzle-orm": "catalog:",
-    "postgres": "catalog:"
+    "@libsql/client": "catalog:",
+    "drizzle-orm": "catalog:"
   },
   "devDependencies": {
     "bun-types": "catalog:",

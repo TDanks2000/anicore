@@ -60,9 +60,9 @@ async function assertSegmentMappingTablesExist(): Promise<void> {
     animeProviderSegments: string | null;
   }>(sql`
     select
-      to_regclass('public.provider_entities')::text as "providerEntities",
-      to_regclass('public.anime_provider_mappings')::text as "animeProviderMappings",
-      to_regclass('public.anime_provider_segments')::text as "animeProviderSegments"
+      (select name from sqlite_master where type = 'table' and name = 'provider_entities') as "providerEntities",
+      (select name from sqlite_master where type = 'table' and name = 'anime_provider_mappings') as "animeProviderMappings",
+      (select name from sqlite_master where type = 'table' and name = 'anime_provider_segments') as "animeProviderSegments"
   `);
 
   if (!row?.providerEntities || !row.animeProviderMappings || !row.animeProviderSegments) {
@@ -73,41 +73,41 @@ async function assertSegmentMappingTablesExist(): Promise<void> {
 }
 
 const legacyMappingCountSql = sql`
-  select count(*)::int as count
-  from public.anime_mappings
+  select count(*) as count
+  from anime_mappings
   where provider in ('thetvdb', 'tmdb')
 `;
 
 const distinctLegacyProviderEntityCountSql = sql`
-  select count(*)::int as count
+  select count(*) as count
   from (
     select distinct provider, provider_id
-    from public.anime_mappings
+    from anime_mappings
     where provider in ('thetvdb', 'tmdb')
   ) legacy_entities
 `;
 
 const existingProviderEntityCountSql = sql`
-  select count(*)::int as count
-  from public.provider_entities
+  select count(*) as count
+  from provider_entities
   where provider in ('thetvdb', 'tmdb')
 `;
 
 const existingAnimeProviderMappingCountSql = sql`
-  select count(*)::int as count
-  from public.anime_provider_mappings apm
-  join public.provider_entities pe on pe.id = apm.provider_entity_id
+  select count(*) as count
+  from anime_provider_mappings apm
+  join provider_entities pe on pe.id = apm.provider_entity_id
   where pe.provider in ('thetvdb', 'tmdb')
 `;
 
 const legacyMappingsWithoutV2LinkSql = sql`
-  select count(*)::int as count
-  from public.anime_mappings am
+  select count(*) as count
+  from anime_mappings am
   where am.provider in ('thetvdb', 'tmdb')
     and not exists (
       select 1
-      from public.provider_entities pe
-      join public.anime_provider_mappings apm
+      from provider_entities pe
+      join anime_provider_mappings apm
         on apm.provider_entity_id = pe.id
       where pe.provider = am.provider
         and pe.provider_id = am.provider_id
@@ -119,7 +119,7 @@ async function insertProviderEntities(tx: DbTransaction): Promise<number> {
   const rows = await transactionRows<{ id: number }>(
     tx,
     sql`
-    insert into public.provider_entities (
+    insert into provider_entities (
       provider,
       provider_id,
       provider_slug,
@@ -127,21 +127,19 @@ async function insertProviderEntities(tx: DbTransaction): Promise<number> {
       created_at,
       updated_at
     )
-    select distinct on (am.provider, am.provider_id)
-      am.provider,
-      am.provider_id,
-      am.provider_slug,
-      am.provider_url,
-      am.created_at,
-      am.updated_at
-    from public.anime_mappings am
-    where am.provider in ('thetvdb', 'tmdb')
-    order by
-      am.provider,
-      am.provider_id,
-      am.is_primary desc,
-      am.updated_at desc,
-      am.id desc
+    select provider, provider_id, provider_slug, provider_url, created_at, updated_at
+    from (
+      select
+        am.*,
+        row_number() over (
+          partition by am.provider, am.provider_id
+          order by am.is_primary desc, am.updated_at desc, am.id desc
+        ) as rn
+      from anime_mappings am
+      where am.provider in ('thetvdb', 'tmdb')
+    ) ranked
+    -- Also disambiguates ON CONFLICT from a join constraint for SQLite's parser.
+    where rn = 1
     on conflict (provider, provider_id) do nothing
     returning id
   `,
@@ -153,7 +151,7 @@ async function insertAnimeProviderMappings(tx: DbTransaction): Promise<number> {
   const rows = await transactionRows<{ id: number }>(
     tx,
     sql`
-    insert into public.anime_provider_mappings (
+    insert into anime_provider_mappings (
       anime_id,
       provider_entity_id,
       confidence,
@@ -170,8 +168,8 @@ async function insertAnimeProviderMappings(tx: DbTransaction): Promise<number> {
       am.is_primary,
       am.created_at,
       am.updated_at
-    from public.anime_mappings am
-    join public.provider_entities pe
+    from anime_mappings am
+    join provider_entities pe
       on pe.provider = am.provider
       and pe.provider_id = am.provider_id
     where am.provider in ('thetvdb', 'tmdb')

@@ -2,7 +2,7 @@ import { closeDb } from "@anicore/db";
 import { getTvdbOfficialEpisodes, getTvdbSeriesExtended } from "@anicore/providers/thetvdb/client";
 import { TMDB } from "@api-wrappers/tmdb-wrapper";
 import { sql } from "drizzle-orm";
-import { queryRows } from "../lib/query-rows";
+import { queryRows, withBooleans } from "../lib/query-rows";
 
 import {
   type AmbiguousMappingAnimeIdentity,
@@ -48,20 +48,20 @@ async function loadAmbiguousMappingRows(): Promise<AmbiguousMappingRow[]> {
       am.source,
       am.confidence,
       am.is_primary as "isPrimary"
-    from public.anime_mappings am
-    join public.anime a on a.id = am.anime_id
+    from anime_mappings am
+    join anime a on a.id = am.anime_id
     where am.provider in ('thetvdb', 'tmdb')
       and a.title_romaji is not null
       and am.anime_id in (
         select inner_map.anime_id
-        from public.anime_mappings inner_map
+        from anime_mappings inner_map
         where inner_map.provider = am.provider
         group by inner_map.anime_id
         having count(*) > 1
           and count(*) filter (where inner_map.is_primary = true) <> 1
       )
     order by am.anime_id, am.provider, am.id
-  `);
+  `).then(withBooleans<AmbiguousMappingRow>("isPrimary"));
 }
 
 async function loadAnimeIdentity(): Promise<AnimeIdentityRow[]> {
@@ -77,7 +77,7 @@ async function loadAnimeIdentity(): Promise<AnimeIdentityRow[]> {
       start_date as "startDate",
       format,
       season_year as "seasonYear"
-    from public.anime
+    from anime
     where title_romaji is not null
   `);
 }

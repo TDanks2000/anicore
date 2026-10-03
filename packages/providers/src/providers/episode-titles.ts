@@ -183,14 +183,14 @@ async function upsertAnimeSourceMapping(animeId: number, match: TitleSourceMatch
       set: {
         providerSlug: sql`coalesce(excluded.provider_slug, ${animeMappings.providerSlug})`,
         providerUrl: sql`coalesce(excluded.provider_url, ${animeMappings.providerUrl})`,
-        confidence: sql`greatest(${animeMappings.confidence}, excluded.confidence)`,
+        confidence: sql`max(${animeMappings.confidence}, excluded.confidence)`,
         source: sql`case
 					when ${animeMappings.source} in ('manual', 'api', 'import', 'system')
 						then ${animeMappings.source}
 					else excluded.source
 				end`,
         isPrimary: sql`${animeMappings.isPrimary}`,
-        updatedAt: sql`now()`,
+        updatedAt: new Date(),
       },
       setWhere: eq(animeMappings.animeId, animeId),
     })
@@ -243,7 +243,7 @@ async function applySourceMatch(
           confidence: sql`case
 						when ${episodeMappings.source} in ('manual', 'import', 'system')
 							or (${episodeMappings.source} = 'api' and ${episodeMappings.confidence} > 85)
-							then greatest(${episodeMappings.confidence}, excluded.confidence)
+							then max(${episodeMappings.confidence}, excluded.confidence)
 						else excluded.confidence
 					end`,
           source: sql`case
@@ -252,7 +252,7 @@ async function applySourceMatch(
 							then ${episodeMappings.source}
 						else excluded.source
 					end`,
-          updatedAt: sql`now()`,
+          updatedAt: new Date(),
         },
         setWhere: eq(episodeMappings.episodeId, row.id),
       })

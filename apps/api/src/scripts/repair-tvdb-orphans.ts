@@ -104,7 +104,7 @@ async function loadExistingTvdbIdentities(): Promise<ExistingProviderIdentity[]>
 
 async function countOrphanTvdbRows(): Promise<number> {
   const [row] = await queryRows<{ count: number }>(sql`
-    select count(*)::int as count
+    select count(*) as count
     from episode_mappings em
     join episodes e on e.id = em.episode_id
     where em.provider = 'thetvdb'
@@ -238,7 +238,7 @@ async function applyCandidates(candidates: TvdbSlugRepairCandidate[]): Promise<n
   return db.transaction(async (tx) => {
     let insertedCount = 0;
     for (const candidate of candidates) {
-      const result = await tx.execute(sql`
+      const inserted = await tx.all<{ id: number }>(sql`
         insert into anime_mappings (
           anime_id,
           provider,
@@ -273,7 +273,6 @@ async function applyCandidates(candidates: TvdbSlugRepairCandidate[]): Promise<n
         returning id
       `);
 
-      const inserted = [...result] as Array<{ id: number }>;
       if (inserted.length !== 1) {
         throw new Error(
           `TVDB orphan repair candidate ${candidate.providerId} for anime ${candidate.animeId} changed after planning; transaction rolled back`,

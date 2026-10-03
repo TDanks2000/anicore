@@ -16,4 +16,4 @@ export const badRequest = (message: string) => new HttpError(400, message);
 export const notFound = (message: string) => new HttpError(404, message);
 export const conflict = (message: string) => new HttpError(409, message);
 
-export { isForeignKeyViolation, isUniqueViolation, postgresErrorCode } from "@anicore/db/errors";
+export { isForeignKeyViolation, isUniqueViolation, sqliteErrorCode } from "@anicore/db/errors";

@@ -239,6 +239,9 @@ export async function findAnimeByMapping(identity: MappingIdentity) {
   return row ? { mapping: row.mapping, anime: formatAnime(row.anime) } : null;
 }
 
+// Every transaction opens with BEGIN IMMEDIATE, which takes SQLite's single
+// write lock up front, so reads inside it are already serialised against
+// other writers without row-level locks.
 async function lockAnimeMapping(tx: DbTransaction, identity: MappingIdentity) {
   const [mapping] = await tx
     .select()
@@ -249,8 +252,7 @@ async function lockAnimeMapping(tx: DbTransaction, identity: MappingIdentity) {
         eq(animeMappings.providerId, canonicalProviderId(identity.providerId)),
       ),
     )
-    .limit(1)
-    .for("update");
+    .limit(1);
   if (!mapping) throw notFound("Anime mapping not found");
   return mapping;
 }
@@ -259,8 +261,7 @@ async function countProviderMappings(tx: DbTransaction, animeId: number, provide
   const rows = await tx
     .select({ id: animeMappings.id, isPrimary: animeMappings.isPrimary })
     .from(animeMappings)
-    .where(and(eq(animeMappings.animeId, animeId), eq(animeMappings.provider, provider)))
-    .for("update");
+    .where(and(eq(animeMappings.animeId, animeId), eq(animeMappings.provider, provider)));
   return { total: rows.length, hasPrimary: rows.some((row) => row.isPrimary) };
 }
 
@@ -284,8 +285,7 @@ export async function createAnimeMapping(input: AnimeMappingInput & { animeId: n
     const [parent] = await tx
       .select({ id: anime.id })
       .from(anime)
-      .where(eq(anime.id, input.animeId))
-      .for("update");
+      .where(eq(anime.id, input.animeId));
     if (!parent) throw notFound("Anime not found");
 
     const existing = await countProviderMappings(tx, input.animeId, input.provider);

@@ -173,14 +173,14 @@ async function storeRoute(animeId: number, route: string): Promise<void> {
       set: {
         providerSlug: route,
         providerUrl: `https://animeschedule.net/anime/${route}`,
-        confidence: sql`greatest(${animeMappings.confidence}, 100)`,
+        confidence: sql`max(${animeMappings.confidence}, 100)`,
         source: sql`case
           when ${animeMappings.source} in ('manual', 'import', 'system')
             then ${animeMappings.source}
           else 'api'
         end`,
         isPrimary: animeMappings.isPrimary,
-        updatedAt: sql`now()`,
+        updatedAt: new Date(),
       },
       setWhere: eq(animeMappings.animeId, animeId),
     })
@@ -298,7 +298,7 @@ async function upsertDubStatus(
           status: sql`excluded.status`,
           confidence: sql`excluded.confidence`,
           checkedAt: sql`excluded.checked_at`,
-          updatedAt: sql`now()`,
+          updatedAt: new Date(),
         },
       });
   }

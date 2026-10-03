@@ -24,6 +24,13 @@ async function countRows(query: SQL): Promise<number> {
   return Number(row?.count ?? 0);
 }
 
+/** SQLite returns `json_group_array` results as JSON text; decode them for the report. */
+function decodeIdLists(row: Record<string, unknown>): Record<string, unknown> {
+  return typeof row.providerIds === "string"
+    ? { ...row, providerIds: JSON.parse(row.providerIds) }
+    : row;
+}
+
 async function addFinding(
   findings: MappingAuditFinding[],
   input: {
@@ -42,7 +49,7 @@ async function addFinding(
     severity: input.severity,
     description: input.description,
     count,
-    samples: await queryRows(input.sampleQuery),
+    samples: (await queryRows<Record<string, unknown>>(input.sampleQuery)).map(decodeIdLists),
   });
 }
 
@@ -55,14 +62,14 @@ async function auditMappings(): Promise<MappingAuditReport> {
     description:
       "Anime mappings contain blank or leading/trailing-whitespace provider IDs. Exact provider lookups can miss these rows.",
     countQuery: sql`
-      select count(*)::int as count
+      select count(*) as count
       from anime_mappings
-      where btrim(provider_id) = '' or provider_id <> btrim(provider_id)
+      where trim(provider_id) = '' or provider_id <> trim(provider_id)
     `,
     sampleQuery: sql`
       select id, anime_id as "animeId", provider, provider_id as "providerId"
       from anime_mappings
-      where btrim(provider_id) = '' or provider_id <> btrim(provider_id)
+      where trim(provider_id) = '' or provider_id <> trim(provider_id)
       order by id
       limit 20
     `,
@@ -73,14 +80,14 @@ async function auditMappings(): Promise<MappingAuditReport> {
     severity: "error",
     description: "Episode mappings contain blank or leading/trailing-whitespace provider IDs.",
     countQuery: sql`
-      select count(*)::int as count
+      select count(*) as count
       from episode_mappings
-      where btrim(provider_id) = '' or provider_id <> btrim(provider_id)
+      where trim(provider_id) = '' or provider_id <> trim(provider_id)
     `,
     sampleQuery: sql`
       select id, episode_id as "episodeId", provider, provider_id as "providerId"
       from episode_mappings
-      where btrim(provider_id) = '' or provider_id <> btrim(provider_id)
+      where trim(provider_id) = '' or provider_id <> trim(provider_id)
       order by id
       limit 20
     `,
@@ -91,7 +98,7 @@ async function auditMappings(): Promise<MappingAuditReport> {
     severity: "error",
     description: "More than one mapping is marked primary for the same anime/provider pair.",
     countQuery: sql`
-      select count(*)::int as count
+      select count(*) as count
       from (
         select anime_id, provider
         from anime_mappings
@@ -101,8 +108,8 @@ async function auditMappings(): Promise<MappingAuditReport> {
       ) groups
     `,
     sampleQuery: sql`
-      select anime_id as "animeId", provider, count(*)::int as "primaryCount",
-        array_agg(provider_id order by id) as "providerIds"
+      select anime_id as "animeId", provider, count(*) as "primaryCount",
+        json_group_array(provider_id order by id) as "providerIds"
       from anime_mappings
       where is_primary = true
       group by anime_id, provider
@@ -118,7 +125,7 @@ async function auditMappings(): Promise<MappingAuditReport> {
     description:
       "An anime has multiple IDs for one provider but does not have exactly one primary mapping, making limit(1) consumers nondeterministic.",
     countQuery: sql`
-      select count(*)::int as count
+      select count(*) as count
       from (
         select anime_id, provider
         from anime_mappings
@@ -129,9 +136,9 @@ async function auditMappings(): Promise<MappingAuditReport> {
     `,
     sampleQuery: sql`
       select anime_id as "animeId", provider,
-        count(*)::int as "mappingCount",
-        count(*) filter (where is_primary = true)::int as "primaryCount",
-        array_agg(provider_id order by id) as "providerIds"
+        count(*) as "mappingCount",
+        count(*) filter (where is_primary = true) as "primaryCount",
+        json_group_array(provider_id order by id) as "providerIds"
       from anime_mappings
       group by anime_id, provider
       having count(*) > 1
@@ -147,7 +154,7 @@ async function auditMappings(): Promise<MappingAuditReport> {
     description:
       "Episode mappings exist without either a legacy anime-level mapping for the provider or an explicit v2 segment that maps the stored provider episode number to the parent anime's local episode number.",
     countQuery: sql`
-      select count(*)::int as count
+      select count(*) as count
       from episode_mappings em
       join episodes e on e.id = em.episode_id
       where not exists (
@@ -163,20 +170,14 @@ async function auditMappings(): Promise<MappingAuditReport> {
             on pe.id = apm.provider_entity_id
           join anime_provider_segments aps
             on aps.anime_provider_mapping_id = apm.id
-          cross join lateral (
-            select case
-              when em.provider_episode_number ~ '^[1-9][0-9]*$'
-                then em.provider_episode_number::int
-              else null
-            end as provider_episode_number
-          ) parsed
           where apm.anime_id = e.anime_id
             and pe.provider = em.provider
-            and parsed.provider_episode_number between
+            and em.provider_episode_number regexp '^[1-9][0-9]*$'
+            and cast(em.provider_episode_number as integer) between
               aps.provider_episode_start and aps.provider_episode_end
             and e.number between aps.local_episode_start and aps.local_episode_end
             and e.number = aps.local_episode_start
-              + (parsed.provider_episode_number - aps.provider_episode_start)
+              + (cast(em.provider_episode_number as integer) - aps.provider_episode_start)
         )
     `,
     sampleQuery: sql`
@@ -198,20 +199,14 @@ async function auditMappings(): Promise<MappingAuditReport> {
             on pe.id = apm.provider_entity_id
           join anime_provider_segments aps
             on aps.anime_provider_mapping_id = apm.id
-          cross join lateral (
-            select case
-              when em.provider_episode_number ~ '^[1-9][0-9]*$'
-                then em.provider_episode_number::int
-              else null
-            end as provider_episode_number
-          ) parsed
           where apm.anime_id = e.anime_id
             and pe.provider = em.provider
-            and parsed.provider_episode_number between
+            and em.provider_episode_number regexp '^[1-9][0-9]*$'
+            and cast(em.provider_episode_number as integer) between
               aps.provider_episode_start and aps.provider_episode_end
             and e.number between aps.local_episode_start and aps.local_episode_end
             and e.number = aps.local_episode_start
-              + (parsed.provider_episode_number - aps.provider_episode_start)
+              + (cast(em.provider_episode_number as integer) - aps.provider_episode_start)
         )
       order by em.id
       limit 20
@@ -226,7 +221,7 @@ async function auditMappings(): Promise<MappingAuditReport> {
       select (
         (select count(*) from anime_mappings where confidence < 0 or confidence > 100) +
         (select count(*) from episode_mappings where confidence < 0 or confidence > 100)
-      )::int as count
+      ) as count
     `,
     sampleQuery: sql`
       select * from (
@@ -254,7 +249,7 @@ async function auditMappings(): Promise<MappingAuditReport> {
       select (
         (select count(*) from anime_mappings where source = 'fuzzy' and confidence >= 100) +
         (select count(*) from episode_mappings where source = 'fuzzy' and confidence >= 100)
-      )::int as count
+      ) as count
     `,
     sampleQuery: sql`
       select * from (
@@ -279,7 +274,7 @@ async function auditMappings(): Promise<MappingAuditReport> {
     description:
       "Kitsu episode mappings are stronger than the fuzzy Kitsu anime mapping that established the series identity.",
     countQuery: sql`
-      select count(*)::int as count
+      select count(*) as count
       from episode_mappings em
       join episodes e on e.id = em.episode_id
       join anime_mappings am
@@ -313,17 +308,17 @@ async function auditMappings(): Promise<MappingAuditReport> {
     description:
       "TVDB/TMDB anime mappings do not use AniCore's expected <series-id>:<season-number> format and cannot be reused by episode enrichment.",
     countQuery: sql`
-      select count(*)::int as count
+      select count(*) as count
       from anime_mappings
       where provider in ('thetvdb', 'tmdb')
-        and provider_id !~ '^[1-9][0-9]*:[1-9][0-9]*$'
+        and not (provider_id regexp '^[1-9][0-9]*:[1-9][0-9]*$')
     `,
     sampleQuery: sql`
       select id, anime_id as "animeId", provider, provider_id as "providerId",
         source, confidence, is_primary as "isPrimary"
       from anime_mappings
       where provider in ('thetvdb', 'tmdb')
-        and provider_id !~ '^[1-9][0-9]*:[1-9][0-9]*$'
+        and not (provider_id regexp '^[1-9][0-9]*:[1-9][0-9]*$')
       order by id
       limit 20
     `,
@@ -335,7 +330,7 @@ async function auditMappings(): Promise<MappingAuditReport> {
     description:
       "TVDB/TMDB mappings at the legacy 85% API signature may have been discovered heuristically before provenance hardening and should be revalidated.",
     countQuery: sql`
-      select count(*)::int as count
+      select count(*) as count
       from anime_mappings
       where provider in ('thetvdb', 'tmdb')
         and source = 'api'

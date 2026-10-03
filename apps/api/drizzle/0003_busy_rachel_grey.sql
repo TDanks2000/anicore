@@ -1,1 +1,0 @@
-CREATE UNIQUE INDEX "anime_mappings_anime_provider_primary_idx" ON "anime_mappings" USING btree ("anime_id","provider") WHERE "anime_mappings"."is_primary";
