@@ -2,6 +2,7 @@ import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { formatHttpError } from "../../lib/http";
+import { log } from "../../lib/logger";
 
 const BASE = "https://api.jikan.moe/v4";
 const CACHE_DIR = fileURLToPath(
@@ -13,7 +14,10 @@ let requestQueue: Promise<void> = Promise.resolve();
 let lastRequestAt = 0;
 let consecutiveFailures = 0;
 let disabledUntil = 0;
-class JikanCircuitOpenError extends Error {}
+const BASE_COOLDOWN_MS = 60_000;
+const MAX_COOLDOWN_MS = 15 * 60_000;
+/** Thrown without a request while Jikan is cooling down; the outage is logged once on opening. */
+export class JikanCircuitOpenError extends Error {}
 
 export interface JikanCharacter {
   character: { mal_id: number; name: string };
@@ -141,7 +145,18 @@ export function fetchCharacters(id: string): Promise<JikanCharacter[] | null> {
       (error) => {
         if (!(error instanceof JikanCircuitOpenError)) {
           consecutiveFailures++;
-          if (consecutiveFailures >= 3) disabledUntil = Date.now() + 60_000;
+          if (consecutiveFailures >= 3) {
+            // Each failed probe after a cooldown doubles the next one, so a long
+            // outage stops costing a request timeout every minute.
+            const cooldown = Math.min(
+              MAX_COOLDOWN_MS,
+              BASE_COOLDOWN_MS * 2 ** (consecutiveFailures - 3),
+            );
+            disabledUntil = Date.now() + cooldown;
+            log.warn(
+              `Jikan failed ${consecutiveFailures} times in a row; skipping it for ${Math.round(cooldown / 1000)}s`,
+            );
+          }
         }
         throw error;
       },

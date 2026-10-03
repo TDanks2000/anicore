@@ -4,7 +4,7 @@ import { anime, animeMappings, episodeLanguageStatus, episodes } from "@anicore/
 import { syncAnilistCastLanguages } from "@anicore/providers/anilist/languages";
 import { type DubSyncResult, syncDubStatus } from "@anicore/providers/animeschedule/sync";
 import { syncCrunchyrollLanguages } from "@anicore/providers/crunchyroll/sync";
-import { syncVoiceCastLanguages } from "@anicore/providers/jikan/sync";
+import { JikanCircuitOpenError, syncVoiceCastLanguages } from "@anicore/providers/jikan/sync";
 import { syncKitsuLanguages } from "@anicore/providers/kitsu/languages";
 import { log } from "@anicore/providers/lib/logger";
 import { installProxyFetch } from "@anicore/providers/lib/proxy";
@@ -137,6 +137,8 @@ export async function syncLanguageStatusForAnime(
     try {
       await sync(animeId);
     } catch (error) {
+      // The cooldown was already announced once; repeating it per anime is noise.
+      if (error instanceof JikanCircuitOpenError) continue;
       const message = `${name}: ${error instanceof Error ? error.message : String(error)}`;
       if (name === "jikan" && isOptionalJikanFailure(message)) warnings.push(message);
       else errors.push(message);

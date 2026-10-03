@@ -136,7 +136,11 @@ export interface KitsuEpisodeNode {
   thumbnail: { original: KitsuImage } | null;
 }
 
-async function gql<T>(query: string, variables: Record<string, unknown>): Promise<T> {
+async function gql<T>(
+  query: string,
+  variables: Record<string, unknown>,
+  expectedErrors?: RegExp,
+): Promise<T> {
   const res = await fetch(KITSU_GRAPHQL_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -163,12 +167,18 @@ async function gql<T>(query: string, variables: Record<string, unknown>): Promis
       throw new Error(`Kitsu GraphQL: ${message}`);
     }
     // Kitsu repeats one error per bad record; collapse identical ones with a count.
+    // Errors a caller anticipated (and already handles) are not worth a warning.
     const counts = new Map<string, number>();
-    for (const error of json.errors) counts.set(error.message, (counts.get(error.message) ?? 0) + 1);
-    const summary = [...counts]
-      .map(([text, count]) => (count > 1 ? `${text} (×${count})` : text))
-      .join(", ");
-    log.warn(`Kitsu GraphQL returned partial data: ${summary}`);
+    for (const error of json.errors) {
+      if (expectedErrors?.test(error.message)) continue;
+      counts.set(error.message, (counts.get(error.message) ?? 0) + 1);
+    }
+    if (counts.size > 0) {
+      const summary = [...counts]
+        .map(([text, count]) => (count > 1 ? `${text} (×${count})` : text))
+        .join(", ");
+      log.warn(`Kitsu GraphQL returned partial data: ${summary}`);
+    }
   }
 
   if (!json.data) {
@@ -203,7 +213,7 @@ export async function fetchKitsuEpisodeTitles(kitsuId: string): Promise<Map<stri
     findAnimeById: {
       episodes: { nodes: Array<{ id: string; titles: { canonical: string | null } } | null> };
     } | null;
-  }>(ANIME_EPISODE_TITLES_QUERY, { id: kitsuId });
+  }>(ANIME_EPISODE_TITLES_QUERY, { id: kitsuId }, /TitlesList\.canonical/);
   const titles = new Map<string, string>();
   for (const node of data?.findAnimeById?.episodes?.nodes ?? []) {
     const title = node?.titles?.canonical?.trim();

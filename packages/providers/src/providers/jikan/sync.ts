@@ -4,6 +4,8 @@ import { animeLanguageEvidence, animeMappings } from "@anicore/db/schema";
 import { and, eq } from "drizzle-orm";
 import { fetchCharacters, type JikanCharacter } from "./client";
 
+export { JikanCircuitOpenError } from "./client";
+
 const LANGUAGE_CODES: Record<string, string> = {
   Japanese: "ja",
   English: "en",
