@@ -23,4 +23,18 @@ describe("sync progress checkpointing", () => {
     expect(progress.lastIndex).toBe(1);
     expect(progress.stats).toEqual({ created: 0, updated: 2, failed: 1 });
   });
+
+  test("advances past skipped IDs", () => {
+    const progress: Progress = {
+      version: 1,
+      lastIndex: 0,
+      stats: { created: 0, updated: 0, failed: 0 },
+    };
+    let state = createSyncCheckpointState();
+
+    state = advanceSyncCheckpoint(progress, { created: 0, updated: 0, failed: 0, skipped: 1 }, 0, state);
+    state = advanceSyncCheckpoint(progress, { created: 0, updated: 1, failed: 0, skipped: 1 }, 1, state);
+    expect(progress.lastIndex).toBe(2);
+    expect(state.firstFailedIndex).toBeNull();
+  });
 });

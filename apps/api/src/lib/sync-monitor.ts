@@ -760,7 +760,8 @@ function calculateProgress(input: {
   startedAt: string;
   endedAt?: string;
 }): SyncMonitorProgress {
-  const processed = input.stats.created + input.stats.updated + input.stats.failed;
+  const processed =
+    input.stats.created + input.stats.updated + input.stats.failed + (input.stats.skipped ?? 0);
   const remaining = Math.max(0, input.total - processed);
   const percent =
     input.total > 0 ? Math.max(0, Math.min(100, Math.round((processed / input.total) * 100))) : 0;

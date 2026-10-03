@@ -91,6 +91,7 @@ function formatMonitorStats(stats: SyncStats): SyncMonitorStats {
     created: stats.created,
     updated: stats.updated,
     failed: stats.failed,
+    skipped: stats.skipped ?? 0,
   };
 }
 
@@ -773,13 +774,23 @@ async function main(): Promise<void> {
           () => reportIssue("rate-limit"),
         );
       } catch (err) {
+        // AniList's ID list has entries that were since deleted. Retrying them
+        // can never succeed, so they must not hold back the resume checkpoint.
+        if (isNotFoundError(err)) return null;
         const message = err instanceof Error ? err.message : String(err);
         monitor?.recordError(message, index, id);
         throw err;
       }
     },
-    async (id, index, bar, anilistData) =>
-      processFetchedAnime(id, index, anilistData, engine, bar, monitor),
+    async (id, index, bar, anilistData): Promise<PerIdResult> => {
+      if (anilistData === null) {
+        const message = `ID ${id}: no longer on AniList — skipped`;
+        log.info(message);
+        monitor?.event("info", message, { stage: "anilist-fetch" });
+        return { outcome: "skipped" };
+      }
+      return processFetchedAnime(id, index, anilistData, engine, bar, monitor);
+    },
   );
 
   await saveProgress(progress);
@@ -800,6 +811,7 @@ async function main(): Promise<void> {
   log.info(`  Created  : ${stats.created.toLocaleString()}`);
   log.info(`  Updated  : ${stats.updated.toLocaleString()}`);
   log.info(`  Failed   : ${stats.failed.toLocaleString()}`);
+  if (stats.skipped) log.info(`  Skipped  : ${stats.skipped.toLocaleString()} (no longer on AniList)`);
 
   if (stopRequested) {
     monitor?.stop(formatMonitorStats(stats));

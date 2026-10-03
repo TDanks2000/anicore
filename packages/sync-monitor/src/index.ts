@@ -14,6 +14,7 @@ export interface SyncMonitorStats {
   created: number;
   updated: number;
   failed: number;
+  skipped?: number;
 }
 
 export interface SyncMonitorProgress {

@@ -76,7 +76,7 @@ export function ProgressCard(props: {
               </div>
             </div>
             <Progress value={completion} />
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <Stat label="Created" value={status?.stats.created ?? 0} tone="success" />
               <Stat label="Updated" value={status?.stats.updated ?? 0} />
               <Stat
@@ -84,6 +84,7 @@ export function ProgressCard(props: {
                 value={status?.stats.failed ?? 0}
                 tone={(status?.stats.failed ?? 0) > 0 ? "destructive" : "default"}
               />
+              <Stat label="Skipped" value={status?.stats.skipped ?? 0} />
             </div>
             {status ? <RuntimeSnapshot status={status} /> : null}
           </>

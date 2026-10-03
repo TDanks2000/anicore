@@ -3,12 +3,14 @@ import { ANILIST_RATE_MS, isNotFoundError, isRateLimitError } from "./anilist-ra
 import { appendUnmatched, loadUnmatched } from "./cache";
 import { log, type ProgressBar } from "./logger";
 
-export type SyncOutcome = "created" | "updated" | "failed";
+/** `skipped` is for IDs the source no longer has (AniList 404) — neither a success nor a retryable failure. */
+export type SyncOutcome = "created" | "updated" | "failed" | "skipped";
 
 export interface SyncStats {
   created: number;
   updated: number;
   failed: number;
+  skipped?: number;
 }
 
 export interface PerIdResult {
@@ -230,7 +232,7 @@ export class SyncEngine {
       getRateLimitMs,
     } = options;
     const bar = log.progress(endIndex - startIndex, label);
-    const stats: SyncStats = { created: 0, updated: 0, failed: 0 };
+    const stats: SyncStats = { created: 0, updated: 0, failed: 0, skipped: 0 };
     let activeRateLimitMs = rateLimitMs;
 
     for (let i = startIndex; i < endIndex; i++) {
@@ -242,6 +244,7 @@ export class SyncEngine {
 
       if (outcome === "created") stats.created++;
       else if (outcome === "updated") stats.updated++;
+      else if (outcome === "skipped") stats.skipped = (stats.skipped ?? 0) + 1;
       else stats.failed++;
 
       bar.tick().setStats({ ...stats, ...extra });
@@ -322,7 +325,7 @@ export class SyncEngine {
     } = options;
 
     const bar = log.progress(endIndex - startIndex, label);
-    const stats: SyncStats = { created: 0, updated: 0, failed: 0 };
+    const stats: SyncStats = { created: 0, updated: 0, failed: 0, skipped: 0 };
     const ctrl = new AdaptiveController(concurrency);
     let activeRateLimitMs = rateLimitMs;
     let i = startIndex;
@@ -429,6 +432,7 @@ export class SyncEngine {
 
         if (outcome === "created") stats.created++;
         else if (outcome === "updated") stats.updated++;
+        else if (outcome === "skipped") stats.skipped = (stats.skipped ?? 0) + 1;
         else stats.failed++;
 
         bar.tick().setStats({ ...stats, ...extra });

@@ -133,4 +133,16 @@ describe("SyncEngine.iterateParallel", () => {
     // Still parallel: ID 4 starts fetching before ID 3 is processed.
     expect(calls.indexOf("fetch-start-4")).toBeLessThan(calls.indexOf("process-3"));
   });
+
+  test("counts skipped outcomes separately from failures", async () => {
+    const engine = new SyncEngine([]);
+
+    const stats = await engine.iterateParallel(
+      { ids: [1, 2], startIndex: 0, endIndex: 2, label: "test", concurrency: 2, rateLimitMs: 0 },
+      async (id) => (id === 1 ? null : id),
+      async (_id, _index, _bar, fetched) => ({ outcome: fetched === null ? "skipped" : "updated" }),
+    );
+
+    expect(stats).toEqual({ created: 0, updated: 1, failed: 0, skipped: 1 });
+  });
 });

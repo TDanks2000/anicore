@@ -190,6 +190,16 @@ export interface SyncLease {
   release(succeeded?: boolean): Promise<void>;
 }
 
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    // EPERM means the process exists but belongs to someone else.
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
 export async function tryAcquireSyncLease(): Promise<SyncLease | null> {
   const token = randomUUID();
   // Raw `get` crashes in drizzle's libsql driver when no row matches, so
@@ -198,6 +208,29 @@ export async function tryAcquireSyncLease(): Promise<SyncLease | null> {
   // across processes, which the Postgres version did with LOCK TABLE.
   const leaseId = await getDb().transaction(async (tx) => {
     const now = Date.now();
+
+    // A killed process (e.g. on Windows, where no shutdown handler runs) cannot
+    // release its lease. The database is local, so a recorded pid that no longer
+    // exists means the lease is dead without waiting out the heartbeat timeout.
+    const running = await tx.all<{ id: number; pid: number | null }>(sql`
+      SELECT id, json_extract(metadata_json, '$.pid') AS pid
+      FROM sync_runs
+      WHERE provider = 'anilist'
+        AND kind = 'full'
+        AND status = 'running'
+    `);
+    for (const { id, pid } of running) {
+      if (typeof pid !== "number" || pid === process.pid || isProcessAlive(pid)) continue;
+      await tx.run(sql`
+        UPDATE sync_runs
+        SET status = 'failed',
+          finished_at = ${now},
+          error_message = 'Recovered lease of exited sync process'
+        WHERE id = ${id}
+          AND status = 'running'
+      `);
+    }
+
     await tx.run(sql`
       UPDATE sync_runs
       SET status = 'failed',
@@ -224,7 +257,7 @@ export async function tryAcquireSyncLease(): Promise<SyncLease | null> {
         'anilist',
         'full',
         'running',
-        ${JSON.stringify({ leaseToken: token, heartbeatAt: now })}
+        ${JSON.stringify({ leaseToken: token, heartbeatAt: now, pid: process.pid })}
       )
       RETURNING id
     `);
