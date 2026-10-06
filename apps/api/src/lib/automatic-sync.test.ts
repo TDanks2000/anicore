@@ -17,6 +17,8 @@ function runtimeConfig(
     startFromIndex: 0,
     refreshIds: true,
     resetAll: false,
+    newIdsOnly: false,
+    idOrder: "ascending",
     autoSyncEnabled: true,
     autoSyncIntervalMinutes: 1440,
     updatedAt: "2026-07-16T00:00:00.000Z",

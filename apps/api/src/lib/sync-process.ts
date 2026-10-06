@@ -29,6 +29,8 @@ export function buildSyncStartArgs(options: SyncMonitorStartOptions = {}): strin
   const resetAll = options.resetAll ?? runtime.resetAll;
   const args = ["--monitor"];
 
+  if (options.newIdsOnly ?? runtime.newIdsOnly) args.push("--new-ids-only");
+  if ((options.idOrder ?? runtime.idOrder) === "descending") args.push("--reverse");
   if (dryRun) args.push("--dry-run");
   if (refreshIds) args.push("--refresh-ids");
   if (resetAll) args.push("--reset=all");

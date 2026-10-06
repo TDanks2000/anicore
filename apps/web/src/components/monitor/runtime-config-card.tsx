@@ -9,6 +9,7 @@ import type { ComponentProps } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Select, SelectItem } from "@/components/ui/select";
 import type { useRuntimeConfigForm } from "@/hooks/use-runtime-config-form";
 import { formatDate } from "@/lib/format";
 import type { RuntimeConfigDraft } from "@/lib/runtime-config-draft";
@@ -139,19 +140,19 @@ export function RuntimeConfigCard(props: {
         <div className="flex flex-col gap-3">
           <SectionLabel>Start behavior</SectionLabel>
           <div className="grid gap-3 sm:grid-cols-2">
-            <label className="flex flex-col gap-1.5 text-sm font-medium">
-              Start mode
-              <select
-                className="flex h-9 w-full rounded-md border border-input bg-card px-3 py-1 text-sm shadow-xs outline-none transition-[color,box-shadow,border-color] focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/35"
+            <div className="flex flex-col gap-1.5 text-sm font-medium">
+              <label htmlFor="sync-start-mode">Start mode</label>
+              <Select
+                id="sync-start-mode"
                 value={form.draft.startMode}
-                onChange={(event) =>
-                  form.update({ startMode: event.target.value === "sync" ? "sync" : "dry-run" })
+                onValueChange={(value) =>
+                  form.update({ startMode: value === "sync" ? "sync" : "dry-run" })
                 }
               >
-                <option value="dry-run">Dry run</option>
-                <option value="sync">Sync</option>
-              </select>
-            </label>
+                <SelectItem value="dry-run">Dry run</SelectItem>
+                <SelectItem value="sync">Sync</SelectItem>
+              </Select>
+            </div>
             <NumberField
               form={form}
               field="startLimit"
@@ -161,6 +162,47 @@ export function RuntimeConfigCard(props: {
               placeholder="No limit"
             />
           </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="flex flex-col gap-1.5 text-sm font-medium">
+              <label htmlFor="sync-id-selection">IDs to sync</label>
+              <Select
+                id="sync-id-selection"
+                aria-describedby="sync-id-selection-hint"
+                value={form.draft.newIdsOnly ? "new" : "all"}
+                onValueChange={(value) => form.update({ newIdsOnly: value === "new" })}
+              >
+                <SelectItem value="all">All IDs</SelectItem>
+                <SelectItem value="new">New IDs only</SelectItem>
+              </Select>
+              <span
+                id="sync-id-selection-hint"
+                className="text-xs font-normal text-muted-foreground"
+              >
+                New IDs are AniList IDs not yet in the database.
+              </span>
+            </div>
+            <div className="flex flex-col gap-1.5 text-sm font-medium">
+              <label htmlFor="sync-id-order">ID order</label>
+              <Select
+                id="sync-id-order"
+                value={form.draft.idOrder}
+                onValueChange={(value) =>
+                  form.update({
+                    idOrder: value === "descending" ? "descending" : "ascending",
+                  })
+                }
+              >
+                <SelectItem value="ascending">Lowest IDs first</SelectItem>
+                <SelectItem value="descending">Highest IDs first</SelectItem>
+              </Select>
+            </div>
+          </div>
+          {form.draft.newIdsOnly || form.draft.idOrder === "descending" ? (
+            <p className="text-xs text-muted-foreground">
+              These runs start at index 0 unless specified below and keep normal sync progress
+              unchanged. Options apply to manual starts and dry runs.
+            </p>
+          ) : null}
           <NumberField
             form={form}
             field="startFromIndex"

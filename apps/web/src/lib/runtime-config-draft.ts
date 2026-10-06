@@ -15,6 +15,8 @@ export interface RuntimeConfigDraft {
   startFromIndex: string;
   refreshIds: boolean;
   resetAll: boolean;
+  newIdsOnly: boolean;
+  idOrder: "ascending" | "descending";
   autoSyncEnabled: boolean;
   autoSyncIntervalMinutes: string;
 }
@@ -28,6 +30,8 @@ export const DEFAULT_DRAFT: RuntimeConfigDraft = {
   startFromIndex: "",
   refreshIds: false,
   resetAll: false,
+  newIdsOnly: false,
+  idOrder: "ascending",
   autoSyncEnabled: true,
   autoSyncIntervalMinutes: String(DEFAULT_AUTO_SYNC_INTERVAL_MINUTES),
 };
@@ -44,6 +48,8 @@ export function draftFromRuntime(runtime: SyncMonitorRuntimeConfig): RuntimeConf
     startFromIndex: optional(runtime.startFromIndex),
     refreshIds: runtime.refreshIds,
     resetAll: runtime.resetAll,
+    newIdsOnly: runtime.newIdsOnly ?? false,
+    idOrder: runtime.idOrder ?? "ascending",
     autoSyncEnabled: runtime.autoSyncEnabled,
     autoSyncIntervalMinutes: String(runtime.autoSyncIntervalMinutes),
   };
@@ -119,6 +125,8 @@ export function parseRuntimeConfigDraft(
       startFromIndex,
       refreshIds: draft.refreshIds,
       resetAll: draft.resetAll,
+      newIdsOnly: draft.newIdsOnly,
+      idOrder: draft.idOrder,
       autoSyncEnabled: draft.autoSyncEnabled,
       autoSyncIntervalMinutes,
     },

@@ -148,6 +148,8 @@ function defaultRuntimeConfig(): SyncMonitorRuntimeConfig {
     startFromIndex: null,
     refreshIds: false,
     resetAll: false,
+    newIdsOnly: false,
+    idOrder: "ascending",
     autoSyncEnabled: true,
     autoSyncIntervalMinutes: DEFAULT_AUTO_SYNC_INTERVAL_MINUTES,
     updatedAt: DEFAULT_RUNTIME_CONFIG_UPDATED_AT,
@@ -216,6 +218,11 @@ function normalizeRuntimeConfig(
           : parseNonNegativeIntegerOrNull(input.startFromIndex, "startFromIndex", MAX_START_LIMIT),
       refreshIds: typeof input.refreshIds === "boolean" ? input.refreshIds : fallback.refreshIds,
       resetAll: typeof input.resetAll === "boolean" ? input.resetAll : fallback.resetAll,
+      newIdsOnly: typeof input.newIdsOnly === "boolean" ? input.newIdsOnly : fallback.newIdsOnly,
+      idOrder:
+        input.idOrder === "descending" || input.idOrder === "ascending"
+          ? input.idOrder
+          : fallback.idOrder,
       autoSyncEnabled:
         typeof input.autoSyncEnabled === "boolean"
           ? input.autoSyncEnabled
@@ -373,6 +380,14 @@ export function validateSyncMonitorRuntimeConfigPatch(
 
   if (patch.refreshIds !== undefined) {
     output.refreshIds = parseBoolean(patch.refreshIds, "refreshIds");
+  }
+
+  if (patch.newIdsOnly !== undefined)
+    output.newIdsOnly = parseBoolean(patch.newIdsOnly, "newIdsOnly");
+  if (patch.idOrder !== undefined) {
+    if (patch.idOrder !== "ascending" && patch.idOrder !== "descending")
+      throw new Error("idOrder must be ascending or descending");
+    output.idOrder = patch.idOrder;
   }
 
   if (patch.resetAll !== undefined) {

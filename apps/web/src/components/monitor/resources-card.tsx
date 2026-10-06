@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Select, SelectItem } from "@/components/ui/select";
 import { formatDate } from "@/lib/format";
 
 export function ResourcesCard({
@@ -131,21 +132,21 @@ export function ResourcesCard({
                 });
               }}
             >
-              <label className="flex flex-col gap-1.5 text-sm font-medium">
-                Proxy mode
-                <select
-                  className="h-9 rounded-md border border-input bg-card px-3"
-                  value={draft.mode}
-                  onChange={(event) =>
-                    setDraft({ ...draft, mode: event.target.value as DashboardProxyPatch["mode"] })
+              <div className="flex flex-col gap-1.5 text-sm font-medium">
+                <label htmlFor="proxy-mode">Proxy mode</label>
+                <Select
+                  id="proxy-mode"
+                  value={draft.mode ?? "environment"}
+                  onValueChange={(value) =>
+                    setDraft({ ...draft, mode: value as DashboardProxyPatch["mode"] })
                   }
                 >
-                  <option value="environment">Use environment</option>
-                  <option value="direct">Disabled (direct)</option>
-                  <option value="custom">Custom proxy</option>
-                  <option value="free">Enable free proxy pool</option>
-                </select>
-              </label>
+                  <SelectItem value="environment">Use environment</SelectItem>
+                  <SelectItem value="direct">Disabled (direct)</SelectItem>
+                  <SelectItem value="custom">Custom proxy</SelectItem>
+                  <SelectItem value="free">Enable free proxy pool</SelectItem>
+                </Select>
+              </div>
               <label className="flex flex-col gap-1.5 text-sm font-medium">
                 Custom proxy URL
                 <Input

@@ -19,6 +19,8 @@ const runtime: SyncMonitorRuntimeConfig = {
   startFromIndex: 10,
   refreshIds: true,
   resetAll: false,
+  newIdsOnly: false,
+  idOrder: "ascending",
   autoSyncEnabled: true,
   autoSyncIntervalMinutes: 60,
   updatedAt: "2026-01-01T00:00:00.000Z",
@@ -42,6 +44,8 @@ describe("runtime config draft", () => {
         startFromIndex: 10,
         refreshIds: true,
         resetAll: false,
+        newIdsOnly: false,
+        idOrder: "ascending",
         autoSyncEnabled: true,
         autoSyncIntervalMinutes: 60,
       },
@@ -73,9 +77,16 @@ describe("runtime config draft", () => {
   });
 
   test("draftsEqual compares every field", () => {
+    expect(draftsEqual(DEFAULT_DRAFT, { ...DEFAULT_DRAFT, newIdsOnly: true })).toBe(false);
+    expect(draftsEqual(DEFAULT_DRAFT, { ...DEFAULT_DRAFT, idOrder: "descending" })).toBe(false);
     expect(draftsEqual(DEFAULT_DRAFT, { ...DEFAULT_DRAFT })).toBe(true);
     expect(draftsEqual(DEFAULT_DRAFT, { ...DEFAULT_DRAFT, parallel: "5" })).toBe(false);
     expect(draftsEqual(DEFAULT_DRAFT, { ...DEFAULT_DRAFT, refreshIds: true })).toBe(false);
     expect(draftsEqual(DEFAULT_DRAFT, { ...DEFAULT_DRAFT, startFromIndex: "0" })).toBe(false);
+  });
+  test("round-trips new IDs and highest-first settings", () => {
+    const draft = draftFromRuntime({ ...runtime, newIdsOnly: true, idOrder: "descending" });
+    const parsed = parseRuntimeConfigDraft(draft, 60);
+    expect(parsed.ok && parsed.patch).toMatchObject({ newIdsOnly: true, idOrder: "descending" });
   });
 });

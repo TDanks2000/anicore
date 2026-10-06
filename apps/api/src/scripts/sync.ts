@@ -31,7 +31,7 @@ import { allSyncStagesFresh, animeRefreshTtl } from "@anicore/providers/lib/sync
 import type { ProviderAnimeData, ProviderPlugin } from "@anicore/providers/types";
 import { DEFAULT_AUTO_SYNC_INTERVAL_MINUTES } from "@anicore/sync-monitor";
 import { and, eq } from "drizzle-orm";
-import { parseIntegerFlag } from "../lib/sync-cli";
+import { parseIntegerFlag, selectSyncIds } from "../lib/sync-cli";
 import {
   acknowledgeSyncMonitorControlState,
   createSyncMonitorBatch,
@@ -70,6 +70,9 @@ const LIMIT = readIntegerFlag("--limit=", 1);
 const DEFAULT_PARALLEL = 4;
 const PARALLEL = readIntegerFlag("--parallel=", 1) ?? DEFAULT_PARALLEL;
 const RECONCILE = flag("--reconcile");
+const NEW_IDS_ONLY = flag("--new-ids-only");
+const REVERSE = flag("--reverse");
+const CUSTOM_SELECTION = NEW_IDS_ONLY || REVERSE;
 const forceForId = new Map<number, boolean>();
 const requestedSourceIds = new Set<number>();
 
@@ -357,8 +360,29 @@ async function lookupAnimeMapping(
   return row?.animeId ?? null;
 }
 
-async function runDryRun(): Promise<void> {
+async function loadSelectedIds(): Promise<number[]> {
   const ids = await loadIds(REFRESH_IDS);
+  const existing = NEW_IDS_ONLY
+    ? await db
+        .select({ id: animeMappings.providerId })
+        .from(animeMappings)
+        .where(eq(animeMappings.provider, "anilist"))
+    : [];
+  const selected = selectSyncIds(
+    ids,
+    new Set(existing.map((row) => Number(row.id))),
+    NEW_IDS_ONLY,
+    REVERSE,
+  );
+  if (CUSTOM_SELECTION)
+    log.info(
+      `Selected ${selected.length.toLocaleString()} ${NEW_IDS_ONLY ? "new" : "all"} IDs, ${REVERSE ? "highest" : "lowest"} first; normal saved progress is unchanged`,
+    );
+  return selected;
+}
+
+async function runDryRun(): Promise<void> {
+  const ids = await loadSelectedIds();
   log.info(`Loaded ${ids.length.toLocaleString()} AniList IDs`);
 
   let startIndex = 0;
@@ -371,7 +395,7 @@ async function runDryRun(): Promise<void> {
     startIndex = idx;
     log.info(`Starting from ID ${FROM_ID} (index ${idx})`);
   } else if (FROM_INDEX !== undefined) {
-    startIndex = FROM_INDEX;
+    startIndex = Math.min(FROM_INDEX, ids.length);
     log.info(`Starting from index ${startIndex}`);
   }
 
@@ -653,16 +677,18 @@ async function main(): Promise<void> {
   if (RESET_PROVIDERS.length > 0) return;
 
   if (RESET_ALL) {
-    await resetProgress();
+    if (!CUSTOM_SELECTION) await resetProgress();
     clearAllUnmatched();
     log.info("Full reset — starting from scratch.");
   }
 
-  const ids = await loadIds(REFRESH_IDS);
+  const ids = await loadSelectedIds();
   log.info(`Loaded ${ids.length.toLocaleString()} AniList IDs`);
 
-  let progress = await loadProgress();
-  let startIndex = progress.lastIndex;
+  let progress = CUSTOM_SELECTION
+    ? { version: 1, lastIndex: 0, stats: { created: 0, updated: 0, failed: 0 } }
+    : await loadProgress();
+  let startIndex = Math.min(progress.lastIndex, ids.length);
 
   if (FROM_ID !== undefined) {
     const targetId = FROM_ID;
@@ -674,7 +700,7 @@ async function main(): Promise<void> {
     progress = { ...progress, lastIndex: idx, stats: { created: 0, updated: 0, failed: 0 } };
     log.info(`Starting from ID ${FROM_ID} (index ${idx})`);
   } else if (FROM_INDEX !== undefined) {
-    startIndex = FROM_INDEX;
+    startIndex = Math.min(FROM_INDEX, ids.length);
     progress = { ...progress, lastIndex: startIndex, stats: { created: 0, updated: 0, failed: 0 } };
     log.info(`Starting from index ${startIndex}`);
   } else if (startIndex > 0) {
@@ -706,6 +732,8 @@ async function main(): Promise<void> {
         startFromIndex: null,
         refreshIds: false,
         resetAll: false,
+        newIdsOnly: false,
+        idOrder: "ascending" as const,
         autoSyncEnabled: true,
         autoSyncIntervalMinutes: DEFAULT_AUTO_SYNC_INTERVAL_MINUTES,
         updatedAt: new Date().toISOString(),
@@ -761,7 +789,7 @@ async function main(): Promise<void> {
       const checkpointEvery =
         activeRuntimeConfig?.checkpointEvery ?? initialRuntimeConfig.checkpointEvery;
       if (++processedSinceCheckpoint >= checkpointEvery) {
-        await saveProgress(progress);
+        if (!CUSTOM_SELECTION) await saveProgress(progress);
         processedSinceCheckpoint = 0;
       }
     },
@@ -805,6 +833,8 @@ async function main(): Promise<void> {
       monitor?.stage("anilist-fetch", index, id);
       try {
         const missing = (await lookupAnimeMapping("anilist", String(id))) === null;
+        // An on-demand import may have added this ID after selection.
+        if (NEW_IDS_ONLY && !missing) return "fresh" as const;
         const prior = await readStage(id, "anilist-fetch");
         const recentlyMissing =
           prior?.payloadJson === "null" &&
@@ -866,9 +896,10 @@ async function main(): Promise<void> {
     },
   );
 
-  await saveProgress(progress);
+  if (!CUSTOM_SELECTION) await saveProgress(progress);
   if (
     fullReconciliation &&
+    !CUSTOM_SELECTION &&
     stats.failed === 0 &&
     !stopRequested &&
     startIndex === 0 &&
@@ -879,7 +910,7 @@ async function main(): Promise<void> {
 
   const incompleteMessage =
     stats.failed > 0
-      ? `Sync incomplete — ${stats.failed.toLocaleString()} ID${stats.failed === 1 ? "" : "s"} failed; retry will resume from index ${progress.lastIndex}`
+      ? `Sync incomplete — ${stats.failed.toLocaleString()} ID${stats.failed === 1 ? "" : "s"} failed; ${CUSTOM_SELECTION ? "run an all-ID sync to repair incomplete entries" : `retry will resume from index ${progress.lastIndex}`}`
       : null;
 
   log.divider();

@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@anicore/sync-monitor": "workspace:*",
+    "@radix-ui/react-select": "catalog:",
     "@radix-ui/react-slot": "catalog:",
     "@tailwindcss/vite": "catalog:",
     "@vitejs/plugin-react": "catalog:",

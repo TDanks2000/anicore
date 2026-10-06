@@ -36,6 +36,14 @@ supported and optimized.
 
 ## Selective sync and recovery
 
+The web monitor's Start behavior offers All IDs / New IDs only and Lowest IDs
+first / Highest IDs first. New means no existing AniList mapping in the database.
+These settings apply to manual starts and dry runs; automatic runs still revisit
+the full catalogue. CLI equivalents are `--new-ids-only` and `--reverse`.
+Selection and numeric ordering happen before start indexes and limits. Custom
+selections start at zero unless an index is supplied and do not overwrite the
+normal ascending sync checkpoint.
+
 Automatic and manual syncs reuse fresh stages by default (`--selective` remains
 accepted for compatibility). Use `bun run sync --from-index=0` to revisit the
 catalogue, or `bun run sync --reconcile --from-index=0` to explicitly force all

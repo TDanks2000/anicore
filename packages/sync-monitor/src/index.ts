@@ -72,6 +72,8 @@ export interface SyncMonitorRuntimeConfig {
   startFromIndex: number | null;
   refreshIds: boolean;
   resetAll: boolean;
+  newIdsOnly: boolean;
+  idOrder: "ascending" | "descending";
   autoSyncEnabled: boolean;
   autoSyncIntervalMinutes: number;
   updatedAt: string;
@@ -87,6 +89,8 @@ export interface SyncMonitorRuntimeConfigPatch {
   startFromIndex?: number | null;
   refreshIds?: boolean;
   resetAll?: boolean;
+  newIdsOnly?: boolean;
+  idOrder?: "ascending" | "descending";
   autoSyncEnabled?: boolean;
   autoSyncIntervalMinutes?: number;
 }
@@ -128,6 +132,8 @@ export interface SyncMonitorStartOptions {
   fromIndex?: number;
   refreshIds?: boolean;
   resetAll?: boolean;
+  newIdsOnly?: boolean;
+  idOrder?: "ascending" | "descending";
 }
 
 export interface SyncMonitorStartResponse extends SyncMonitorControlResponse {

@@ -6,7 +6,7 @@ import { ProviderFreshnessPanel } from "@/components/catalog/provider-freshness"
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import { Select } from "@/components/ui/select";
+import { Select, SelectItem } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -312,12 +312,12 @@ export function AnimeDetailDialog({
                           containerClassName="w-[10.5rem]"
                           className="h-8 pl-2.5 text-xs"
                           value={language}
-                          onChange={(event) => setLanguage(event.target.value)}
+                          onValueChange={setLanguage}
                         >
                           {languages.map((code) => (
-                            <option key={code} value={code}>
+                            <SelectItem key={code} value={code}>
                               {formatLanguageName(code)}
-                            </option>
+                            </SelectItem>
                           ))}
                         </Select>
                       ) : null}

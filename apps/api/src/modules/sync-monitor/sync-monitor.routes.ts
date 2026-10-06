@@ -198,6 +198,8 @@ export const syncMonitorRoutes = new Elysia({
         startFromIndex: t.Optional(t.Nullable(t.Number())),
         refreshIds: t.Optional(t.Boolean()),
         resetAll: t.Optional(t.Boolean()),
+        newIdsOnly: t.Optional(t.Boolean()),
+        idOrder: t.Optional(t.UnionEnum(["ascending", "descending"])),
         autoSyncEnabled: t.Optional(t.Boolean()),
         autoSyncIntervalMinutes: t.Optional(
           t.Integer({ minimum: 1, maximum: MAX_AUTO_SYNC_INTERVAL_MINUTES }),
@@ -223,6 +225,8 @@ export const syncMonitorRoutes = new Elysia({
         fromIndex: t.Optional(t.Integer({ minimum: 0 })),
         refreshIds: t.Optional(t.Boolean()),
         resetAll: t.Optional(t.Boolean()),
+        newIdsOnly: t.Optional(t.Boolean()),
+        idOrder: t.Optional(t.UnionEnum(["ascending", "descending"])),
       }),
     },
   );

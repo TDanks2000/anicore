@@ -3,7 +3,7 @@ import { type RefObject, useMemo } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
+import { Select, SelectItem } from "@/components/ui/select";
 import {
   ANIME_FORMAT_OPTIONS,
   ANIME_SEASON_OPTIONS,
@@ -82,13 +82,13 @@ export function AnimeToolbar({ query, searchRef, onSearch, onFilter, onClear }: 
             aria-label="Filter by format"
             containerClassName="min-w-0 xl:w-[8.5rem]"
             value={query.format}
-            onChange={(event) => onFilter({ format: event.target.value })}
+            onValueChange={(value) => onFilter({ format: value })}
           >
-            <option value="">All formats</option>
+            <SelectItem value="">All formats</SelectItem>
             {ANIME_FORMAT_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
+              <SelectItem key={option.value} value={option.value}>
                 {option.label}
-              </option>
+              </SelectItem>
             ))}
           </Select>
 
@@ -96,13 +96,13 @@ export function AnimeToolbar({ query, searchRef, onSearch, onFilter, onClear }: 
             aria-label="Filter by status"
             containerClassName="min-w-0 xl:w-[10.5rem]"
             value={query.status}
-            onChange={(event) => onFilter({ status: event.target.value })}
+            onValueChange={(value) => onFilter({ status: value })}
           >
-            <option value="">All statuses</option>
+            <SelectItem value="">All statuses</SelectItem>
             {ANIME_STATUS_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
+              <SelectItem key={option.value} value={option.value}>
                 {option.label}
-              </option>
+              </SelectItem>
             ))}
           </Select>
 
@@ -110,13 +110,13 @@ export function AnimeToolbar({ query, searchRef, onSearch, onFilter, onClear }: 
             aria-label="Filter by season"
             containerClassName="min-w-0 xl:w-[7.5rem]"
             value={query.season}
-            onChange={(event) => onFilter({ season: event.target.value })}
+            onValueChange={(value) => onFilter({ season: value })}
           >
-            <option value="">All seasons</option>
+            <SelectItem value="">All seasons</SelectItem>
             {ANIME_SEASON_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
+              <SelectItem key={option.value} value={option.value}>
                 {option.label}
-              </option>
+              </SelectItem>
             ))}
           </Select>
 
@@ -124,13 +124,13 @@ export function AnimeToolbar({ query, searchRef, onSearch, onFilter, onClear }: 
             aria-label="Filter by year"
             containerClassName="min-w-0 xl:w-[7rem]"
             value={query.seasonYear}
-            onChange={(event) => onFilter({ seasonYear: event.target.value })}
+            onValueChange={(value) => onFilter({ seasonYear: value })}
           >
-            <option value="">All years</option>
+            <SelectItem value="">All years</SelectItem>
             {yearOptions.map((year) => (
-              <option key={year} value={year}>
+              <SelectItem key={year} value={year}>
                 {year}
-              </option>
+              </SelectItem>
             ))}
           </Select>
         </div>

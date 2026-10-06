@@ -1,3 +1,15 @@
+/** Filter before applying indexes/limits, with numeric rather than lexical ordering. */
+export function selectSyncIds(
+  ids: number[],
+  existingIds: Set<number>,
+  newIdsOnly: boolean,
+  reverse: boolean,
+): number[] {
+  return ids
+    .filter((id) => !newIdsOnly || !existingIds.has(id))
+    .sort((a, b) => (reverse ? b - a : a - b));
+}
+
 export function parseIntegerFlag(
   args: string[],
   prefix: string,

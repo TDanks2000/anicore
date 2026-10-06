@@ -1,7 +1,7 @@
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Select } from "@/components/ui/select";
+import { Select, SelectItem } from "@/components/ui/select";
 import {
   ANIME_PAGE_SIZES,
   type AnimeCatalogQuery,
@@ -68,12 +68,12 @@ export function AnimePagination({
             className="h-8 pl-2.5 text-xs"
             value={String(query.pageSize)}
             disabled={loading}
-            onChange={(event) => onPageSize(Number(event.target.value))}
+            onValueChange={(value) => onPageSize(Number(value))}
           >
             {ANIME_PAGE_SIZES.map((size) => (
-              <option key={size} value={size}>
+              <SelectItem key={size} value={size}>
                 {size}
-              </option>
+              </SelectItem>
             ))}
           </Select>
         </div>

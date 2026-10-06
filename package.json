@@ -16,6 +16,7 @@
       "@elysia/cors": "1.4.2",
       "@libsql/client": "0.18.0",
       "@elysia/openapi": "1.4.16",
+      "@radix-ui/react-select": "2.3.8",
       "@radix-ui/react-slot": "1.4.0",
       "@tailwindcss/vite": "4.3.3",
       "@types/react": "19.3.0",
