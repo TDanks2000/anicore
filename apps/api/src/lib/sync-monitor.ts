@@ -5,7 +5,6 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
-  renameSync,
   statSync,
   writeFileSync,
 } from "node:fs";
@@ -26,6 +25,7 @@ import {
   DEFAULT_AUTO_SYNC_INTERVAL_MINUTES,
   MAX_AUTO_SYNC_INTERVAL_MINUTES,
 } from "@anicore/sync-monitor";
+import { isRetryableFileError, atomicWriteJson as writeJson } from "./atomic-write-json";
 
 export type {
   SyncMonitorAutomationStatus,
@@ -97,9 +97,7 @@ function nowIso(): string {
 
 function atomicWriteJson(path: string, value: unknown): void {
   ensureMonitorDir();
-  const tmpPath = `${path}.tmp-${process.pid}`;
-  writeFileSync(tmpPath, JSON.stringify(value, null, 2));
-  renameSync(tmpPath, path);
+  writeJson(path, value);
 }
 
 function safeReadText(path: string): string | null {
@@ -506,6 +504,7 @@ export function appendSyncMonitorEvent(
 
 export class SyncMonitor {
   private status: SyncMonitorStatus;
+  private statusWriteBlocked = false;
 
   constructor(input: {
     mode: SyncMonitorStatus["mode"];
@@ -737,7 +736,24 @@ export class SyncMonitor {
   }
 
   private writeStatus(): void {
-    atomicWriteJson(statusFile(), this.status);
+    try {
+      atomicWriteJson(statusFile(), this.status);
+      this.statusWriteBlocked = false;
+    } catch (error) {
+      if (!isRetryableFileError(error)) throw error;
+      // Status is telemetry: a locked snapshot must not abort the actual sync.
+      // Keep the latest state in memory and try again on the next update.
+      if (!this.statusWriteBlocked) {
+        console.warn(
+          JSON.stringify({
+            event: "file.sync_status.blocked",
+            path: statusFile(),
+            err: error instanceof Error ? error.message : String(error),
+          }),
+        );
+      }
+      this.statusWriteBlocked = true;
+    }
   }
 }
 
