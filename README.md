@@ -17,6 +17,30 @@ The database file is created and migrated automatically the first time anything 
 
 Interactive API docs are served at `http://localhost:3000/docs` (OpenAPI JSON at `/docs/json`).
 
+## Running with PM2
+
+Install Node.js and PM2 (`npm install -g pm2`) alongside Bun, then run from the repository root:
+
+```sh
+bun install
+# Configure apps/api/.env and apps/web/.env before building.
+bun run build
+bun run pm2:start
+pm2 save
+```
+
+[`ecosystem.config.cjs`](./ecosystem.config.cjs) manages `anicore-api` with Bun and serves the built dashboard as `anicore-web` using [PM2's static SPA server](https://pm2.keymetrics.io/docs/usage/expose/). The API runs from `apps/api`, so Bun loads its environment file and relative database/cache paths stay consistent. A single API instance owns the automatic sync scheduler, with a ten-second shutdown timeout. Both processes restart after crashes and write timestamped logs to PM2's default log directory.
+
+The dashboard runs on port `5173`. Set `VITE_ANICORE_API_URL` in `apps/web/.env` to the API URL that dashboard users can reach; Vite embeds this URL at build time. Set `CORS_ORIGIN` in `apps/api/.env` to the dashboard's browser origin. For remote API access, also set `HOST=0.0.0.0` in that file.
+
+```sh
+bun run pm2:logs
+bun run pm2:restart   # after code or API environment changes; rebuild for web changes
+bun run pm2:stop
+```
+
+To run only the API, use `pm2 start ecosystem.config.cjs --only anicore-api`; no dashboard build is needed. On supported Unix hosts, run `pm2 startup` and follow its printed command, then `pm2 save`, to restore processes after reboot. Windows requires a separate service or Task Scheduler setup for reboot persistence.
+
 ## Architecture
 
 AniCore is a Bun workspace driven by Turborepo:
