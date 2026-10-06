@@ -36,17 +36,22 @@ supported and optimized.
 
 ## Selective sync and recovery
 
-Automatic syncs use `--selective`. Manual `bun run sync` remains a full refresh;
-use `bun run sync --selective --from-index=0` for selective manual runs or
-`bun run sync --reconcile --from-index=0` to explicitly force all stages.
-Selective runs perform a full reconciliation when none has completed or the last
-complete reconciliation is at least 30 days old. A limited/stopped/failed run does
-not advance that reconciliation marker.
+Automatic and manual syncs reuse fresh stages by default (`--selective` remains
+accepted for compatibility). Use `bun run sync --from-index=0` to revisit the
+catalogue, or `bun run sync --reconcile --from-index=0` to explicitly force all
+stages. Existing mapped IDs with all required stages fresh count as skipped and
+consume no source request budget. Missing local mappings and incomplete or failed
+stages still receive repair work. Full reconciliation is explicit rather than
+automatically repeating the entire catalogue every month.
 
 Each AniList ID has durable stage records for its source fetch, anime upsert,
 provider plugin, episode titles and each language provider. Successful stages store
-their current result and freshness deadline. Active/upcoming/unknown-status titles
-refresh every six hours. Finished/cancelled metadata refreshes every seven days;
+their current result and freshness deadline. Upcoming releases more than a week
+away refresh at most every 30 days, becoming due seven days before release;
+upcoming titles without a known date refresh weekly. Airing titles with a future
+episode refresh within a day or an hour after that episode, whichever comes first.
+Near-release and unknown-status titles refresh every six hours.
+Finished/cancelled metadata refreshes every seven days;
 their language stages refresh daily. Language freshness is independent of metadata
 freshness, so cached AniList metadata does not suppress a due dub/cast check.
 Confirmed source 404s are cached for 30 days and count as skipped, with forced

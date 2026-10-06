@@ -4,7 +4,7 @@ import { ANILIST_RATE_MS, isNotFoundError, isRateLimitError } from "./anilist-ra
 import { appendUnmatched, loadUnmatched } from "./cache";
 import { log, type ProgressBar } from "./logger";
 
-/** `skipped` is for IDs the source no longer has (AniList 404) — neither a success nor a retryable failure. */
+/** `skipped` covers fresh database entries and IDs the source no longer has. */
 export type SyncOutcome = "created" | "updated" | "failed" | "skipped";
 
 export interface SyncStats {

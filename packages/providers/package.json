@@ -34,6 +34,7 @@
     "./lib/proxy": "./src/lib/proxy.ts",
     "./lib/slug": "./src/lib/slug.ts",
     "./lib/sync-engine": "./src/lib/sync-engine.ts",
+    "./lib/sync-freshness": "./src/lib/sync-freshness.ts",
     "./lib/stage-state": "./src/lib/stage-state.ts"
   },
   "scripts": {

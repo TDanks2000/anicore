@@ -121,20 +121,22 @@ export async function syncDubStatusForAnime(animeId: number): Promise<DubSyncRes
 }
 
 /** Providers fail independently so a schedule outage cannot suppress cast evidence. */
+export const LANGUAGE_SYNC_PROVIDERS = {
+  "original-audio": syncSubStatusForAnime,
+  animeschedule: syncDubStatusForAnime,
+  crunchyroll: syncCrunchyrollLanguages,
+  "anilist-cast": syncAnilistCastLanguages,
+  jikan: syncVoiceCastLanguages,
+  "kitsu-languages": syncKitsuLanguages,
+};
+
 export async function syncLanguageStatusForAnime(
   animeId: number,
   runStage?: <T>(name: string, operation: () => Promise<T>) => Promise<T>,
 ): Promise<{ errors: string[]; warnings: string[] }> {
   const errors: string[] = [];
   const warnings: string[] = [];
-  for (const [name, sync] of [
-    ["original-audio", syncSubStatusForAnime],
-    ["animeschedule", syncDubStatusForAnime],
-    ["crunchyroll", syncCrunchyrollLanguages],
-    ["anilist-cast", syncAnilistCastLanguages],
-    ["jikan", syncVoiceCastLanguages],
-    ["kitsu-languages", syncKitsuLanguages],
-  ] as const) {
+  for (const [name, sync] of Object.entries(LANGUAGE_SYNC_PROVIDERS)) {
     try {
       const operation = async () => {
         await sync(animeId);

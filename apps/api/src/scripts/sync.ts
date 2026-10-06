@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { closeDb, db, type SyncLease, tryAcquireSyncLease } from "@anicore/db";
-import { anime, animeMappings } from "@anicore/db/schema";
+import { anime, animeMappings, syncStageState } from "@anicore/db/schema";
 import { upsertAnimeFromProvider } from "@anicore/providers";
 import { fetchAnilistAnime } from "@anicore/providers/anilist/sync";
 import {
@@ -20,18 +20,14 @@ import {
 } from "@anicore/providers/lib/cache";
 import { log, type ProgressBar } from "@anicore/providers/lib/logger";
 import { installProxyFetch } from "@anicore/providers/lib/proxy";
-import {
-  hasFailedStages,
-  readStage,
-  refreshTtl,
-  runSyncStage,
-} from "@anicore/providers/lib/stage-state";
+import { readStage, runSyncStage } from "@anicore/providers/lib/stage-state";
 import {
   type DryPluginEntry,
   type PerIdResult,
   SyncEngine,
   type SyncStats,
 } from "@anicore/providers/lib/sync-engine";
+import { allSyncStagesFresh, animeRefreshTtl } from "@anicore/providers/lib/sync-freshness";
 import type { ProviderAnimeData, ProviderPlugin } from "@anicore/providers/types";
 import { DEFAULT_AUTO_SYNC_INTERVAL_MINUTES } from "@anicore/sync-monitor";
 import { and, eq } from "drizzle-orm";
@@ -50,7 +46,7 @@ import {
   writeSyncMonitorControlState,
 } from "../lib/sync-monitor";
 import { advanceSyncCheckpoint, createSyncCheckpointState } from "../lib/sync-progress";
-import { syncLanguageStatusForAnime } from "./sync-audio-status";
+import { LANGUAGE_SYNC_PROVIDERS, syncLanguageStatusForAnime } from "./sync-audio-status";
 
 // ── CLI flags ─────────────────────────────────────────────────────────────────
 
@@ -73,7 +69,6 @@ const FROM_INDEX = readIntegerFlag("--from-index=", 0);
 const LIMIT = readIntegerFlag("--limit=", 1);
 const DEFAULT_PARALLEL = 4;
 const PARALLEL = readIntegerFlag("--parallel=", 1) ?? DEFAULT_PARALLEL;
-const SELECTIVE = flag("--selective");
 const RECONCILE = flag("--reconcile");
 const forceForId = new Map<number, boolean>();
 const requestedSourceIds = new Set<number>();
@@ -594,7 +589,7 @@ async function processFetchedAnime(
 ): Promise<PerIdResult> {
   monitor?.stage("database-upsert", index, id);
   const force = forceForId.get(id) ?? true;
-  const ttl = refreshTtl(anilistData.status);
+  const ttl = animeRefreshTtl(anilistData);
   const result = await runSyncStage(
     id,
     "anime-upsert",
@@ -624,7 +619,7 @@ async function processFetchedAnime(
   monitor?.stage("audio-sub", index, id);
   monitor?.stage("audio-dub", index, id);
   const languageSync = await syncLanguageStatusForAnime(result.animeId, (name, operation) =>
-    runSyncStage(id, `language:${name}`, refreshTtl(anilistData.status, true), operation, force),
+    runSyncStage(id, `language:${name}`, animeRefreshTtl(anilistData, true), operation, force),
   );
   for (const error of languageSync.errors)
     log.warn(`Language status sync failed for ID ${id}: ${error}`);
@@ -740,16 +735,12 @@ async function main(): Promise<void> {
     refreshRuntimeConfig(monitor);
   }
 
-  const reconciliation = await readStage(0, "reconciliation");
-  const fullReconciliation =
-    RECONCILE ||
-    (SELECTIVE &&
-      (!reconciliation?.successAt || Date.now() - reconciliation.successAt >= 30 * 24 * 3600_000));
+  const fullReconciliation = RECONCILE;
   const engine = new SyncEngine(PLUGINS, (id, name, data, operation) =>
     runSyncStage(
       id,
       `provider:${name}`,
-      refreshTtl(data.status),
+      animeRefreshTtl(data),
       operation,
       forceForId.get(id) ?? true,
     ),
@@ -819,15 +810,26 @@ async function main(): Promise<void> {
           prior?.payloadJson === "null" &&
           prior.failures === 0 &&
           (prior.nextDueAt ?? 0) > Date.now();
-        const force =
-          RECONCILE ||
-          (missing && !recentlyMissing) ||
-          ((!SELECTIVE || fullReconciliation) && !(await hasFailedStages(id)));
+        const force = RECONCILE || (missing && !recentlyMissing);
         forceForId.set(id, force);
+        if (!missing && !force) {
+          const states = await db
+            .select()
+            .from(syncStageState)
+            .where(eq(syncStageState.anilistId, id));
+          const required = [
+            "anilist-fetch",
+            "anime-upsert",
+            "episode-titles",
+            ...engine.activePluginsFor(id).map((plugin) => `provider:${plugin.name}`),
+            ...Object.keys(LANGUAGE_SYNC_PROVIDERS).map((name) => `language:${name}`),
+          ];
+          if (allSyncStagesFresh(states, required)) return "fresh" as const;
+        }
         return await runSyncStage(
           id,
           "anilist-fetch",
-          (data: ProviderAnimeData | null) => (data ? refreshTtl(data.status) : 30 * 24 * 3600_000),
+          (data: ProviderAnimeData | null) => (data ? animeRefreshTtl(data) : 30 * 24 * 3600_000),
           () => {
             requestedSourceIds.add(id);
             return withAnilistRetry(
@@ -850,6 +852,10 @@ async function main(): Promise<void> {
       }
     },
     async (id, index, bar, anilistData): Promise<PerIdResult> => {
+      if (anilistData === "fresh") {
+        monitor?.stage("fresh-skipped", index, id);
+        return { outcome: "skipped" };
+      }
       if (anilistData === null) {
         const message = `ID ${id}: no longer on AniList — skipped`;
         log.info(message);
@@ -888,7 +894,7 @@ async function main(): Promise<void> {
   log.info(`  Updated  : ${stats.updated.toLocaleString()}`);
   log.info(`  Failed   : ${stats.failed.toLocaleString()}`);
   if (stats.skipped)
-    log.info(`  Skipped  : ${stats.skipped.toLocaleString()} (no longer on AniList)`);
+    log.info(`  Skipped  : ${stats.skipped.toLocaleString()} (fresh or no longer on AniList)`);
 
   if (stopRequested) {
     monitor?.stop(formatMonitorStats(stats));
