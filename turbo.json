@@ -14,15 +14,15 @@
   ],
   "tasks": {
     "build": {
-      "dependsOn": ["^build"],
-      "outputs": []
+      "dependsOn": ["^typecheck", "typecheck"],
+      "outputs": ["dist/**"]
     },
     "typecheck": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["^typecheck"],
       "outputs": []
     },
     "test": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["^typecheck"],
       "outputs": []
     },
     "dev": {

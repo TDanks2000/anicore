@@ -25,7 +25,7 @@ Install Node.js and PM2 (`npm install -g pm2`) alongside Bun, then run from the 
 bun install
 # Configure apps/api/.env and apps/web/.env before building.
 bun run build
-bun run pm2:start
+pm2 start ecosystem.config.cjs
 pm2 save
 ```
 
@@ -34,9 +34,9 @@ pm2 save
 The dashboard runs on port `5173`. Set `VITE_ANICORE_API_URL` in `apps/web/.env` to the API URL that dashboard users can reach; Vite embeds this URL at build time. Set `CORS_ORIGIN` in `apps/api/.env` to the dashboard's browser origin. For remote API access, also set `HOST=0.0.0.0` in that file.
 
 ```sh
-bun run pm2:logs
-bun run pm2:restart   # after code or API environment changes; rebuild for web changes
-bun run pm2:stop
+pm2 logs
+pm2 restart ecosystem.config.cjs --update-env   # rebuild first for web changes
+pm2 stop ecosystem.config.cjs
 ```
 
 To run only the API, use `pm2 start ecosystem.config.cjs --only anicore-api`; no dashboard build is needed. On supported Unix hosts, run `pm2 startup` and follow its printed command, then `pm2 save`, to restore processes after reboot. Windows requires a separate service or Task Scheduler setup for reboot persistence.
@@ -133,11 +133,17 @@ under `workspaces.catalog`. Root tools and every app/package use `catalog:`;
 internal packages use `workspace:*`. Commit `bun.lock` with dependency changes
 and use `bun install --frozen-lockfile` for reproducible installs.
 
-Run `bun run deps:update` to update all workspaces and catalog entries to their
+Run `bun update --latest --recursive --exact` to update all workspaces and catalog entries to their
 latest releases, then run `bun run deps:check`, lint, typecheck, tests and build.
 CI checks the catalog policy so a new per-package version cannot silently drift.
 Add an external dependency with `bun add <package> --catalog` from its workspace;
 the version belongs in the root catalog, not an individual app manifest.
+
+Operational commands live in the root manifest; apps and shared packages keep
+only the tasks Turbo runs. Use `bun run sync --dry-run` for previews. Occasional
+maintenance tools remain available directly: `bun --cwd apps/api src/scripts/empty-db.ts`,
+`bun --cwd apps/api src/scripts/seed.ts`, `bun run --cwd apps/api --bun drizzle-kit studio`,
+and `bun --cwd apps/api src/scripts/sync-anilist.ts`.
 
 ### Performance measurements
 
