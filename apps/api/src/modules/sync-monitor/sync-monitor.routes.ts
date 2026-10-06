@@ -105,13 +105,22 @@ function snapshotPayload(eventLimit: number): SyncMonitorSnapshotResponse {
   };
 }
 
-function requestControl(command: "pause" | "resume" | "stop", message: string) {
+async function requestControl(command: "pause" | "resume" | "stop", message: string) {
   // Use the same definition of "active" the dashboard sees, so the button state
   // and the accepted command can never disagree.
   if (!isAnySyncActive()) {
     throw conflict(`No active sync process to ${command}`);
   }
-  writeSyncMonitorControlState(command, message);
+  const requested = writeSyncMonitorControlState(command, message);
+  // The worker observes commands independently of provider requests. Return its
+  // acknowledgement in this response, with a bounded wait for older workers.
+  const deadline = Date.now() + 500;
+  while (Date.now() < deadline) {
+    const control = readSyncMonitorControlState();
+    if (control.requestedAt !== requested.requestedAt || control.acknowledgedAt) break;
+    if (!isAnySyncActive()) break;
+    await Bun.sleep(25);
+  }
   return controlPayload();
 }
 

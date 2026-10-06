@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { formatHttpError } from "../../lib/http";
 import { log } from "../../lib/logger";
+import { waitForProvider } from "../../lib/provider-wait";
 
 const BASE = "https://api.jikan.moe/v4";
 const CACHE_DIR = fileURLToPath(
@@ -62,7 +63,7 @@ export function validateCharacters(value: unknown): JikanCharacter[] {
 async function limitedFetch(url: string): Promise<Response> {
   const operation = requestQueue.then(async () => {
     // Jikan allows 60/minute and 3/second. Serialise even concurrent imports.
-    await Bun.sleep(Math.max(0, 1100 - (Date.now() - lastRequestAt)));
+    await waitForProvider(Math.max(0, 1100 - (Date.now() - lastRequestAt)));
     lastRequestAt = Date.now();
     return fetch(url, {
       headers: { Accept: "application/json" },
@@ -106,7 +107,7 @@ async function loadCharacters(id: string): Promise<JikanCharacter[] | null> {
         : header
           ? Date.parse(header) - Date.now()
           : 0;
-      await Bun.sleep(
+      await waitForProvider(
         Math.max(1100 * 2 ** attempt, Math.min(30000, Number.isFinite(delay) ? delay : 0)),
       );
       continue;

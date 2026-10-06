@@ -1,6 +1,7 @@
 import {
   isControlPending,
   type SyncMonitorClient,
+  type SyncMonitorControlResponse,
   type SyncMonitorControlState,
   SyncMonitorRequestError,
   type SyncMonitorStatus,
@@ -20,6 +21,7 @@ export function ControlsSection(props: {
   control: SyncMonitorControlState | null;
   active: boolean;
   onChanged: () => Promise<void>;
+  onControlled: (response: SyncMonitorControlResponse) => void;
 }) {
   const { client, status, control, active } = props;
   const [busy, setBusy] = useState<ControlName | null>(null);
@@ -28,7 +30,7 @@ export function ControlsSection(props: {
 
   const mode = syncControlMode({ active, status, control });
   const disabled = !client || busy !== null;
-  const pending = isControlPending(control);
+  const pending = active && isControlPending(control);
   // The loop acknowledges pause/stop; while pending we spin on that exact button.
   const pendingName = pending ? (control?.command as ControlName | undefined) : undefined;
 
@@ -37,11 +39,10 @@ export function ControlsSection(props: {
     setBusy(name);
     setMessage(null);
     try {
-      if (name === "start") await client.start();
-      else if (name === "resume") await client.resume();
-      else await client[name]();
+      const response = await client[name]();
+      props.onControlled(response);
       setMessage(successMessage);
-      await props.onChanged();
+      void props.onChanged();
     } catch (err) {
       if (err instanceof SyncMonitorRequestError && err.status === 409) {
         // The process changed between the last poll and this click — for

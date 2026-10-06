@@ -26,6 +26,7 @@ export interface IterateOptions {
   endIndex: number;
   label: string;
   rateLimitMs?: number;
+  sleep?: (milliseconds: number) => Promise<unknown>;
   getRateLimitMs?: () => number | Promise<number>;
   /** Called after each item — use for progress checkpointing. */
   onAfterEach?: (ctx: { stats: SyncStats; index: number }) => Promise<void>;
@@ -259,6 +260,7 @@ export class SyncEngine {
       label,
       onAfterEach,
       beforeEach,
+      sleep = Bun.sleep,
       rateLimitMs = ANILIST_RATE_MS,
       getRateLimitMs,
     } = options;
@@ -287,7 +289,7 @@ export class SyncEngine {
           activeRateLimitMs = Math.max(0, Math.floor(await getRateLimitMs()));
         }
         bar.setStage("waiting…");
-        await Bun.sleep(activeRateLimitMs);
+        await sleep(activeRateLimitMs);
       }
     }
 
@@ -355,6 +357,8 @@ export class SyncEngine {
       onBatchEnd,
       onConcurrencyChange,
       beforeBatch,
+      beforeEach,
+      sleep = Bun.sleep,
       getFetchBudgetCost,
     } = options;
 
@@ -453,6 +457,12 @@ export class SyncEngine {
         const id = batchIds[j]!;
         const idx = batchIndices[j]!;
         const fetched = await fetchResults[j]!;
+        if (beforeEach && !(await beforeEach({ id, index: idx }))) {
+          // Settle aborted prefetches before returning and closing the database.
+          await Promise.all(fetchResults);
+          bar.finish();
+          return stats;
+        }
         fetchBudgetCost += Math.max(0, getFetchBudgetCost?.(id) ?? 1);
         let outcome: SyncOutcome;
         let extra: Record<string, number> | undefined;
@@ -492,7 +502,7 @@ export class SyncEngine {
         const sleepMs = Math.max(0, fetchBudgetCost * activeRateLimitMs - elapsed);
         if (sleepMs > 0) {
           bar.setStage(`waiting ${(sleepMs / 1000).toFixed(1)}s… (${ctrl.statusLabel})`);
-          await Bun.sleep(sleepMs);
+          await sleep(sleepMs);
         }
       }
     }

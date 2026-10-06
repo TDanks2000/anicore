@@ -1,4 +1,5 @@
 import { log } from "./logger";
+import { waitForProvider } from "./provider-wait";
 
 // AniList public API: 90 req/min → 2 parallel reqs/ID → min 1333ms. 1500ms is safe.
 export const ANILIST_RATE_MS = 1500;
@@ -29,7 +30,7 @@ export function isTransientAnilistError(err: unknown): boolean {
 export async function withAnilistRetry<T>(
   fn: () => Promise<T>,
   onRateLimit?: (err: unknown, attempt: number) => void,
-  sleep: (milliseconds: number) => Promise<unknown> = Bun.sleep,
+  sleep: (milliseconds: number) => Promise<unknown> = waitForProvider,
 ): Promise<T> {
   for (let attempt = 0; attempt < 4; attempt++) {
     try {

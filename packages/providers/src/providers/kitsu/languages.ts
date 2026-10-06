@@ -7,6 +7,7 @@ import { normalizeLanguageCode } from "@anicore/db/language-status-scoring";
 import { animeLanguageEvidence, animeMappings } from "@anicore/db/schema";
 import { and, eq } from "drizzle-orm";
 import { formatHttpError } from "../../lib/http";
+import { waitForProvider } from "../../lib/provider-wait";
 
 const SOURCE_PREFIX = "https://kitsu.io/api/edge/anime/";
 export interface KitsuStreamingLink {
@@ -48,7 +49,7 @@ export async function fetchStreamingLinks(id: string): Promise<KitsuStreamingLin
   if (!/^[1-9]\d*$/.test(id)) throw new Error("Invalid Kitsu ID");
   const links: KitsuStreamingLink[] = [];
   for (let offset = 0; offset < 2000; offset += 20) {
-    await Bun.sleep(250);
+    await waitForProvider(250);
     const url = new URL(`${SOURCE_PREFIX}${id}/streaming-links`);
     url.searchParams.set("page[limit]", "20");
     url.searchParams.set("page[offset]", String(offset));

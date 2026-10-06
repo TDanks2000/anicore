@@ -1,6 +1,7 @@
 import {
   SyncMonitorClient,
   type SyncMonitorConfigResponse,
+  type SyncMonitorControlResponse,
   type SyncMonitorEvent,
   type SyncMonitorSnapshotResponse,
   type SyncMonitorStatusResponse,
@@ -215,6 +216,17 @@ export function useSyncMonitor() {
     setConfigPayloadState(next);
   }, []);
 
+  const applyControl = useCallback((next: SyncMonitorControlResponse) => {
+    // Discard any poll started before the command so it cannot undo the result.
+    generation.current++;
+    abortRef.current?.abort();
+    abortRef.current = null;
+    refreshingRef.current = false;
+    revisionRef.current = null;
+    activeRef.current = next.active;
+    setStatusPayload((previous) => (previous ? { ...previous, ...next } : previous));
+  }, []);
+
   return {
     apiUrl,
     setApiUrl,
@@ -230,6 +242,7 @@ export function useSyncMonitor() {
     error,
     lastRefresh,
     refresh,
+    applyControl,
   };
 }
 

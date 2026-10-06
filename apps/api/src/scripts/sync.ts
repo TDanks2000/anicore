@@ -19,6 +19,7 @@ import {
   saveProgress,
 } from "@anicore/providers/lib/cache";
 import { log, type ProgressBar } from "@anicore/providers/lib/logger";
+import { setProviderWait } from "@anicore/providers/lib/provider-wait";
 import { installProxyFetch } from "@anicore/providers/lib/proxy";
 import { readStage, runSyncStage } from "@anicore/providers/lib/stage-state";
 import {
@@ -32,14 +33,15 @@ import type { ProviderAnimeData, ProviderPlugin } from "@anicore/providers/types
 import { DEFAULT_AUTO_SYNC_INTERVAL_MINUTES } from "@anicore/sync-monitor";
 import { and, eq } from "drizzle-orm";
 import { parseIntegerFlag, selectSyncIds } from "../lib/sync-cli";
+import { SyncControl, SyncStoppedError } from "../lib/sync-control";
 import {
-  acknowledgeSyncMonitorControlState,
   createSyncMonitorBatch,
   ensureSyncMonitorAccessCode,
   ensureSyncMonitorRuntimeConfig,
   getSyncMonitorPublicConfig,
   readSyncMonitorControlState,
   readSyncMonitorRuntimeConfig,
+  readSyncMonitorStatus,
   SyncMonitor,
   type SyncMonitorRuntimeConfig,
   type SyncMonitorStats,
@@ -92,7 +94,38 @@ const PLUGINS: ProviderPlugin[] = [kitsuPlugin];
 let activeMonitor: SyncMonitor | null = null;
 let activeRuntimeConfig: SyncMonitorRuntimeConfig | null = null;
 let stopRequested = false;
-let paused = false;
+let controls: SyncControl | null = null;
+
+function startControls(): SyncControl | null {
+  // API starts clear the previous command before spawning. A terminal start must
+  // also discard controls from a finished run, while preserving startup requests.
+  if (MONITOR_ENABLED) {
+    const previous = readSyncMonitorStatus();
+    const control = readSyncMonitorControlState();
+    if (control.acknowledgedAt && previous && !SyncMonitor.isLikelyActive(previous)) {
+      writeSyncMonitorControlState(null, null, "sync");
+    }
+  }
+  const controller = MONITOR_ENABLED ? new SyncControl() : null;
+  if (controller) {
+    setProviderWait((milliseconds) => controller.sleep(milliseconds));
+    const providerFetch = globalThis.fetch;
+    globalThis.fetch = (async (input, init) => {
+      if (!(await controller.waitForRelease())) throw new SyncStoppedError();
+      const caller = init?.signal ?? (input instanceof Request ? input.signal : undefined);
+      return providerFetch(input, {
+        ...init,
+        signal: caller ? AbortSignal.any([caller, controller.signal]) : controller.signal,
+      });
+    }) as typeof fetch;
+  }
+  return controller;
+}
+
+async function controlSleep(milliseconds: number): Promise<void> {
+  if (controls) await controls.sleep(milliseconds);
+  else await Bun.sleep(milliseconds);
+}
 
 function formatMonitorStats(stats: SyncStats): SyncMonitorStats {
   return {
@@ -122,6 +155,13 @@ function failActiveMonitor(message: string): void {
   const monitor = activeMonitor;
   if (!monitor) return;
   monitor.fail(message);
+  activeMonitor = null;
+}
+
+function stopActiveMonitor(): void {
+  const monitor = activeMonitor;
+  if (!monitor) return;
+  monitor.stop(readSyncMonitorStatus()?.stats ?? { created: 0, updated: 0, failed: 0 });
   activeMonitor = null;
 }
 
@@ -175,45 +215,10 @@ function refreshRuntimeConfig(monitor?: SyncMonitor | null): SyncMonitorRuntimeC
   return next;
 }
 
-async function waitForControlRelease(monitor?: SyncMonitor | null): Promise<boolean> {
-  if (!monitor) return true;
-
-  while (true) {
-    const control = readSyncMonitorControlState();
-    if (control.command === "stop") {
-      if (!stopRequested) {
-        stopRequested = true;
-        monitor.stopping(control.message ?? "Stop requested from monitor");
-      }
-      acknowledgeSyncMonitorControlState();
-      return false;
-    }
-
-    if (control.command === "pause") {
-      if (!paused) {
-        paused = true;
-        monitor.pause(control.message ?? "Pause requested from monitor");
-      }
-      acknowledgeSyncMonitorControlState();
-      await Bun.sleep(1000);
-      refreshRuntimeConfig(monitor);
-      continue;
-    }
-
-    if (control.command === "resume") {
-      writeSyncMonitorControlState(null, null, "sync");
-      if (paused) {
-        paused = false;
-        monitor.resume(control.message ?? "Resume requested from monitor");
-      }
-    }
-
-    if (paused) {
-      paused = false;
-      monitor.resume("Sync resumed");
-    }
-    return true;
-  }
+async function waitForControlRelease(): Promise<boolean> {
+  const released = (await controls?.waitForRelease()) ?? true;
+  stopRequested = controls?.stopped ?? false;
+  return released;
 }
 
 // ── Verify mode ───────────────────────────────────────────────────────────────
@@ -422,6 +427,7 @@ async function runDryRun(): Promise<void> {
       providers: ["anilist", ...PLUGINS.map((p) => p.name)],
     });
     activeMonitor = monitor;
+    controls?.attach(monitor);
     refreshRuntimeConfig(monitor);
   }
 
@@ -443,7 +449,15 @@ async function runDryRun(): Promise<void> {
         monitor?.update({ stats: formatMonitorStats(s), currentIndex: index });
         refreshRuntimeConfig(monitor);
       },
-      beforeBatch: async () => waitForControlRelease(monitor),
+      beforeBatch: async () => waitForControlRelease(),
+      beforeEach: async () => waitForControlRelease(),
+      sleep: async (milliseconds) => {
+        try {
+          await controlSleep(milliseconds);
+        } catch (error) {
+          if (!(error instanceof SyncStoppedError)) throw error;
+        }
+      },
       onBatchStart: ({
         startIndex: batchStart,
         endIndex: batchEnd,
@@ -477,6 +491,7 @@ async function runDryRun(): Promise<void> {
           data: await withAnilistRetry(
             () => fetchAnilistAnime(id),
             () => reportIssue("rate-limit"),
+            controlSleep,
           ),
         };
       } catch (err) {
@@ -544,6 +559,7 @@ async function runDryRun(): Promise<void> {
       }
     },
   );
+  stopRequested = controls?.stopped ?? stopRequested;
   if (stopRequested) {
     monitor?.stop(formatMonitorStats(stats));
   } else {
@@ -760,6 +776,7 @@ async function main(): Promise<void> {
       providers: ["anilist", ...PLUGINS.map((p) => p.name)],
     });
     activeMonitor = monitor;
+    controls?.attach(monitor);
     refreshRuntimeConfig(monitor);
   }
 
@@ -803,7 +820,15 @@ async function main(): Promise<void> {
       getRateLimitMs: monitor ? () => refreshRuntimeConfig(monitor).rateLimitMs : undefined,
       rateLimitMs: initialRuntimeConfig.rateLimitMs,
       getConcurrency: monitor ? () => refreshRuntimeConfig(monitor).parallel : undefined,
-      beforeBatch: async () => waitForControlRelease(monitor),
+      beforeBatch: async () => waitForControlRelease(),
+      beforeEach: async () => waitForControlRelease(),
+      sleep: async (milliseconds) => {
+        try {
+          await controlSleep(milliseconds);
+        } catch (error) {
+          if (!(error instanceof SyncStoppedError)) throw error;
+        }
+      },
       onBatchStart: ({
         startIndex: batchStart,
         endIndex: batchEnd,
@@ -865,6 +890,7 @@ async function main(): Promise<void> {
             return withAnilistRetry(
               () => fetchAnilistAnime(id),
               () => reportIssue("rate-limit"),
+              controlSleep,
             ).catch((error) => {
               if (isNotFoundError(error)) return null;
               throw error;
@@ -896,6 +922,7 @@ async function main(): Promise<void> {
     },
   );
 
+  stopRequested = controls?.stopped ?? stopRequested;
   if (!CUSTOM_SELECTION) await saveProgress(progress);
   if (
     fullReconciliation &&
@@ -914,6 +941,7 @@ async function main(): Promise<void> {
       : null;
 
   log.divider();
+  stopRequested = controls?.stopped ?? stopRequested;
   if (stopRequested) {
     log.warn("Sync stopped by monitor request");
   } else if (incompleteMessage) {
@@ -927,6 +955,7 @@ async function main(): Promise<void> {
   if (stats.skipped)
     log.info(`  Skipped  : ${stats.skipped.toLocaleString()} (fresh or no longer on AniList)`);
 
+  stopRequested = controls?.stopped ?? stopRequested;
   if (stopRequested) {
     monitor?.stop(formatMonitorStats(stats));
   } else if (incompleteMessage) {
@@ -958,15 +987,22 @@ try {
   if (!syncLease) {
     throw new Error("Another AniCore sync process already holds the database lease");
   }
+  controls = startControls();
   log.info(JSON.stringify({ event: "sync.lease.acquired" }));
   await main();
-  syncSucceeded = true;
+  syncSucceeded = !controls?.stopped;
 } catch (err) {
-  const message = err instanceof Error ? err.message : String(err);
-  log.error(`Fatal: ${message}`);
-  failActiveMonitor(message);
-  process.exitCode = 1;
+  if (controls?.stopped) {
+    stopRequested = true;
+    stopActiveMonitor();
+  } else {
+    const message = err instanceof Error ? err.message : String(err);
+    log.error(`Fatal: ${message}`);
+    failActiveMonitor(message);
+    process.exitCode = 1;
+  }
 } finally {
+  controls?.dispose();
   if (syncLease) {
     try {
       await syncLease.release(syncSucceeded);

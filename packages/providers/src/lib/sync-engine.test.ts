@@ -47,6 +47,34 @@ describe("SyncEngine.syncPlugins", () => {
 });
 
 describe("SyncEngine.iterateParallel", () => {
+  test("checks controls between prefetched items without advancing unprocessed checkpoints", async () => {
+    const engine = new SyncEngine([]);
+    const processed: number[] = [];
+    const checkpoints: number[] = [];
+    const stats = await engine.iterateParallel(
+      {
+        ids: [1, 2, 3],
+        startIndex: 0,
+        endIndex: 3,
+        label: "stop",
+        concurrency: 3,
+        rateLimitMs: 0,
+        beforeEach: async () => processed.length === 0,
+        onAfterEach: async ({ index }) => {
+          checkpoints.push(index);
+        },
+      },
+      async (id) => id,
+      async (id) => {
+        processed.push(id);
+        return { outcome: "updated" };
+      },
+    );
+    expect(processed).toEqual([1]);
+    expect(checkpoints).toEqual([0]);
+    expect(stats).toMatchObject({ updated: 1, failed: 0 });
+  });
+
   test("rejects unbounded or invalid prefetch windows", async () => {
     const engine = new SyncEngine([]);
     for (const concurrency of [0, 33, Number.POSITIVE_INFINITY]) {

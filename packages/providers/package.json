@@ -32,6 +32,7 @@
     "./lib/json": "./src/lib/json.ts",
     "./lib/logger": "./src/lib/logger.ts",
     "./lib/proxy": "./src/lib/proxy.ts",
+    "./lib/provider-wait": "./src/lib/provider-wait.ts",
     "./lib/slug": "./src/lib/slug.ts",
     "./lib/sync-engine": "./src/lib/sync-engine.ts",
     "./lib/sync-freshness": "./src/lib/sync-freshness.ts",

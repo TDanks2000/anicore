@@ -90,6 +90,7 @@ export function MonitorView({
           control={statusPayload?.control ?? null}
           active={active}
           onChanged={() => refresh(true)}
+          onControlled={monitor.applyControl}
         />
       </div>
 

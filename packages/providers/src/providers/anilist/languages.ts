@@ -4,6 +4,7 @@ import { animeLanguageEvidence, animeMappings } from "@anicore/db/schema";
 import { and, eq } from "drizzle-orm";
 import { withAnilistRetry } from "../../lib/anilist-rate-limit";
 import { formatHttpError } from "../../lib/http";
+import { waitForProvider } from "../../lib/provider-wait";
 import { voiceCastLanguages } from "../jikan/sync";
 
 export interface AnilistCastCharacter {
@@ -65,7 +66,9 @@ export function validateAnilistCast(
 
 async function requestCast(id: number, page: number) {
   const operation = queue.then(async () => {
-    await Bun.sleep(Math.max(0, 1100 - (Date.now() - lastRequestAt), nextRequestAt - Date.now()));
+    await waitForProvider(
+      Math.max(0, 1100 - (Date.now() - lastRequestAt), nextRequestAt - Date.now()),
+    );
     lastRequestAt = Date.now();
     const response = await fetch("https://graphql.anilist.co", {
       method: "POST",

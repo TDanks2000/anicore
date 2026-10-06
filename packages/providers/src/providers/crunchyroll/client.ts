@@ -1,4 +1,5 @@
 import { formatHttpError } from "../../lib/http";
+import { waitForProvider } from "../../lib/provider-wait";
 
 const BASE = "https://www.crunchyroll.com";
 // The public web client's anonymous grant: catalogue metadata only, no account.
@@ -75,7 +76,7 @@ async function accessToken(): Promise<string> {
 /** Serialised, rate-limited GET; `null` means the resource does not exist. */
 async function get<T>(path: string, retried = false): Promise<T | null> {
   const operation = queue.then(async () => {
-    await Bun.sleep(Math.max(0, RATE_MS - (Date.now() - lastRequestAt)));
+    await waitForProvider(Math.max(0, RATE_MS - (Date.now() - lastRequestAt)));
     lastRequestAt = Date.now();
     const url = new URL(path, BASE);
     url.searchParams.set("locale", "en-US");

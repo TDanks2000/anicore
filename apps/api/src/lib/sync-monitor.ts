@@ -551,7 +551,7 @@ export class SyncMonitor {
     parallel: number;
     providers: string[];
   }) {
-    writeSyncMonitorControlState(null, null, "sync");
+    if (!existsSync(controlFile())) writeSyncMonitorControlState(null, null, "sync");
     const at = nowIso();
     this.status = {
       version: 1,
@@ -629,6 +629,10 @@ export class SyncMonitor {
   ): void {
     const updatedAt = nowIso();
     const next = { ...this.status, ...patch, updatedAt };
+    if (!patch.state && (this.status.state === "paused" || this.status.state === "stopping")) {
+      next.currentStage = this.status.currentStage;
+      next.activeBatch = null;
+    }
     this.status = {
       ...next,
       progress: calculateProgress({

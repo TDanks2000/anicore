@@ -6,6 +6,7 @@ import {
 import { animeMappings, episodes } from "@anicore/db/schema";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { log } from "../../lib/logger";
+import { waitForProvider } from "../../lib/provider-wait";
 import { syncAuthoritativeCrossMappings } from "../authoritative-cross-mappings";
 import { titleSimilarity } from "../title-similarity";
 import type { ProviderAuthoritativeMapping } from "../types";
@@ -35,7 +36,7 @@ export interface DubSyncResult {
   subtitlesMarked?: number;
 }
 
-export const sleep = (ms: number) => Bun.sleep(ms);
+export const sleep = (ms: number) => waitForProvider(ms);
 const RATE_MS = 250;
 const SOURCE_PREFIX = "https://animeschedule.net/anime/";
 

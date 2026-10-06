@@ -1,4 +1,5 @@
 import { formatHttpError } from "../../lib/http";
+import { waitForProvider } from "../../lib/provider-wait";
 
 const TVDB_API_BASE = "https://api4.thetvdb.com/v4";
 const TVDB_REQUEST_TIMEOUT_MS = 15_000;
@@ -61,7 +62,7 @@ function getCredentials(): { apiKey: string; pin?: string } | null {
 }
 
 function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return waitForProvider(ms).then(() => undefined);
 }
 
 function retryDelayMs(response: Response | null, attempt: number): number {
