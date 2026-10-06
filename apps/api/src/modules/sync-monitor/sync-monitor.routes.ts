@@ -7,6 +7,7 @@ import {
   clearDashboardCache,
   getDashboardResources,
   previewCache,
+  refreshDashboardAnilistIds,
   updateDashboardProxy,
 } from "../../lib/dashboard-resources";
 import { conflict, HttpError } from "../../lib/errors";
@@ -184,6 +185,17 @@ export const syncMonitorRoutes = new Elysia({
     },
     { body: t.Object({ name: t.String({ maxLength: 200 }) }) },
   )
+  .post("/resources/anilist-ids/refresh", async () => {
+    if (isAnySyncActive()) throw conflict("Stop sync before refreshing the AniList ID list");
+    try {
+      return await refreshDashboardAnilistIds();
+    } catch (error) {
+      throw new HttpError(
+        502,
+        `AniList ID refresh failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  })
   .patch(
     "/config",
     ({ body }) => {

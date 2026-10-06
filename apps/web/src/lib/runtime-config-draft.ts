@@ -3,6 +3,7 @@ import {
   MAX_AUTO_SYNC_INTERVAL_MINUTES,
   type SyncMonitorRuntimeConfig,
   type SyncMonitorRuntimeConfigPatch,
+  type SyncMonitorStartOptions,
 } from "@anicore/sync-monitor";
 
 /** Form state for the runtime config card: numbers stay strings while edited. */
@@ -57,6 +58,31 @@ export function draftFromRuntime(runtime: SyncMonitorRuntimeConfig): RuntimeConf
 
 function integerIn(value: number, min: number, max: number): boolean {
   return Number.isInteger(value) && value >= min && value <= max;
+}
+
+/**
+ * Start options sent with the dashboard Start button. The form is the source of
+ * truth for the next run, so unsaved start-behavior changes (ID order, new IDs
+ * only, start mode, limit, index, refresh, reset) apply immediately instead of
+ * silently falling back to the last saved config.
+ */
+export function startOptionsFromDraft(draft: RuntimeConfigDraft): SyncMonitorStartOptions {
+  const limit = Number(draft.startLimit);
+  const fromIndex = Number(draft.startFromIndex);
+  const options: SyncMonitorStartOptions = {
+    dryRun: draft.startMode === "dry-run",
+    refreshIds: draft.refreshIds,
+    resetAll: draft.resetAll,
+    newIdsOnly: draft.newIdsOnly,
+    idOrder: draft.idOrder,
+  };
+  if (draft.startLimit.trim() !== "" && Number.isInteger(limit) && limit >= 1) {
+    options.limit = limit;
+  }
+  if (draft.startFromIndex.trim() !== "" && Number.isInteger(fromIndex) && fromIndex >= 0) {
+    options.fromIndex = fromIndex;
+  }
+  return options;
 }
 
 /** Field-wise equality, so unchanged drafts keep their previous object identity. */

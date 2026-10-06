@@ -7,6 +7,7 @@ import {
   draftsEqual,
   isAutoSyncIntervalValid,
   parseRuntimeConfigDraft,
+  startOptionsFromDraft,
 } from "./runtime-config-draft";
 
 const runtime: SyncMonitorRuntimeConfig = {
@@ -88,5 +89,43 @@ describe("runtime config draft", () => {
     const draft = draftFromRuntime({ ...runtime, newIdsOnly: true, idOrder: "descending" });
     const parsed = parseRuntimeConfigDraft(draft, 60);
     expect(parsed.ok && parsed.patch).toMatchObject({ newIdsOnly: true, idOrder: "descending" });
+  });
+
+  test("start options carry unsaved start behavior and omit unusable numbers", () => {
+    const draft = {
+      ...DEFAULT_DRAFT,
+      startMode: "sync" as const,
+      startLimit: "250",
+      startFromIndex: "12",
+      refreshIds: true,
+      resetAll: true,
+      newIdsOnly: true,
+      idOrder: "descending" as const,
+    };
+    expect(startOptionsFromDraft(draft)).toEqual({
+      dryRun: false,
+      refreshIds: true,
+      resetAll: true,
+      newIdsOnly: true,
+      idOrder: "descending",
+      limit: 250,
+      fromIndex: 12,
+    });
+
+    const defaultOptions = startOptionsFromDraft(DEFAULT_DRAFT);
+    expect(defaultOptions).toEqual({
+      dryRun: true,
+      refreshIds: false,
+      resetAll: false,
+      newIdsOnly: false,
+      idOrder: "ascending",
+      limit: 5,
+    });
+    expect(startOptionsFromDraft({ ...draft, startLimit: "" })).not.toHaveProperty("limit");
+    expect(startOptionsFromDraft({ ...draft, startFromIndex: "" })).not.toHaveProperty("fromIndex");
+    expect(startOptionsFromDraft({ ...draft, startLimit: "0" })).not.toHaveProperty("limit");
+    expect(startOptionsFromDraft({ ...draft, startFromIndex: "junk" })).not.toHaveProperty(
+      "fromIndex",
+    );
   });
 });

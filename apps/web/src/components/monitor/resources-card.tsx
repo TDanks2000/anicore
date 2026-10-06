@@ -229,23 +229,54 @@ export function ResourcesCard({
                   Cache files · {data.cache.totalFiles.toLocaleString()} files ·{" "}
                   {(data.cache.totalBytes / 1024).toFixed(1)} KB
                 </h3>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={busy}
-                  onClick={() =>
-                    void run(async () => {
-                      const next = await client.getResources(offset);
-                      if (mounted.current) apply(next);
-                    })
-                  }
-                >
-                  Refresh cache
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={busy || active}
+                    title={
+                      active ? "Stop the sync before refreshing the AniList ID list" : undefined
+                    }
+                    onClick={() =>
+                      void run(async () => {
+                        const result = await client.refreshAnilistIds();
+                        const next = await client.getResources(offset);
+                        if (!mounted.current) return;
+                        apply(next);
+                        const details = [
+                          `${result.total.toLocaleString()} IDs`,
+                          result.added > 0 ? `+${result.added.toLocaleString()} new` : null,
+                          result.keptLocal > 0
+                            ? `${result.keptLocal.toLocaleString()} local kept`
+                            : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ");
+                        setMessage(`AniList ID list replaced from GitHub (${details}).`);
+                      })
+                    }
+                  >
+                    Refresh AniList IDs
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={busy}
+                    onClick={() =>
+                      void run(async () => {
+                        const next = await client.getResources(offset);
+                        if (mounted.current) apply(next);
+                      })
+                    }
+                  >
+                    Refresh cache
+                  </Button>
+                </div>
               </div>
               <p className="mb-3 text-xs text-muted-foreground">
-                Preview up to 8 KB per file. Provider caches can be cleared while sync is idle. ID
-                lists, proxy pools and sync checkpoints are read-only.
+                Preview up to 8 KB per file. Provider caches can be cleared while sync is idle.
+                Proxy pools and sync checkpoints are read-only; the AniList ID list is replaced from
+                its GitHub source.
               </p>
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">

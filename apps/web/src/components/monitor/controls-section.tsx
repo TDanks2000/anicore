@@ -4,6 +4,7 @@ import {
   type SyncMonitorControlResponse,
   type SyncMonitorControlState,
   SyncMonitorRequestError,
+  type SyncMonitorStartOptions,
   type SyncMonitorStatus,
 } from "@anicore/sync-monitor";
 import { CircleCheck, Loader2, Pause, Play, Square } from "lucide-react";
@@ -20,10 +21,12 @@ export function ControlsSection(props: {
   status: SyncMonitorStatus | null;
   control: SyncMonitorControlState | null;
   active: boolean;
+  /** Start behavior from the config form, so unsaved choices still apply. */
+  startOptions: SyncMonitorStartOptions;
   onChanged: () => Promise<void>;
   onControlled: (response: SyncMonitorControlResponse) => void;
 }) {
-  const { client, status, control, active } = props;
+  const { client, status, control, active, startOptions } = props;
   const [busy, setBusy] = useState<ControlName | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const { toast } = useToast();
@@ -39,7 +42,7 @@ export function ControlsSection(props: {
     setBusy(name);
     setMessage(null);
     try {
-      const response = await client[name]();
+      const response = name === "start" ? await client.start(startOptions) : await client[name]();
       props.onControlled(response);
       setMessage(successMessage);
       void props.onChanged();

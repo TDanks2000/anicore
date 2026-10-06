@@ -3,7 +3,14 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { appendAnilistId, loadIds, loadProgress, parseProgress, saveProgress } from "./cache";
+import {
+  appendAnilistId,
+  loadIds,
+  loadProgress,
+  parseProgress,
+  refreshAnilistIdsFile,
+  saveProgress,
+} from "./cache";
 
 const originalCwd = process.cwd();
 const originalFetch = globalThis.fetch;
@@ -82,6 +89,55 @@ describe("AniList ID cache", () => {
           .map(Number),
       ),
     ).toEqual(new Set([1, 7, 42]));
+  });
+
+  test("refresh replaces duplicates and unsorted appends with the fetched list", async () => {
+    const dir = useTempCwd();
+    const cacheDir = join(dir, "data/cache");
+    mkdirSync(cacheDir, { recursive: true });
+    writeFileSync(join(cacheDir, "anilist_ids.txt"), "42\n7\n42\n");
+
+    globalThis.fetch = Object.assign(async () => new Response("1\n7\n"), {
+      preconnect: () => undefined,
+    });
+
+    const result = await refreshAnilistIdsFile();
+    expect(result).toMatchObject({ total: 3, added: 1, keptLocal: 1 });
+    expect(result.bytes).toBe(7);
+    expect(readFileSync(join(cacheDir, "anilist_ids.txt"), "utf-8")).toBe("1\n7\n42\n");
+    expect(await loadIds()).toEqual([1, 7, 42]);
+  });
+
+  test("shares one refresh request between concurrent callers", async () => {
+    useTempCwd();
+    let calls = 0;
+    globalThis.fetch = Object.assign(
+      async () => {
+        calls++;
+        return new Response("5\n");
+      },
+      { preconnect: () => undefined },
+    );
+
+    const [first, second] = await Promise.all([refreshAnilistIdsFile(), refreshAnilistIdsFile()]);
+    expect(calls).toBe(1);
+    expect(first).toEqual(second);
+    expect(first.total).toBe(1);
+  });
+
+  test("refresh reports fetch failures instead of silently keeping the cached list", async () => {
+    const dir = useTempCwd();
+    const cacheDir = join(dir, "data/cache");
+    mkdirSync(cacheDir, { recursive: true });
+    writeFileSync(join(cacheDir, "anilist_ids.txt"), "7\n");
+
+    globalThis.fetch = Object.assign(
+      async () => new Response("nope", { status: 500, statusText: "Internal Server Error" }),
+      { preconnect: () => undefined },
+    );
+
+    await expect(refreshAnilistIdsFile()).rejects.toThrow("Failed to fetch IDs: 500");
+    expect(readFileSync(join(cacheDir, "anilist_ids.txt"), "utf-8")).toBe("7\n");
   });
 });
 

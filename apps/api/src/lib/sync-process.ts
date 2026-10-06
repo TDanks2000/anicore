@@ -34,7 +34,9 @@ export function buildSyncStartArgs(options: SyncMonitorStartOptions = {}): strin
   if (dryRun) args.push("--dry-run");
   if (refreshIds) args.push("--refresh-ids");
   if (resetAll) args.push("--reset=all");
-  if (limit !== undefined) args.push(`--limit=${limit}`);
+  // The sync CLI requires a positive limit. Zero (or empty) means no limit;
+  // passing --limit=0 would make the child exit immediately on flag parsing.
+  if (limit !== undefined && limit > 0) args.push(`--limit=${limit}`);
   if (fromIndex !== undefined) args.push(`--from-index=${fromIndex}`);
 
   return args;

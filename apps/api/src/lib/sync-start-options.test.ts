@@ -46,3 +46,11 @@ test("legacy settings default to all IDs ascending and invalid patches fail", ()
     validateSyncMonitorRuntimeConfigPatch({ newIdsOnly: "yes" as unknown as boolean }),
   ).toThrow("newIdsOnly");
 });
+
+test("a saved zero start limit means no limit instead of crashing the sync CLI", () => {
+  writeSyncMonitorRuntimeConfig({ startLimit: 0 }, "api");
+  expect(buildSyncStartArgs().some((arg) => arg.startsWith("--limit="))).toBe(false);
+
+  writeSyncMonitorRuntimeConfig({ startLimit: 25 }, "api");
+  expect(buildSyncStartArgs()).toContain("--limit=25");
+});

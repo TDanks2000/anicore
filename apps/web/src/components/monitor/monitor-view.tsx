@@ -14,6 +14,7 @@ import { useRuntimeConfigForm } from "@/hooks/use-runtime-config-form";
 import type { SyncMonitorState } from "@/hooks/use-sync-monitor";
 import { formatDuration, formatEta, formatRate } from "@/lib/format";
 import { displayRunState } from "@/lib/monitor-state";
+import { startOptionsFromDraft } from "@/lib/runtime-config-draft";
 
 export interface ConnectionDisplay {
   label: string;
@@ -89,6 +90,7 @@ export function MonitorView({
           status={status}
           control={statusPayload?.control ?? null}
           active={active}
+          startOptions={runtime ? startOptionsFromDraft(form.draft) : {}}
           onChanged={() => refresh(true)}
           onControlled={monitor.applyControl}
         />

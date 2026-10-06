@@ -10,6 +10,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { type AnilistIdsRefreshResult, refreshAnilistIdsFile } from "@anicore/providers/lib/cache";
 import { maskProxyUrl, readProxySettings, writeProxySettings } from "@anicore/providers/lib/proxy";
 import type { DashboardProxyPatch, DashboardResources } from "@anicore/sync-monitor";
 import { HttpError } from "./errors";
@@ -169,4 +170,9 @@ export function clearDashboardCache(name: string): void {
   if (!(name.endsWith("_unmatched.txt") || name.startsWith("jikan/")))
     throw new HttpError(400, "This cache file is read-only");
   if (existsSync(path)) unlinkSync(path);
+}
+
+/** Replaces the dashboard's AniList ID list with the GitHub source. */
+export function refreshDashboardAnilistIds(): Promise<AnilistIdsRefreshResult> {
+  return refreshAnilistIdsFile(cachePath("anilist_ids.txt"));
 }

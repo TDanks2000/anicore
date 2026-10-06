@@ -115,3 +115,55 @@ test("resource routes require monitor auth and block cache deletion during sync"
     else process.env.ANICORE_SYNC_MONITOR_DIR = oldMonitor;
   }
 });
+
+test("AniList ID refresh replaces the cache file and reports fetch failures", async () => {
+  const oldCode = process.env.ANICORE_SYNC_MONITOR_CODE;
+  const oldMonitor = process.env.ANICORE_SYNC_MONITOR_DIR;
+  const originalFetch = globalThis.fetch;
+  process.env.ANICORE_SYNC_MONITOR_CODE = "resource-test-code";
+  process.env.ANICORE_SYNC_MONITOR_DIR = join(directory, "monitor");
+  try {
+    writeFileSync(join(directory, "anilist_ids.txt"), "42\n7\n42\n");
+    globalThis.fetch = Object.assign(async () => new Response("1\n7\n"), {
+      preconnect: () => undefined,
+    });
+    const refresh = (auth = true) =>
+      app.handle(
+        new Request("http://localhost/sync-monitor/resources/anilist-ids/refresh", {
+          method: "POST",
+          headers: auth ? { Authorization: "Bearer resource-test-code" } : {},
+        }),
+      );
+
+    expect((await refresh(false)).status).toBe(401);
+
+    const refreshed = await refresh();
+    expect(refreshed.status).toBe(200);
+    expect(await refreshed.json()).toEqual({ total: 3, added: 1, keptLocal: 1, bytes: 7 });
+    expect(readFileSync(join(directory, "anilist_ids.txt"), "utf-8")).toBe("1\n7\n42\n");
+
+    const monitor = new SyncMonitor({
+      mode: "sync",
+      total: 1,
+      startIndex: 0,
+      endIndex: 1,
+      parallel: 1,
+      providers: ["anilist"],
+    });
+    expect((await refresh()).status).toBe(409);
+    monitor.complete({ created: 0, updated: 0, failed: 0 });
+
+    globalThis.fetch = Object.assign(
+      async () => new Response("down", { status: 503, statusText: "Service Unavailable" }),
+      { preconnect: () => undefined },
+    );
+    expect((await refresh()).status).toBe(502);
+    expect(readFileSync(join(directory, "anilist_ids.txt"), "utf-8")).toBe("1\n7\n42\n");
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (oldCode === undefined) delete process.env.ANICORE_SYNC_MONITOR_CODE;
+    else process.env.ANICORE_SYNC_MONITOR_CODE = oldCode;
+    if (oldMonitor === undefined) delete process.env.ANICORE_SYNC_MONITOR_DIR;
+    else process.env.ANICORE_SYNC_MONITOR_DIR = oldMonitor;
+  }
+});

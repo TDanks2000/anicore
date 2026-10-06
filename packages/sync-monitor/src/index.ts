@@ -212,6 +212,18 @@ export interface DashboardProxyPatch {
   maxAttempts?: number;
   timeoutMs?: number;
 }
+
+/** Result of replacing the AniList ID list with the GitHub source. */
+export interface AnilistIdsRefreshResponse {
+  /** IDs in the file after the refresh. */
+  total: number;
+  /** Remote IDs that were not present locally. */
+  added: number;
+  /** Locally discovered IDs that the remote list does not publish. */
+  keptLocal: number;
+  bytes: number;
+}
+
 export interface DashboardResources {
   proxy: {
     mode: "environment" | "direct" | "custom" | "free";
@@ -308,6 +320,11 @@ export class SyncMonitorClient {
 
   async clearCache(name: string): Promise<{ cleared: string }> {
     return this.postJson("/sync-monitor/resources/cache/clear", { name });
+  }
+
+  /** Downloads the GitHub ID list and replaces the API host's cached file. */
+  async refreshAnilistIds(): Promise<AnilistIdsRefreshResponse> {
+    return this.postJson<AnilistIdsRefreshResponse>("/sync-monitor/resources/anilist-ids/refresh");
   }
 
   /** One atomic read of status, control, config, automation and events. */
