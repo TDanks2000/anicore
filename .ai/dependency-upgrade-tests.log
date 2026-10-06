@@ -1,0 +1,666 @@
+$ turbo run test --ui=stream
+
+   • turbo 2.11.7
+   • Packages in scope: @anicore/api, @anicore/db, @anicore/providers, @anicore/sync-monitor, @anicore/web
+   • Running test in 5 packages
+   • Remote caching disabled
+
+@anicore/db:test: cache miss, executing 2390f7f0df37717f
+@anicore/sync-monitor:test: cache miss, executing 91d76c99563b9e00
+@anicore/sync-monitor:build: cache hit, replaying logs b617462abae14750
+@anicore/db:build: cache hit, replaying logs bf5e04d6398cec90
+@anicore/sync-monitor:build: $ tsc --noEmit
+@anicore/db:build: $ tsc --noEmit
+@anicore/web:test: cache miss, executing 98328e8aa065fd75
+@anicore/db:test: $ bun test
+@anicore/db:test: bun test v1.4.3-canary.1 (bb35d1b81)
+@anicore/db:test: 
+@anicore/db:test: src\db-config.test.ts:
+@anicore/db:test: (pass) getDatabaseConfig > defaults to the API data directory [0.29ms]
+@anicore/db:test: (pass) getDatabaseConfig > accepts plain paths and file: URLs, resolving relative ones [0.30ms]
+@anicore/db:test: (pass) getDatabaseConfig > rejects in-memory databases [0.14ms]
+@anicore/db:test: (pass) getDatabaseConfig > rejects a leftover Postgres URL [0.08ms]
+@anicore/db:test: 
+@anicore/db:test: src\db-shape.test.ts:
+@anicore/db:test: (pass) analyzeDbShape > passes when normalized tables and key indexes are present [0.63ms]
+@anicore/db:test: (pass) analyzeDbShape > fails when legacy tables remain [0.16ms]
+@anicore/db:test: (pass) analyzeDbShape > fails when normalized join tables or indexes are missing [2.61ms]
+@anicore/db:test: 
+@anicore/db:test: src\errors.test.ts:
+@anicore/db:test: (pass) sqliteErrorCode > reads the extended result code from the error or its causes [0.39ms]
+@anicore/db:test: (pass) sqliteErrorCode > ignores non-SQLite codes and plain values [0.08ms]
+@anicore/db:test: 
+@anicore/db:test: src\performance.test.ts:
+@anicore/db:test: (pass) performance summaries > disabled measurements do not log or survive into an enabled interval [1.97ms]
+@anicore/providers:test: cache miss, executing 780cba6740183eb9
+@anicore/providers:build: cache miss, executing 45f969b60ebd9c3f
+@anicore/db:test: (pass) performance summaries > bounds retained samples and metric names while counting the complete interval [27.95ms]
+@anicore/db:test: 
+@anicore/db:test: src\provider-segments.test.ts:
+@anicore/db:test: (pass) provider episode segments > validates an offset split-cour segment [0.35ms]
+@anicore/db:test: (pass) provider episode segments > rejects unequal or reversed ranges [0.11ms]
+@anicore/db:test: (pass) provider episode segments > maps provider numbering onto restarted local numbering [0.24ms]
+@anicore/db:test: (pass) provider episode segments > maps local numbering back to the real provider numbering [0.07ms]
+@anicore/db:test: (pass) provider episode segments > detects provider and local overlap independently [0.14ms]
+@anicore/db:test: 
+@anicore/db:test: src\sync-lease.test.ts:
+@anicore/sync-monitor:test: $ bun test
+@anicore/sync-monitor:test: bun test v1.4.3-canary.1 (bb35d1b81)
+@anicore/sync-monitor:test: 
+@anicore/sync-monitor:test: src\index.test.ts:
+@anicore/sync-monitor:test: (pass) SyncMonitorClient > includes API error details in rejected requests [1.53ms]
+@anicore/sync-monitor:test: (pass) SyncMonitorClient > reads the unified snapshot with an event limit [0.40ms]
+@anicore/sync-monitor:test: 
+@anicore/sync-monitor:test:  2 pass
+@anicore/sync-monitor:test:  0 fail
+@anicore/sync-monitor:test:  4 expect() calls
+@anicore/sync-monitor:test: Ran 2 tests across 1 file. [20.00ms]
+@anicore/web:test: $ bun test
+@anicore/web:test: bun test v1.4.3-canary.1 (bb35d1b81)
+@anicore/web:test: 
+@anicore/web:test: src\lib\anime-api.test.ts:
+@anicore/web:test: (pass) anime api > builds list params, omitting empty filters and mapping the page to an offset [0.29ms]
+@anicore/web:test: (pass) anime api > reads items and the total header from the API [0.76ms]
+@anicore/web:test: (pass) anime api > treats a missing total header as unknown [0.20ms]
+@anicore/web:test: (pass) anime api > surfaces the API error message [0.33ms]
+@anicore/web:test: 
+@anicore/web:test: src\lib\anime-format.test.ts:
+@anicore/web:test: (pass) anime formatting > labels known values and passes unknown ones through [0.20ms]
+@anicore/web:test: (pass) anime formatting > combines season and year, tolerating either being missing [0.10ms]
+@anicore/web:test: (pass) anime formatting > picks the first alternative title that differs from romaji [0.10ms]
+@anicore/web:test: (pass) anime formatting > maps scores to tones at the thresholds [0.07ms]
+@anicore/web:test: (pass) anime formatting > maps formats and statuses to badge variants [0.09ms]
+@anicore/web:test: (pass) anime formatting > strips provider HTML from descriptions without losing line breaks [0.17ms]
+@anicore/web:test: (pass) anime formatting > falls back through episode titles [0.09ms]
+@anicore/web:test: (pass) anime formatting > labels providers with their public names [0.05ms]
+@anicore/web:test: (pass) anime formatting > year options run newest-first and include next year [0.18ms]
+@anicore/web:test: (pass) anime formatting > labels provider episode ranges against local numbering [0.14ms]
+@anicore/web:test: 
+@anicore/web:test: src\lib\anime-query.test.ts:
+@anicore/web:test: (pass) anime query > toggleAnimeSort flips direction on the active field and resets the page [0.13ms]
+@anicore/web:test: (pass) anime query > filter patches reset to the first page and keep the sort [0.07ms]
+@anicore/web:test: (pass) anime query > clearing filters keeps sort, order and page size [0.06ms]
+@anicore/web:test: (pass) anime query > the query key ignores surrounding search whitespace [0.10ms]
+@anicore/web:test: (pass) anime query > page bounds clamp to the total and survive an empty result set [0.16ms]
+@anicore/web:test: (pass) anime query > next-page detection falls back to a full page when the total is unknown [0.05ms]
+@anicore/web:test: 
+@anicore/web:test: src\lib\detail-cache.test.ts:
+@anicore/web:test: (pass) detail cache > expires without losing the last good result; refresh restores freshness [0.27ms]
+@anicore/web:test: (pass) detail cache > evicts the least recently used entry and separates servers [2.82ms]
+@anicore/web:test: 
+@anicore/web:test: src\lib\format.test.ts:
+@anicore/web:test: (pass) format > formats durations at each scale [0.13ms]
+@anicore/web:test: (pass) format > measures elapsed time up to now when a run has not finished [0.13ms]
+@anicore/web:test: (pass) format > formats ETA and rate [0.16ms]
+@anicore/web:test: (pass) format > derives completion when the status has no progress block [0.11ms]
+@anicore/web:test: 
+@anicore/web:test: src\lib\language-status.test.ts:
+@anicore/providers:test: $ bun test
+@anicore/web:test: (pass) language status helpers > labels and tones statuses [0.22ms]
+@anicore/web:test: (pass) language status helpers > names languages in English and falls back for odd codes [1.15ms]
+@anicore/web:test: (pass) language status helpers > groups anime statuses by language and medium [1.34ms]
+@anicore/web:test: (pass) language status helpers > lists episode languages from both status sources [0.34ms]
+@anicore/web:test: (pass) language status helpers > maps episode statuses by episode, language and medium [0.44ms]
+@anicore/web:test: (pass) language status helpers > counts confirmed and partial coverage against the episode total [0.34ms]
+@anicore/web:test: (pass) language status helpers > deduplicates providers, favors manual evidence, and leaves tied conflicts unknown [0.27ms]
+@anicore/web:test: (pass) language status helpers > names evidence sources from their URLs [0.09ms]
+@anicore/web:test: 
+@anicore/web:test: src\lib\monitor-state.test.ts:
+@anicore/web:test: (pass) monitor state > offers Start whenever no process is active, even if the status says paused [0.13ms]
+@anicore/web:test: (pass) monitor state > offers Resume only for an active paused process [0.14ms]
+@anicore/web:test: (pass) monitor state > keeps offering Pause while a pause request is still unacknowledged [0.04ms]
+@anicore/web:test: (pass) monitor state > offers Pause for an active running process [0.05ms]
+@anicore/web:test: (pass) monitor state > shows a dead process's last live state as stopped [0.10ms]
+@anicore/web:test: (pass) monitor state > keeps finished and active states as written [0.05ms]
+@anicore/web:test: 
+@anicore/web:test: src\lib\polling.test.ts:
+@anicore/web:test: (pass) nextPollDelay > polls fast while active and slower while idle [0.08ms]
+@anicore/web:test: (pass) nextPollDelay > backs off exponentially on consecutive failures [0.05ms]
+@anicore/web:test: (pass) nextPollDelay > caps backoff at the configured maximum [0.02ms]
+@anicore/web:test: 
+@anicore/web:test: src\lib\runtime-config-draft.test.ts:
+@anicore/providers:test: bun test v1.4.3-canary.1 (bb35d1b81)
+@anicore/providers:test: 
+@anicore/providers:test: src\lib\anilist-rate-limit.test.ts:
+@anicore/web:test: (pass) runtime config draft > round-trips a saved config [0.32ms]
+@anicore/web:test: (pass) runtime config draft > keeps the saved interval while automatic sync is disabled [0.06ms]
+@anicore/web:test: (pass) runtime config draft > rejects out-of-range and fractional values with a field-specific message [0.16ms]
+@anicore/web:test: (pass) runtime config draft > draftsEqual compares every field [0.19ms]
+@anicore/web:test: 
+@anicore/web:test: src\lib\views.test.ts:
+@anicore/web:test: (pass) dashboard views > resolves catalog links with or without a leading slash [0.17ms]
+@anicore/web:test: (pass) dashboard views > anything else is the monitor [0.04ms]
+@anicore/web:test: 
+@anicore/web:test:  49 pass
+@anicore/web:test:  0 fail
+@anicore/web:test:  182 expect() calls
+@anicore/web:test: Ran 49 tests across 10 files. [156.00ms]
+@anicore/providers:test: 05:44:45 ⚠ AniList request failed temporarily — retrying in 1s (1/3)…
+@anicore/providers:test: (pass) AniList retries > retries transient server failures [16.82ms]
+@anicore/providers:test: (pass) AniList retries > does not retry permanent client failures [0.30ms]
+@anicore/providers:test: 
+@anicore/providers:test: src\lib\cache.test.ts:
+@anicore/providers:build: $ tsc --noEmit
+@anicore/providers:test: (pass) AniList ID cache > appends missing ids without replacing the live file and sorts on read [43.96ms]
+@anicore/providers:test: (pass) AniList ID cache > deduplicates and sorts lines written by concurrent appenders [24.14ms]
+@anicore/providers:test: (pass) AniList ID cache > rejects invalid ids [2.25ms]
+@anicore/providers:test: 05:44:45 ◆ Downloading AniList ID list…
+@anicore/providers:test: 05:44:45 ✔ Refreshed → data/cache/anilist_ids.txt
+@anicore/providers:test: (pass) AniList ID cache > preserves ids appended while a refresh request is in flight [26.87ms]
+@anicore/providers:test: (pass) sync progress checkpoint > accepts only complete non-negative integer progress [0.51ms]
+@anicore/providers:test: (pass) sync progress checkpoint > returns a fresh default when no checkpoint exists [2.30ms]
+@anicore/providers:test: (pass) sync progress checkpoint > refuses unreadable or structurally invalid checkpoints instead of restarting from zero [59.38ms]
+@anicore/providers:test: (pass) sync progress checkpoint > atomically replaces a valid checkpoint [21.52ms]
+@anicore/providers:test: (pass) sync progress checkpoint > rejects an invalid save without damaging the previous checkpoint [10.70ms]
+@anicore/providers:test: 
+@anicore/providers:test: src\lib\cache.unmatched.test.ts:
+@anicore/providers:test: (pass) provider unmatched cache > keeps fresh unmatched IDs and expires them after the TTL [44.75ms]
+@anicore/providers:test: (pass) provider unmatched cache > expires legacy bare-ID cache entries so they are retried after upgrade [14.12ms]
+@anicore/providers:test: (pass) provider unmatched cache > keeps only the freshest timestamp for duplicate IDs [31.98ms]
+@anicore/providers:test: 
+@anicore/providers:test: src\lib\http.test.ts:
+@anicore/providers:test: (pass) formatHttpError > includes structured JSON error details [0.66ms]
+@anicore/providers:test: (pass) formatHttpError > includes plain text error details [0.12ms]
+@anicore/providers:test: 
+@anicore/providers:test: src\lib\proxy-config.test.ts:
+@anicore/providers:test: (pass) installed proxy fetch observes saved routing changes between requests [320.65ms]
+@anicore/providers:test: 
+@anicore/providers:test: src\lib\proxy.test.ts:
+@anicore/providers:test: (pass) free proxy error pages > a proxy's own HTML or empty refusal is not an API answer [0.18ms]
+@anicore/providers:test: (pass) free proxy error pages > JSON errors, successes and 404 pages come from the API [0.07ms]
+@anicore/providers:test: 
+@anicore/providers:test: src\lib\slug.test.ts:
+@anicore/providers:test: (pass) slugify > lowercases and hyphenates [0.16ms]
+@anicore/providers:test: (pass) slugCandidates > tries the title, then the qualified title, then numbered variants [0.55ms]
+@anicore/providers:test: (pass) slugCandidates > falls back to the discriminator for titles without Latin characters [0.16ms]
+@anicore/providers:test: (pass) slugCandidates > works without a discriminator [0.10ms]
+@anicore/providers:test: 
+@anicore/providers:test: src\lib\sync-engine.test.ts:
+@anicore/providers:test: 05:44:46 ✖ [KITSU] ID 999999999: identity conflict
+@anicore/providers:test: (pass) SyncEngine.syncPlugins > runs every provider then rejects the item when providers fail [1.40ms]
+@anicore/providers:test: 05:44:46 ✖ [ANIMESCHEDULE] ID 999999999: provider unavailable
+@anicore/providers:test: [100%] 2/2  created=0 updated=1 failed=0 skipped=0
+@anicore/providers:test: (pass) SyncEngine.iterateParallel > fetches a batch in parallel before processing it sequentially [3.40ms]
+@anicore/providers:test: 05:44:46 ⚠ External request failures hit threshold — parallel backoff: sequential (10 batches left, then ×2)
+@anicore/providers:test: [100%] 4/4  created=0 updated=3 failed=0 skipped=0
+@anicore/providers:test: (pass) SyncEngine.iterateParallel > backs off to sequential fetches after reported request failures [0.60ms]
+@anicore/providers:test: 05:44:46 ✖ ID 1: Request failed with status 404
+@anicore/providers:test: 05:44:46 ✖ ID 2: Request failed with status 404
+@anicore/providers:test: [100%] 4/4  created=0 updated=1 failed=2 skipped=0
+@anicore/providers:test: (pass) SyncEngine.iterateParallel > does not back off when AniList reports missing IDs [0.54ms]
+@anicore/providers:test: [100%] 2/2  created=0 updated=0 failed=0 skipped=1
+@anicore/providers:test: (pass) SyncEngine.iterateParallel > counts skipped outcomes separately from failures [0.28ms]
+@anicore/providers:test: 
+@anicore/providers:test: src\providers\authoritative-cross-mappings.test.ts:
+@anicore/db:test: (pass) tryAcquireSyncLease > recovers a lease whose owning process has exited, without waiting for the heartbeat timeout [132.30ms]
+@anicore/db:test: (pass) tryAcquireSyncLease > refuses while the owning process is still alive and heartbeating [10.02ms]
+@anicore/db:test: (pass) tryAcquireSyncLease > falls back to the heartbeat timeout for leases without a pid [20.63ms]
+@anicore/db:test: 
+@anicore/db:test:  19 pass
+@anicore/db:test:  0 fail
+@anicore/db:test:  52 expect() calls
+@anicore/db:test: Ran 19 tests across 6 files. [1138.00ms]
+@anicore/providers:test: (pass) authoritative cross mappings > canonicalizes and deduplicates identical provider identities [0.23ms]
+@anicore/providers:test: (pass) authoritative cross mappings > rejects two authoritative IDs for one provider [0.08ms]
+@anicore/providers:test: (pass) authoritative cross mappings > rejects blank authoritative IDs [0.05ms]
+@anicore/providers:test: 
+@anicore/providers:test: src\providers\episode-source-mapping-lifecycle.test.ts:
+@anicore/providers:test: (pass) episode source mapping lifecycle > allows fuzzy mappings to self-retire [0.08ms]
+@anicore/providers:test: (pass) episode source mapping lifecycle > recognizes legacy 85/api heuristic mappings as automatic [0.03ms]
+@anicore/providers:test: (pass) episode source mapping lifecycle > preserves strong or human-controlled mappings [0.05ms]
+@anicore/providers:test: 
+@anicore/providers:test: src\providers\episode-source-matching.test.ts:
+@anicore/providers:test: (pass) episode source title matching > normalizes punctuation and diacritics [3.19ms]
+@anicore/providers:test: (pass) episode source number alignment > accepts canonical numbering [0.47ms]
+@anicore/providers:test: (pass) episode source number alignment > rejects a provider season whose numbering is offset from the AniList cour [0.13ms]
+@anicore/providers:test: (pass) episode source number alignment > rejects duplicate provider episode numbers [0.27ms]
+@anicore/providers:test: (pass) episode source number alignment > allows a larger provider batch when enough known local numbers align [0.20ms]
+@anicore/providers:test: (pass) episode source batch scoring > accepts a season with matching count, year, and dates [0.84ms]
+@anicore/providers:test: (pass) episode source batch scoring > rejects a season from a clearly different year [0.21ms]
+@anicore/providers:test: (pass) episode source batch scoring > rejects a season with a wildly different episode count [0.17ms]
+@anicore/providers:test: (pass) episode source batch scoring > rejects a count-compatible season whose episode numbers cannot map locally [0.12ms]
+@anicore/providers:test: (pass) episode source batch scoring > does not reject a larger provider batch when the final local count is unknown [0.19ms]
+@anicore/providers:test: (pass) episode source candidate selection > rejects near-tied season candidates [0.18ms]
+@anicore/providers:test: (pass) episode source candidate selection > accepts a clearly better season candidate [0.08ms]
+@anicore/providers:test: 
+@anicore/providers:test: src\providers\episode-title-scoring.test.ts:
+@anicore/providers:test: (pass) episode title scoring > rejects provider batches whose explicit title numbers conflict [0.06ms]
+@anicore/providers:test: (pass) episode title scoring > allows batches whose explicit title numbers line up [0.11ms]
+@anicore/providers:test: 
+@anicore/providers:test: src\providers\episode-titles.mapping.test.ts:
+@anicore/providers:test: (pass) episode source mapping preference > always prefers an explicitly primary mapping [0.43ms]
+@anicore/providers:test: (pass) episode source mapping preference > prefers stronger provenance when no mapping is primary [0.08ms]
+@anicore/providers:test: (pass) episode source mapping preference > uses confidence, recency, then id as deterministic tie breakers [1.42ms]
+@anicore/providers:test: (pass) episode source mapping preference > returns null when no mapping exists [0.06ms]
+@anicore/providers:test: 
+@anicore/providers:test: src\providers\normalize.test.ts:
+@anicore/providers:test: (pass) provider normalization > normalizes entity names consistently [0.10ms]
+@anicore/providers:test: (pass) provider normalization > dedupes studios by normalized name and preserves strongest metadata [0.37ms]
+@anicore/providers:test: (pass) provider normalization > dedupes tags by normalized name and keeps lowest rank [0.48ms]
+@anicore/providers:test: 
+@anicore/providers:test: src\providers\segmented-source-mapping.test.ts:
+@anicore/providers:test: (pass) applyProviderEpisodeSegments > maps a provider suffix onto local episode numbering [8.06ms]
+@anicore/providers:test: (pass) applyProviderEpisodeSegments > filters provider episodes outside explicit segments [0.17ms]
+@anicore/providers:test: (pass) applyProviderEpisodeSegments > rejects overlapping provider ranges [0.18ms]
+@anicore/providers:test: (pass) applyProviderEpisodeSegments > rejects overlapping local ranges [0.19ms]
+@anicore/providers:test: (pass) applyProviderEpisodeSegments > rejects malformed provider episode numbers [0.06ms]
+@anicore/providers:test: 
+@anicore/providers:test: src\providers\title-similarity.test.ts:
+@anicore/providers:test: (pass) title similarity > normalizes punctuation and diacritics [0.23ms]
+@anicore/providers:test: (pass) title similarity > preserves voiced and semi-voiced kana distinctions [1.66ms]
+@anicore/providers:test: (pass) title similarity > normalizes halfwidth kana to their fullwidth equivalents [0.15ms]
+@anicore/providers:test: (pass) title similarity > preserves non-Latin combining marks [0.07ms]
+@anicore/providers:test: (pass) title similarity > treats reordered identical tokens as a strong match [0.55ms]
+@anicore/providers:test: (pass) title similarity > does not overrate short titles that share one word [0.28ms]
+@anicore/providers:test: (pass) title similarity > retains tolerance for small spelling differences [0.22ms]
+@anicore/providers:test: (pass) title similarity > does not treat a longer related franchise title as exact identity [7.09ms]
+@anicore/providers:test: (pass) title similarity > requirement 1: Japanese romanisation variance > yuusha/yuusha/yusha: "Yuusha" vs "Yūsha" scores >= 0.95 [0.37ms]
+@anicore/providers:test: (pass) title similarity > requirement 1: Japanese romanisation variance > yuusha/yuusha/yusha: "Yuusha" vs "Yusha" scores >= 0.95 [4.09ms]
+@anicore/providers:test: (pass) title similarity > requirement 1: Japanese romanisation variance > yuusha/yuusha/yusha: "Yūsha" vs "Yusha" scores >= 0.95 [0.12ms]
+@anicore/providers:test: (pass) title similarity > requirement 1: Japanese romanisation variance > shounen/shonen/shonen: "Shounen" vs "Shōnen" scores >= 0.95 [0.07ms]
+@anicore/providers:test: (pass) title similarity > requirement 1: Japanese romanisation variance > shounen/shonen/shonen: "Shounen" vs "Shonen" scores >= 0.95 [0.09ms]
+@anicore/providers:test: (pass) title similarity > requirement 1: Japanese romanisation variance > shounen/shonen/shonen: "Shōnen" vs "Shonen" scores >= 0.95 [0.08ms]
+@anicore/providers:test: (pass) title similarity > requirement 1: Japanese romanisation variance > juujutsu/jujutsu/jujutsu: "Juujutsu" vs "Jūjutsu" scores >= 0.95 [0.07ms]
+@anicore/providers:test: (pass) title similarity > requirement 1: Japanese romanisation variance > juujutsu/jujutsu/jujutsu: "Juujutsu" vs "Jujutsu" scores >= 0.95 [0.05ms]
+@anicore/providers:test: (pass) title similarity > requirement 1: Japanese romanisation variance > juujutsu/jujutsu/jujutsu: "Jūjutsu" vs "Jujutsu" scores >= 0.95 [0.05ms]
+@anicore/providers:test: (pass) title similarity > requirement 1: Japanese romanisation variance > ohgami/ougami/ogami: "Ohgami" vs "Ougami" scores >= 0.95 [0.02ms]
+@anicore/providers:test: (pass) title similarity > requirement 1: Japanese romanisation variance > ohgami/ougami/ogami: "Ohgami" vs "Ōgami" scores >= 0.95 [0.03ms]
+@anicore/providers:test: (pass) title similarity > requirement 1: Japanese romanisation variance > ohgami/ougami/ogami: "Ougami" vs "Ōgami" scores >= 0.95 [0.02ms]
+@anicore/providers:test: (pass) title similarity > requirement 1: Japanese romanisation variance > folding does not touch native (non-Latin) script [0.12ms]
+@anicore/providers:test: (pass) title similarity > requirement 2: symbol/conjunction equivalence > ampersand and full-width ampersand both fold to 'and' [0.15ms]
+@anicore/providers:test: (pass) title similarity > requirement 2: symbol/conjunction equivalence > multiplication sign and multiplication-x both fold to 'x' [0.40ms]
+@anicore/providers:test: (pass) title similarity > requirement 2: symbol/conjunction equivalence > '+' folds to 'plus' only when it separates words [0.15ms]
+@anicore/providers:test: (pass) title similarity > requirement 3: ordinal / season canonicalisation > "Title 2nd Season" and "Title Season 2" canonicalise to the same ordinal [0.13ms]
+@anicore/providers:test: (pass) title similarity > requirement 3: ordinal / season canonicalisation > "Title 2nd Season" and "Title S2" canonicalise to the same ordinal [0.08ms]
+@anicore/providers:test: (pass) title similarity > requirement 3: ordinal / season canonicalisation > "Title 2nd Season" and "Title II" canonicalise to the same ordinal [0.07ms]
+@anicore/providers:test: (pass) title similarity > requirement 3: ordinal / season canonicalisation > "Title 2nd Season" and "Title Part 2" canonicalise to the same ordinal [0.05ms]
+@anicore/providers:test: (pass) title similarity > requirement 3: ordinal / season canonicalisation > "Title 2nd Season" and "Title 2nd Cour" canonicalise to the same ordinal [0.05ms]
+@anicore/providers:test: (pass) title similarity > requirement 3: ordinal / season canonicalisation > "Title Season 2" and "Title S2" canonicalise to the same ordinal [0.07ms]
+@anicore/providers:test: (pass) title similarity > requirement 3: ordinal / season canonicalisation > "Title Season 2" and "Title II" canonicalise to the same ordinal [0.08ms]
+@anicore/providers:test: (pass) title similarity > requirement 3: ordinal / season canonicalisation > "Title Season 2" and "Title Part 2" canonicalise to the same ordinal [0.04ms]
+@anicore/providers:test: (pass) title similarity > requirement 3: ordinal / season canonicalisation > "Title Season 2" and "Title 2nd Cour" canonicalise to the same ordinal [0.05ms]
+@anicore/providers:test: (pass) title similarity > requirement 3: ordinal / season canonicalisation > "Title S2" and "Title II" canonicalise to the same ordinal [0.04ms]
+@anicore/providers:test: (pass) title similarity > requirement 3: ordinal / season canonicalisation > "Title S2" and "Title Part 2" canonicalise to the same ordinal [0.05ms]
+@anicore/providers:test: (pass) title similarity > requirement 3: ordinal / season canonicalisation > "Title S2" and "Title 2nd Cour" canonicalise to the same ordinal [0.04ms]
+@anicore/providers:test: (pass) title similarity > requirement 3: ordinal / season canonicalisation > "Title II" and "Title Part 2" canonicalise to the same ordinal [0.03ms]
+@anicore/providers:test: (pass) title similarity > requirement 3: ordinal / season canonicalisation > "Title II" and "Title 2nd Cour" canonicalise to the same ordinal [0.11ms]
+@anicore/providers:test: (pass) title similarity > requirement 3: ordinal / season canonicalisation > "Title Part 2" and "Title 2nd Cour" canonicalise to the same ordinal [0.06ms]
+@anicore/providers:test: (pass) title similarity > requirement 3: ordinal / season canonicalisation > conflicting explicit ordinals must not score >= 0.9 [0.84ms]
+@anicore/providers:test: (pass) title similarity > requirement 3: ordinal / season canonicalisation > a bare roman numeral is only canonicalised in the trailing position [0.10ms]
+@anicore/providers:test: (pass) title similarity > requirement 4: length-aware scoring > a short title that is a strict prefix of a longer one scores clearly below 0.9 [3.11ms]
+@anicore/providers:test: (pass) title similarity > requirement 4: length-aware scoring > transliteration/punctuation noise still scores >= 0.9 [0.27ms]
+@anicore/providers:test: (pass) title similarity > requirement 4: length-aware scoring > two two-word titles sharing exactly one word do not score highly [0.20ms]
+@anicore/providers:test: (pass) title similarity > sequel numbering > word-form ordinals reach the same token as digit forms [0.15ms]
+@anicore/providers:test: (pass) title similarity > sequel numbering > a bare trailing sequel number separates a sequel from its base [0.29ms]
+@anicore/providers:test: (pass) title similarity > sequel numbering > season 1 is not treated as a sequel of the unnumbered title [0.34ms]
+@anicore/providers:test: (pass) title similarity > sequel numbering > a title that is itself a number is not read as a sequel marker [0.09ms]
+@anicore/providers:test: 
+@anicore/providers:test: src\providers\anilist\languages.test.ts:
+@anicore/providers:test: (pass) AniList voice-cast identity > uses only the requested media and validated voice credits [0.35ms]
+@anicore/providers:test: (pass) AniList voice-cast identity > malformed actors fail before persistence [0.10ms]
+@anicore/providers:test: 
+@anicore/providers:test: src\providers\anilist\mapper.test.ts:
+@anicore/providers:test: (pass) AniList mapper cross-provider identity > emits AniList idMal as an authoritative MAL mapping [0.46ms]
+@anicore/providers:test: (pass) AniList mapper cross-provider identity > does not invent a MAL mapping when AniList has no idMal [0.06ms]
+@anicore/providers:test: 
+@anicore/providers:test: src\providers\animeschedule\client.test.ts:
+@anicore/providers:test: (pass) catalogue URL verification > parses only the right host and a whole positive numeric ID [0.46ms]
+@anicore/providers:test: (pass) catalogue URL verification > invalid, empty, missing, and Go-zero dates are not premieres [0.14ms]
+@anicore/providers:test: (pass) AnimeSchedule documented release markers > ignores midnight, TBD and matching raw clocks, comparing only hour and minute [0.17ms]
+@anicore/providers:test: (pass) AnimeSchedule documented release markers > an explicit midnight premiere still identifies a language track [0.03ms]
+@anicore/providers:test: (pass) AnimeSchedule documented release markers > rejects malformed identity and website fields [0.58ms]
+@anicore/providers:test: (pass) an interrupted search cannot accept a partial set of identity candidates [0.95ms]
+@anicore/providers:test: 
+@anicore/providers:test: src\providers\animeschedule\identity.test.ts:
+@anicore/providers:test: (pass) AnimeSchedule identity > accepts zero or one cached route [0.13ms]
+@anicore/providers:test: (pass) AnimeSchedule identity > refuses to choose arbitrarily when multiple cached routes exist [0.14ms]
+@anicore/providers:test: (pass) AnimeSchedule identity > prevents a verified search from adding a second route [0.26ms]
+@anicore/providers:test: 
+@anicore/providers:test: src\providers\animeschedule\sync.test.ts:
+@anicore/providers:test: (pass) AnimeSchedule mapping verification > accepts only entries linked to the expected AniList anime [0.16ms]
+@anicore/providers:test: (pass) AnimeSchedule mapping verification > rejects entries without an AniList link [0.05ms]
+@anicore/providers:test: (pass) AnimeSchedule dub evidence lifecycle > a premiere proves existence without proving all episodes [0.26ms]
+@anicore/providers:test: (pass) AnimeSchedule dub evidence lifecycle > missing schedule data withdraws evidence instead of asserting absence [0.06ms]
+@anicore/providers:test: (pass) AnimeSchedule dub evidence lifecycle > an ongoing original broadcast does not erase an already aired dub premiere [0.08ms]
+@anicore/providers:test: (pass) AnimeSchedule dub evidence lifecycle > Cowboy Bebop's time markers prove English tracks despite zero premieres [1.61ms]
+@anicore/providers:test: (pass) AnimeSchedule dub evidence lifecycle > future premiere and override do not establish released audio [0.17ms]
+@anicore/providers:test: (pass) AnimeSchedule dub evidence lifecycle > an override records exactly its batch, never preceding episodes [0.16ms]
+@anicore/providers:test: (pass) AnimeSchedule dub evidence lifecycle > refuses multiple routes claiming the same AniList identity [0.89ms]
+@anicore/providers:test: (pass) AnimeSchedule cross-references > extracts numeric Kitsu and MAL ids [0.24ms]
+@anicore/providers:test: (pass) AnimeSchedule cross-references > parses ids from urls that carry a trailing title segment [0.06ms]
+@anicore/providers:test: (pass) AnimeSchedule cross-references > reports a slug-only Kitsu reference instead of inventing a provider id [0.07ms]
+@anicore/providers:test: (pass) AnimeSchedule cross-references > yields nothing when the entry publishes no cross-references [0.04ms]
+@anicore/providers:test: 
+@anicore/providers:test: src\providers\crunchyroll\alignment.test.ts:
+@anicore/providers:test: (pass) Crunchyroll alignment against real catalogues > Cowboy Bebop fits its only season despite TV Tokyo premiere dates [1.65ms]
+@anicore/providers:test: (pass) Crunchyroll alignment against real catalogues > every Attack on Titan TV entry lands on its own slice of the series [20.43ms]
+@anicore/providers:test: (pass) Crunchyroll alignment against real catalogues > recaps, specials and PVs never occupy an episode number [1.27ms]
+@anicore/providers:test: (pass) Crunchyroll alignment against real catalogues > a sequel season restarting at episode 1 is told apart by its premiere [0.37ms]
+@anicore/providers:test: (pass) Crunchyroll alignment against real catalogues > a premiere date preceded by a later-dated episode is not a split cour [0.12ms]
+@anicore/providers:test: (pass) Crunchyroll alignment against real catalogues > bulk upload dates neither anchor nor veto a linked season [0.55ms]
+@anicore/providers:test: (pass) Crunchyroll alignment against real catalogues > a single special with no numbered episode abstains [0.38ms]
+@anicore/providers:test: (pass) Crunchyroll alignment against real catalogues > an unanchored airing entry and an unknown length abstain [0.21ms]
+@anicore/providers:test: (pass) Crunchyroll alignment against real catalogues > search-discovered series must be anchored on the premiere date [0.13ms]
+@anicore/providers:test: (pass) Crunchyroll alignment against real catalogues > a finished entry missing an episode on Crunchyroll abstains [0.19ms]
+@anicore/providers:test: (pass) Crunchyroll alignment against real catalogues > two seasons fitting equally well is ambiguous [0.29ms]
+@anicore/providers:test: (pass) Crunchyroll alignment against real catalogues > episode titles veto an alignment shifted by one [2.89ms]
+@anicore/providers:test: (pass) Crunchyroll series-level fallback > a near-sized season from the same years can stand for the anime [0.40ms]
+@anicore/providers:test: (pass) Crunchyroll series-level fallback > films, sequels and differently sized works linking the parent show cannot [0.16ms]
+@anicore/providers:test: (pass) Crunchyroll title and link helpers > episode titles agree across translations but not across episodes [0.07ms]
+@anicore/providers:test: (pass) Crunchyroll title and link helpers > numbered placeholder titles are neither titles nor evidence [0.48ms]
+@anicore/providers:test: (pass) Crunchyroll title and link helpers > too few comparable titles never veto [0.17ms]
+@anicore/providers:test: (pass) Crunchyroll title and link helpers > reads modern ids and legacy slugs, and rejects other destinations [0.41ms]
+@anicore/providers:test: (pass) Crunchyroll title and link helpers > locales fold to AniCore's base language codes [0.14ms]
+@anicore/providers:test: (pass) Crunchyroll seasons told apart by linked siblings > two equal undated seasons are ambiguous on their own [1.98ms]
+@anicore/providers:test: (pass) Crunchyroll seasons told apart by linked siblings > each anime takes the season at its premiere-ordered position [1.70ms]
+@anicore/providers:test: (pass) Crunchyroll seasons told apart by linked siblings > any mismatch in count, order or dates abstains [0.28ms]
+@anicore/providers:test: 
+@anicore/providers:test: src\providers\jikan\sync.test.ts:
+@anicore/providers:test: (pass) MAL voice-cast evidence > records named languages and deduplicates credits without inventing full coverage [0.32ms]
+@anicore/providers:test: (pass) MAL voice-cast evidence > empty cast and unknown language labels establish no availability [0.07ms]
+@anicore/providers:test: (pass) MAL voice-cast evidence > rejects malformed payloads before replacing stored evidence [0.32ms]
+@anicore/providers:test: 
+@anicore/providers:test: src\providers\kitsu\client.test.ts:
+@anicore/providers:test: (pass) Kitsu GraphQL client > keeps the non-null canonical title out of the search and episode queries [1.06ms]
+@anicore/providers:test: (pass) Kitsu GraphQL client > fetches canonical episode titles separately and tolerates nulled records [0.51ms]
+@anicore/providers:test: 
+@anicore/providers:test: src\providers\kitsu\identity.test.ts:
+@anicore/providers:test: (pass) Kitsu identity drift > allows resyncing the same Kitsu identity [0.12ms]
+@anicore/providers:test: (pass) Kitsu identity drift > detects a different Kitsu identity instead of silently accumulating it [0.15ms]
+@anicore/providers:test: (pass) Kitsu identity drift > does not weaken the guard for authoritative or manual existing mappings [0.06ms]
+@anicore/providers:test: 
+@anicore/providers:test: src\providers\kitsu\languages.test.ts:
+@anicore/providers:test: (pass) Kitsu streaming language metadata > uses explicit track arrays, including original audio, without treating the stream URL as a dub [3.05ms]
+@anicore/providers:test: (pass) Kitsu streaming language metadata > normalizes regional languages and rejects unknown labels and invalid destinations [1.20ms]
+@anicore/providers:test: (pass) Kitsu streaming language metadata > malformed arrays and IDs never reach snapshot replacement [0.39ms]
+@anicore/providers:test: 
+@anicore/providers:test: src\providers\kitsu\mapper.test.ts:
+@anicore/providers:test: (pass) Kitsu mapper > maps anime when optional title fields are sparse [0.51ms]
+@anicore/providers:test: (pass) Kitsu mapper > maps episodes without clobbering missing titles into bogus strings [1.06ms]
+@anicore/providers:test: (pass) Kitsu mapper > rejects zero and ambiguous duplicate canonical episode numbers [0.42ms]
+@anicore/providers:test: 
+@anicore/providers:test: src\providers\kitsu\matching.test.ts:
+@anicore/providers:test: (pass) Kitsu authoritative matching > prioritizes an authoritative AniList mapping [0.57ms]
+@anicore/providers:test: (pass) Kitsu authoritative matching > finds the target AniList mapping even when it is not first [0.10ms]
+@anicore/providers:test: (pass) Kitsu authoritative matching > keeps a direct AniList mapping authoritative even when provider metadata differs [0.32ms]
+@anicore/providers:test: (pass) Kitsu authoritative matching > rejects a candidate mapped to a different AniList anime [0.09ms]
+@anicore/providers:test: (pass) Kitsu authoritative matching > does not fuzzy-match when the authoritative mapping page is incomplete [0.07ms]
+@anicore/providers:test: (pass) Kitsu title discovery > uses native titles and bounded unique synonyms only as fallbacks [0.36ms]
+@anicore/providers:test: (pass) Kitsu title discovery > lets an AniList synonym contribute to fuzzy title evidence [0.92ms]
+@anicore/providers:test: (pass) Kitsu fuzzy matching > requires meaningful title agreement even when metadata lines up [0.59ms]
+@anicore/providers:test: (pass) Kitsu fuzzy matching > rejects an exact-title candidate from a clearly different year [0.58ms]
+@anicore/providers:test: (pass) Kitsu fuzzy matching > rejects an exact-title candidate with a grossly incompatible episode count [0.53ms]
+@anicore/providers:test: (pass) Kitsu fuzzy matching > tolerates missing structural metadata instead of treating it as conflict [0.09ms]
+@anicore/providers:test: (pass) Kitsu fuzzy matching > rejects a movie candidate for a TV target [0.52ms]
+@anicore/providers:test: (pass) Kitsu fuzzy matching > rejects a TV short candidate for a movie target [0.63ms]
+@anicore/providers:test: (pass) Kitsu fuzzy matching > keeps a direct AniList mapping authoritative over a format conflict [0.12ms]
+@anicore/providers:test: (pass) Kitsu fuzzy matching > tolerates missing and unrelated formats [0.10ms]
+@anicore/providers:test: (pass) Kitsu fuzzy matching > rejects ambiguous fuzzy candidates instead of choosing search order [0.14ms]
+@anicore/providers:test: (pass) Kitsu fuzzy matching > accepts a clearly separated candidate [0.06ms]
+@anicore/providers:test: (pass) premiere-date evidence > an exact start date decides between same-year franchise entries [0.27ms]
+@anicore/providers:test: (pass) premiere-date evidence > a start date more than a year apart is a structural conflict [0.06ms]
+@anicore/providers:test: (pass) episode-count disagreement > an exact premiere date overrides a counting-convention difference [0.18ms]
+@anicore/providers:test: (pass) episode-count disagreement > still rejects a count mismatch when the premiere dates differ [0.06ms]
+@anicore/providers:test: (pass) catalogue-type agreement > format agreement separates a series from its mini-anime spin-off [0.72ms]
+@anicore/providers:test: (pass) catalogue-type agreement > TV_SHORT agrees with Kitsu's TV, which has no short subtype [1.00ms]
+@anicore/providers:test: (pass) titles shared across candidates > an umbrella title carried by several candidates is not identity evidence [0.84ms]
+@anicore/providers:test: (pass) titles shared across candidates > a primary title is identity evidence even when relatives share it [0.46ms]
+@anicore/providers:test: (pass) titles shared across candidates > a title only one candidate carries is left alone [0.13ms]
+@anicore/providers:test: 
+@anicore/providers:test: src\providers\kitsu\sync-episodes.test.ts:
+@anicore/providers:test: (pass) Kitsu canonical episode count > drops provider extras beyond AniList's known episode count [0.21ms]
+@anicore/providers:test: (pass) Kitsu canonical episode count > does not cap ongoing anime when AniList has no final count [0.05ms]
+@anicore/providers:test: 
+@anicore/providers:test: src\providers\kitsu\sync-provenance.test.ts:
+@anicore/providers:test: (pass) Kitsu mapping provenance > marks direct AniList cross-references as authoritative API mappings [0.09ms]
+@anicore/providers:test: (pass) Kitsu mapping provenance > keeps title/metadata matches visibly fuzzy at anime and episode level [0.03ms]
+@anicore/providers:test: 
+@anicore/providers:test: src\providers\kitsu\sync-repair.test.ts:
+@anicore/providers:test: (pass) Kitsu authoritative repair cleanup > targets only provider episode IDs belonging to the repaired Kitsu series [0.12ms]
+@anicore/providers:test: (pass) Kitsu authoritative repair cleanup > does not invent cleanup IDs when Kitsu exposes no episodes [0.03ms]
+@anicore/providers:test: 
+@anicore/providers:test:  202 pass
+@anicore/providers:test:  0 fail
+@anicore/providers:test:  377 expect() calls
+@anicore/providers:test: Ran 202 tests across 31 files. [1.51s]
+@anicore/api:test: cache miss, executing e3ebc968af6020ef
+@anicore/api:test: $ bun test
+@anicore/api:test: bun test v1.4.3-canary.1 (bb35d1b81)
+@anicore/api:test: 
+@anicore/api:test: src\admin-auth.integration.test.ts:
+@anicore/api:test: (pass) global admin guard > fails closed when the admin token is not configured [14.67ms]
+@anicore/api:test: (pass) global admin guard > rejects a write with the wrong token before validating its body [0.63ms]
+@anicore/api:test: (pass) global admin guard > protects admin reads [0.24ms]
+@anicore/api:test: (pass) global admin guard > keeps CORS headers on rejected cross-origin writes from allowed origins [0.22ms]
+@anicore/api:test: 
+@anicore/api:test: src\app.test.ts:
+@anicore/api:test: (pass) readableValidationMessage > collapses duplicated union alternatives [0.18ms]
+@anicore/api:test: (pass) app contract > reports health [5.69ms]
+@anicore/api:test: (pass) app contract > opt-in HTTP measurements use route templates without leaking request values [15.29ms]
+@anicore/api:test: (pass) app contract > returns 400 for invalid anime ids [0.76ms]
+@anicore/api:test: (pass) app contract > returns 400 for invalid episode ids [2.84ms]
+@anicore/api:test: (pass) app contract > returns safe global errors for unknown routes and invalid bodies [13.94ms]
+@anicore/api:test: (pass) app contract > rejects values that cannot be represented by the database schema [21.98ms]
+@anicore/api:test: [cors] BLOCKED preflight OPTIONS /admin/anime/1/language-override origin=https://evil.example allowed=[http://localhost:5173, http://localhost:4173, http://192.168.0.31:5173, http://192.168.0.31:4173, http://100.91.59.54:5173, http://100.91.59.54:4173]
+@anicore/api:test: (pass) app contract > does not allow cross-origin browser access by default [1.48ms]
+@anicore/api:test: (pass) app contract > guards sync monitor endpoints until a valid code is supplied [5.34ms]
+@anicore/api:test: (pass) app contract > serves one consistent snapshot for the dashboard [7.53ms]
+@anicore/api:test: (pass) app contract > returns file-backed sync monitor status and events [39.39ms]
+@anicore/api:test: (pass) app contract > normalizes automation defaults in legacy monitor status [5.23ms]
+@anicore/api:test: (pass) app contract > allows authenticated monitor config edits [21.45ms]
+@anicore/api:test: (pass) app contract > fails closed when persisted automation config is malformed [11.91ms]
+@anicore/api:test: (pass) app contract > writes authenticated sync control commands [157.33ms]
+@anicore/api:test: 
+@anicore/api:test: src\integration\anime-import.integration.test.ts:
+@anicore/api:test: (pass) AniList import > requires the admin token [116.99ms]
+@anicore/api:test: (pass) AniList import > creates, then refreshes, and queues the ID for scheduled sync [110.68ms]
+@anicore/api:test: (pass) AniList import > shares one fetch between concurrent imports of the same ID [62.55ms]
+@anicore/api:test: (pass) AniList import > reports unknown AniList IDs as 404 without queuing them [29.45ms]
+@anicore/api:test: (pass) AniList import > language refresh is authenticated and returns statuses plus provider diagnostics [54.18ms]
+@anicore/api:test: (pass) AniList import > validates the request body [8.20ms]
+@anicore/api:test: 
+@anicore/api:test: src\integration\api.integration.test.ts:
+@anicore/api:test: (pass) API against SQLite > reports database readiness [29.75ms]
+@anicore/api:test: (pass) API against SQLite > anime > creates, reads and 404s [30.11ms]
+@anicore/api:test: (pass) API against SQLite > anime > rejects a duplicate slug with 409 [15.96ms]
+@anicore/api:test: (pass) API against SQLite > anime > searches literally, ranks exact and prefix matches first, and paginates [69.36ms]
+@anicore/api:test: (pass) API against SQLite > anime > lists in id order and filters by catalogue fields [55.08ms]
+@anicore/api:test: (pass) API against SQLite > anime > sorts by catalogue fields, keeps missing values last, and reports totals [67.60ms]
+@anicore/api:test: (pass) API against SQLite > anime > GET lookups never import: an unknown AniList ID is a plain 404 [11.30ms]
+@anicore/api:test: (pass) API against SQLite > anime > returns the full aggregate with ordered children [37.78ms]
+@anicore/api:test: (pass) API against SQLite > anime mappings > makes a provider's first mapping primary and resolves lookups [24.62ms]
+@anicore/api:test: (pass) API against SQLite > anime mappings > keeps exactly one primary per provider through promote, demote and delete [65.03ms]
+@anicore/api:test: (pass) API against SQLite > anime mappings > rejects ambiguous primaries on anime creation [7.47ms]
+@anicore/api:test: (pass) API against SQLite > anime mappings > rejects a provider identity already owned by another anime [25.24ms]
+@anicore/api:test: (pass) API against SQLite > episodes > requires an anime-level mapping before episode mappings [43.46ms]
+@anicore/api:test: (pass) API against SQLite > episodes > maps missing parents and duplicates onto 404 and 409 [60.20ms]
+@anicore/api:test: (pass) API against SQLite > episodes > records language statuses and rolls them up to the anime [33.53ms]
+@anicore/api:test: (pass) API against SQLite > language status administration > omitting the media filter returns both audio and subtitle status and evidence [63.54ms]
+@anicore/api:test: (pass) API against SQLite > language status administration > applies overrides and exposes the review queue to admins [21.39ms]
+@anicore/api:test: 
+@anicore/api:test: src\integration\crunchyroll.integration.test.ts:
+@anicore/api:test: (pass) Crunchyroll episode language tracks > Cowboy Bebop gets its English dub and subtitles on every episode [141.50ms]
+@anicore/api:test: (pass) Crunchyroll episode language tracks > records the season mapping, episode mappings and fills only missing metadata [83.29ms]
+@anicore/api:test: (pass) Crunchyroll episode language tracks > a resync is idempotent [186.39ms]
+@anicore/api:test: (pass) Crunchyroll episode language tracks > a provider outage throws and keeps the last good snapshot [82.77ms]
+@anicore/api:test: (pass) Crunchyroll episode language tracks > a series withdrawn from the catalogue retires its evidence and mappings [109.10ms]
+@anicore/api:test: (pass) Crunchyroll episode language tracks > without a published link, a series must match the title and premiere date [66.38ms]
+@anicore/api:test: (pass) Crunchyroll episode language tracks > a linked single-season series that cannot be aligned supplies anime-level tracks only [57.87ms]
+@anicore/api:test: 05:44:51 ⚠ Crunchyroll: 1 episode(s) of GYVNXMVP6 are already mapped to another anime (anime 1)
+@anicore/api:test: (pass) Crunchyroll episode language tracks > an episode already aligned to another anime is neither stolen nor trusted [136.96ms]
+@anicore/api:test: (pass) Crunchyroll episode language tracks > two anime sharing a link take their own seasons by premiere order [130.39ms]
+@anicore/api:test: 
+@anicore/api:test: src\integration\language-providers.integration.test.ts:
+@anicore/api:test: (pass) verified language providers > repairs Cowboy Bebop false negatives, retires old route evidence and confirms both tracks [415.08ms]
+@anicore/api:test: (pass) verified language providers > finished original broadcast plus first dub premiere marks only episode one [303.34ms]
+@anicore/api:test: (pass) verified language providers > a full explicit released batch can confirm complete coverage [311.57ms]
+@anicore/api:test: (pass) verified language providers > incompatible episode counts never transfer provider numbering [294.82ms]
+@anicore/api:test: (pass) verified language providers > missing premiere and time data erase the old negative without replacing it with absence [292.82ms]
+@anicore/api:test: (pass) verified language providers > a server error preserves the previously verified identity and snapshot [532.50ms]
+@anicore/api:test: (pass) verified language providers > manual overrides and unrelated evidence survive provider replacements [299.89ms]
+@anicore/api:test: (pass) verified language providers > contradictory sibling IDs withdraw schedule evidence and are reported [546.06ms]
+@anicore/api:test: (pass) verified language providers > voice-cast fallback records multiple languages only at anime level [62.06ms]
+@anicore/api:test: (pass) verified language providers > voice-cast lookups refuse fuzzy identities and clear evidence on identity changes [39.21ms]
+@anicore/api:test: (pass) verified language providers > provider snapshot replacement rolls back invalid episode data atomically [319.60ms]
+@anicore/api:test: (pass) verified language providers > verified Kitsu streaming metadata provides subtitle fallback without episode guesses [62.01ms]
+@anicore/api:test: (pass) verified language providers > episode rollups account for unknown canonical coverage and the weakest confidence [25.62ms]
+@anicore/api:test: (pass) verified language providers > AniList cast establishes multilingual fallback independently of MAL availability [51.91ms]
+@anicore/api:test: (pass) verified language providers > retired AniList cast evidence is withdrawn before a replacement lookup fails [28.73ms]
+@anicore/api:test: (pass) verified language providers > language audit flags unsupported negatives and unverified evidence identities [58.66ms]
+@anicore/api:test: 
+@anicore/api:test: src\integration\provider-upsert.integration.test.ts:
+@anicore/api:test: (pass) provider upsert > concurrent writers of one new record create exactly one anime [48.56ms]
+@anicore/api:test: (pass) provider upsert > concurrent records sharing a title, studio and tag get distinct slugs and shared entities [40.79ms]
+@anicore/api:test: (pass) provider upsert > refreshes existing rows, merges entity flags and tolerates duplicate links [19.51ms]
+@anicore/api:test: (pass) provider upsert > manual creates without a slug get one from the title [14.83ms]
+@anicore/api:test: (pass) provider upsert > unchanged associations retain IDs while shared entity metadata still merges [49.71ms]
+@anicore/api:test: (pass) provider upsert > changed fields and authoritative removals still replace associations; omitted fields preserve them [38.29ms]
+@anicore/api:test: 
+@anicore/api:test: src\lib\admin-auth.test.ts:
+@anicore/api:test: (pass) requiresAdmin > leaves public reads open [0.03ms]
+@anicore/api:test: (pass) requiresAdmin > protects every write [0.08ms]
+@anicore/api:test: (pass) requiresAdmin > protects reads under /admin but not CORS preflight [0.04ms]
+@anicore/api:test: (pass) requiresAdmin > leaves the sync monitor to its own access-code guard [0.02ms]
+@anicore/api:test: (pass) authorizeAdminRequest > allows public reads without a token [0.06ms]
+@anicore/api:test: (pass) authorizeAdminRequest > fails closed when no admin token is configured [0.04ms]
+@anicore/api:test: (pass) authorizeAdminRequest > accepts bearer and explicit admin-token headers [0.10ms]
+@anicore/api:test: (pass) authorizeAdminRequest > rejects missing, empty and wrong tokens [0.08ms]
+@anicore/api:test: 
+@anicore/api:test: src\lib\automatic-sync.dispatch.test.ts:
+@anicore/api:test: (pass) AutomaticSyncScheduler failed dispatches > backs off after process creation throws instead of retrying every poll [0.46ms]
+@anicore/api:test: 
+@anicore/api:test: src\lib\automatic-sync.stopped.test.ts:
+@anicore/api:test: (pass) AutomaticSyncScheduler stopped runs > retries a stopped sync on the failure retry interval [0.16ms]
+@anicore/api:test: 
+@anicore/api:test: src\lib\automatic-sync.test.ts:
+@anicore/api:test: (pass) AutomaticSyncScheduler > starts a configured sync immediately when no previous run exists [0.12ms]
+@anicore/api:test: (pass) AutomaticSyncScheduler > retries a failed sync on the bounded failure interval [0.12ms]
+@anicore/api:test: (pass) AutomaticSyncScheduler > waits until the persisted completion is due [0.12ms]
+@anicore/api:test: (pass) AutomaticSyncScheduler > does not restart repeatedly while an old completion remains on disk [0.10ms]
+@anicore/api:test: (pass) AutomaticSyncScheduler > never overlaps an active manual or automatic sync [0.06ms]
+@anicore/api:test: (pass) AutomaticSyncScheduler > does not let a dry run delay the next real automatic sync [0.08ms]
+@anicore/api:test: (pass) AutomaticSyncScheduler > keeps real-sync cadence after a newer dry run overwrites status [0.08ms]
+@anicore/api:test: (pass) AutomaticSyncScheduler > stays disabled until automation is enabled [0.06ms]
+@anicore/api:test: (pass) AutomaticSyncScheduler > honors the environment kill switch [0.06ms]
+@anicore/api:test: (pass) AutomaticSyncScheduler > keeps telemetry failures out of scheduler control flow [0.11ms]
+@anicore/api:test: (pass) SyncMonitor liveness > does not trust a silent running status even when its PID was reused [0.05ms]
+@anicore/api:test: 
+@anicore/api:test: src\lib\cors-log.test.ts:
+@anicore/api:test: (pass) resolveCorsLogPath > defaults to the API data logs directory [0.03ms]
+@anicore/api:test: (pass) resolveCorsLogPath > resolves a relative override against the working directory [0.06ms]
+@anicore/api:test: [cors] ALLOWED GET /anime origin=http://localhost:5173 allowed=[]
+@anicore/api:test: (pass) resolveCorsLogPath > keeps an absolute override as-is [0.02ms]
+@anicore/api:test: (pass) logCors > appends a timestamped line to the configured file [6.79ms]
+@anicore/api:test: 
+@anicore/api:test: src\lib\dashboard-resources.test.ts:
+@anicore/api:test: (pass) resources paginate managed cache files and bound previews [118.07ms]
+@anicore/api:test: (pass) proxy settings persist, preserve credentials on unrelated changes, and redact responses [21.45ms]
+@anicore/api:test: (pass) resource routes require monitor auth and block cache deletion during sync [36.84ms]
+@anicore/api:test: 
+@anicore/api:test: src\lib\derived-airdate-language.test.ts:
+@anicore/api:test: (pass) derived air-date language evidence > derives only original Japanese audio for Japanese-origin anime [3.52ms]
+@anicore/api:test: (pass) derived air-date language evidence > does not invent English subtitle availability from an air date [0.13ms]
+@anicore/api:test: (pass) derived air-date language evidence > does not assume Japanese audio for non-Japanese or unknown origin [0.03ms]
+@anicore/api:test: 
+@anicore/api:test: src\lib\event-tail.test.ts:
+@anicore/api:test: (pass) bounded event tails > matches the previous line selection across chunks, unicode and blank lines [13.63ms]
+@anicore/api:test: (pass) bounded event tails > retains an unterminated final line and handles a short file [2.17ms]
+@anicore/api:test: (pass) bounded event tails > bounds a huge malformed tail and never returns a cut-off JSON fragment [15.98ms]
+@anicore/api:test: (pass) bounded event tails > missing files remain an empty event history [0.23ms]
+@anicore/api:test: 
+@anicore/api:test: src\lib\sync-cli.test.ts:
+@anicore/api:test: (pass) sync CLI integer flags > returns undefined when a flag is absent [0.09ms]
+@anicore/api:test: (pass) sync CLI integer flags > parses positive and non-negative integers [0.05ms]
+@anicore/api:test: (pass) sync CLI integer flags > rejects malformed numbers instead of partially parsing them [0.07ms]
+@anicore/api:test: (pass) sync CLI integer flags > enforces each flag's lower bound [0.04ms]
+@anicore/api:test: 
+@anicore/api:test: src\lib\sync-monitor.test.ts:
+@anicore/api:test: (pass) atomic monitor writes > retries EPERM without exposing a partial snapshot [9.35ms]
+@anicore/api:test: (pass) atomic monitor writes > retries EACCES without exposing a partial snapshot [4.03ms]
+@anicore/api:test: (pass) atomic monitor writes > retries EBUSY without exposing a partial snapshot [3.91ms]
+@anicore/api:test: (pass) atomic monitor writes > bounds retries and preserves the previous snapshot on a persistent lock [2.51ms]
+@anicore/api:test: (pass) atomic monitor writes > does not retry unrelated errors and cleans up the temporary file [1.67ms]
+@anicore/api:test: (pass) sync monitor status locks > continues updating in memory and publishes the latest state after the lock clears [20.38ms]
+@anicore/api:test: (pass) sync monitor status locks > can start and finish while only the status file is locked [8.38ms]
+@anicore/api:test: (pass) sync monitor status locks > still reports failed control writes to the caller [1.83ms]
+@anicore/api:test: (pass) sync monitor status locks > does not hide unrelated status write errors [7.97ms]
+@anicore/api:test: 
+@anicore/api:test: src\lib\sync-progress.test.ts:
+@anicore/api:test: (pass) sync progress checkpointing > holds the checkpoint at the first failed index [0.11ms]
+@anicore/api:test: (pass) sync progress checkpointing > advances past skipped IDs [0.04ms]
+@anicore/api:test: 
+@anicore/api:test: src\scripts\audit-mappings-command.test.ts:
+@anicore/api:test: (pass) parseAuditCommandArgs > keeps the normal audit command unchanged without --write [0.14ms]
+@anicore/api:test: (pass) parseAuditCommandArgs > writes to mapping-audit.json at the repository root by default [0.04ms]
+@anicore/api:test: (pass) parseAuditCommandArgs > accepts a path after --write [0.05ms]
+@anicore/api:test: (pass) parseAuditCommandArgs > accepts --write=<path> and preserves unrelated arguments [0.04ms]
+@anicore/api:test: (pass) parseAuditCommandArgs > rejects an empty --write= path [0.06ms]
+@anicore/api:test: (pass) parseAuditReportOutput > accepts a successful report [0.07ms]
+@anicore/api:test: (pass) parseAuditReportOutput > accepts a report with findings even when ok is false [0.04ms]
+@anicore/api:test: (pass) parseAuditReportOutput > rejects malformed or error-only output:  [0.03ms]
+@anicore/api:test: (pass) parseAuditReportOutput > rejects malformed or error-only output: null
+@anicore/api:test: (pass) parseAuditReportOutput > rejects malformed or error-only output: []
+@anicore/api:test: (pass) parseAuditReportOutput > rejects malformed or error-only output: not json
+@anicore/api:test: (pass) parseAuditReportOutput > rejects malformed or error-only output: {"ok":false,"error":"database unavailable"}
+@anicore/api:test: (pass) parseAuditReportOutput > rejects malformed or error-only output: {"ok":"false","generatedAt":"now","findings":[]}
+@anicore/api:test: (pass) parseAuditReportOutput > rejects malformed or error-only output: {"ok":false,"generatedAt":"now","findings":{}}
+@anicore/api:test: (pass) writeAuditReport > preserves an existing report when output is invalid [9.06ms]
+@anicore/api:test: (pass) writeAuditReport > writes a valid report [9.24ms]
+@anicore/api:test: 
+@anicore/api:test: src\scripts\benchmark-api.test.ts:
+@anicore/api:test: (pass) API benchmark > bounds concurrency and rejects paths that escape the selected server [0.27ms]
+@anicore/api:test: (pass) API benchmark > consumes responses, observes concurrency, and keeps failed requests out of latency percentiles [63.87ms]
+@anicore/api:test: 
+@anicore/api:test: src\scripts\evaluate-kitsu-matching.test.ts:
+@anicore/api:test: (pass) gradeCase > classifies a correct match: expected candidate scores highest and clears the threshold [1.57ms]
+@anicore/api:test: (pass) gradeCase > classifies a wrong match: a decoy outscores the expected candidate by more than the ambiguity margin [0.52ms]
+@anicore/api:test: (pass) gradeCase > classifies an abstention: the only candidate clears title similarity but stays below the match threshold [0.09ms]
+@anicore/api:test: (pass) gradeCase > classifies unreachable: the expected id never appears among the candidates [0.13ms]
+@anicore/api:test: (pass) gradeCase > an unreachable case that still selects a node counts as wrong, not as a footnote [0.14ms]
+@anicore/api:test: (pass) gradeCase > strips anilistId from the hints before scoring so the authoritative shortcut cannot fire [0.15ms]
+@anicore/api:test: (pass) computeMetrics > computes precision, recall, abstention rate and unreachable rate [0.07ms]
+@anicore/api:test: (pass) computeMetrics > returns null precision when there are no correct or wrong cases (divide by zero) [0.02ms]
+@anicore/api:test: (pass) computeMetrics > returns null for every rate on an empty case list [0.02ms]
+@anicore/api:test: (pass) computeMetrics > aggregates per format [0.17ms]
+@anicore/api:test: (pass) collectWrongCases / collectTopAbstentions > only includes wrong cases, sorted by anime title [0.43ms]
+@anicore/api:test: (pass) collectWrongCases / collectTopAbstentions > ranks abstentions by best score, descending, and respects the limit [0.33ms]
+@anicore/api:test: (pass) passesMinPrecision > passes when no threshold is set [0.06ms]
+@anicore/api:test: (pass) passesMinPrecision > passes when precision meets or exceeds the threshold [0.03ms]
+@anicore/api:test: (pass) passesMinPrecision > fails when precision is below the threshold [0.02ms]
+@anicore/api:test: (pass) passesMinPrecision > fails closed when precision could not be computed (divide by zero) but a threshold is set [0.02ms]
+@anicore/api:test: (pass) buildEvaluationReport > ok reflects the min-precision decision end to end [0.44ms]
+@anicore/api:test: (pass) buildEvaluationReport > ok is true when no threshold is requested, even with zero scored cases [0.41ms]
+@anicore/api:test: 
+@anicore/api:test: src\modules\anime\anime.format.test.ts:
+@anicore/api:test: (pass) formatAnime > exposes genres and synonyms arrays instead of json storage fields [0.21ms]
+@anicore/api:test: 
+@anicore/api:test: src\modules\language-status\language-status.scoring.test.ts:
+@anicore/api:test: (pass) language status scoring > missing evidence resolves to unknown [0.03ms]
+@anicore/api:test: (pass) language status scoring > manual overrides beat automated evidence [0.04ms]
+@anicore/api:test: (pass) language status scoring > official provider evidence resolves to confirmed [0.07ms]
+@anicore/api:test: (pass) language status scoring > only reliable explicit negative evidence resolves to not_available [0.03ms]
+@anicore/api:test: (pass) language status scoring > explicit partial evidence resolves to partial [0.02ms]
+@anicore/api:test: (pass) language status scoring > conflicting reliable availability resolves to unknown, independent of order [0.07ms]
+@anicore/api:test: (pass) language status scoring > partial episode coverage is not upgraded by cast existence evidence [0.03ms]
+@anicore/api:test: (pass) language status scoring > unknown and future schedules are never positive evidence [0.05ms]
+@anicore/api:test: (pass) language status scoring > legacy episode audio status maps to new episode language status [0.03ms]
+@anicore/api:test: (pass) language status scoring > episode audio compatibility response is backed by language rows [0.05ms]
+@anicore/api:test: (pass) language status scoring > episode statuses resolve to one per episode, manual first, ties abstain [0.16ms]
+@anicore/api:test: 
+@anicore/api:test: src\modules\mappings\mappings.service.test.ts:
+@anicore/api:test: (pass) canonicalProviderId > trims surrounding whitespace [0.02ms]
+@anicore/api:test: (pass) canonicalProviderId > rejects blank IDs [0.09ms]
+@anicore/api:test: (pass) prepareNewAnimeMappings > makes a provider's only mapping primary by default [0.06ms]
+@anicore/api:test: (pass) prepareNewAnimeMappings > requires exactly one primary when a provider has several mappings [0.09ms]
+@anicore/api:test: (pass) prepareNewAnimeMappings > rejects the same identity twice after canonicalization [0.05ms]
+@anicore/api:test: (pass) prepareNewEpisodeMappings > canonicalizes and de-duplicates identities [0.08ms]
+@anicore/api:test: 
+@anicore/api:test:  177 pass
+@anicore/api:test:  0 fail
+@anicore/api:test:  612 expect() calls
+@anicore/api:test: Ran 177 tests across 24 files. [7.48s]
+
+ Tasks:    8 successful, 8 total
+Cached:    2 cached, 8 total
+  Time:    11.048s 
+

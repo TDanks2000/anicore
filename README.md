@@ -4,7 +4,7 @@ AniCore is a unified anime metadata API. It maps anime and episodes across AniLi
 
 ## Quick start
 
-Requires [Bun](https://bun.sh) 1.3. Data lives in a local SQLite file (`apps/api/data/anicore.db`), so there is no database server to run or pay for.
+Requires [Bun](https://bun.sh) 1.4.2. Data lives in a local SQLite file (`apps/api/data/anicore.db`), so there is no database server to run or pay for.
 
 ```sh
 bun install
@@ -125,6 +125,59 @@ Root commands force Turbo's stream UI so Windows shells avoid the interactive UI
 API integration tests run as part of `bun run test` against a throwaway SQLite file: a test preload (`apps/api/src/test/preload.ts`) points `DATABASE_URL` at a temporary directory, so tests never touch your real database.
 
 CI runs lint, typecheck, and the full test suite, including integration tests, on every push and pull request.
+
+### Workspace dependencies
+
+All external dependency versions are pinned once in the root `package.json`
+under `workspaces.catalog`. Root tools and every app/package use `catalog:`;
+internal packages use `workspace:*`. Commit `bun.lock` with dependency changes
+and use `bun install --frozen-lockfile` for reproducible installs.
+
+Run `bun run deps:update` to update all workspaces and catalog entries to their
+latest releases, then run `bun run deps:check`, lint, typecheck, tests and build.
+CI checks the catalog policy so a new per-package version cannot silently drift.
+Add an external dependency with `bun add <package> --catalog` from its workspace;
+the version belongs in the root catalog, not an individual app manifest.
+
+### Performance measurements
+
+Set `ANICORE_PERFORMANCE=1` in the API environment (or the sync process environment)
+to emit `performance.summary` JSON lines every 30 seconds and when the database
+closes. Measurements cover HTTP route duration, database process-lock wait,
+client operations outside transactions, transaction duration, sync plugin duration,
+and process RSS. Metrics are local to each process; use `pid` to distinguish the API
+from its sync child. They never include SQL, bound values, request bodies, query
+strings or credentials. Instrumentation is disabled by default.
+
+Each interval reports counts, mean/max duration, and p50/p95/p99 from at most the
+latest 512 observations per metric (at most 64 metric names). These sampled
+percentiles are diagnostic estimates, not exact long-term service statistics.
+Transaction duration includes work inside its callback; lock wait is measured
+separately. HTTP timing ends when Elysia completes its response lifecycle, rather
+than measuring a remote client's download time.
+
+Benchmark a running API with read-only GET requests:
+
+```sh
+bun run benchmark --base-url=http://localhost:3000 --requests=100 --concurrency=4
+bun run benchmark --path=/anime/1/full --requests=100 --concurrency=4 --warmup=5
+```
+
+The default scenarios cover the first catalogue page, substring search, filtered
+score sorting, and a deep offset. `--path` can be repeated to select other scenarios;
+each scenario runs separately. The JSON report includes successful-request latency
+percentiles, throughput, received bytes, status counts and failures. Responses are
+fully consumed, requests have a 15-second timeout, and failures produce a nonzero
+exit code. Compare runs with identical data and settings, both idle and during a
+sync; these measurements do not establish correctness of response content.
+
+Provider refreshes retain unchanged studio/tag/external-link association rows while
+still merging shared metadata and applying authoritative removals. Anime refresh
+timestamps retain their previous behavior. The dashboard keeps up to 50 anime
+details per hook, considers them fresh for one minute, and revalidates expired
+details in the background while preserving the last loaded result on failure.
+Monitor event reads scan only a bounded tail, not the full history; oversized or
+malformed lines remain ignored. Log files themselves are not rotated automatically.
 
 ### Schema changes
 

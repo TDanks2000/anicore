@@ -32,8 +32,18 @@ describe("sync progress checkpointing", () => {
     };
     let state = createSyncCheckpointState();
 
-    state = advanceSyncCheckpoint(progress, { created: 0, updated: 0, failed: 0, skipped: 1 }, 0, state);
-    state = advanceSyncCheckpoint(progress, { created: 0, updated: 1, failed: 0, skipped: 1 }, 1, state);
+    state = advanceSyncCheckpoint(
+      progress,
+      { created: 0, updated: 0, failed: 0, skipped: 1 },
+      0,
+      state,
+    );
+    state = advanceSyncCheckpoint(
+      progress,
+      { created: 0, updated: 1, failed: 0, skipped: 1 },
+      1,
+      state,
+    );
     expect(progress.lastIndex).toBe(2);
     expect(state.firstFailedIndex).toBeNull();
   });

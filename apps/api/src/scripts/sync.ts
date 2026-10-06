@@ -811,7 +811,8 @@ async function main(): Promise<void> {
   log.info(`  Created  : ${stats.created.toLocaleString()}`);
   log.info(`  Updated  : ${stats.updated.toLocaleString()}`);
   log.info(`  Failed   : ${stats.failed.toLocaleString()}`);
-  if (stats.skipped) log.info(`  Skipped  : ${stats.skipped.toLocaleString()} (no longer on AniList)`);
+  if (stats.skipped)
+    log.info(`  Skipped  : ${stats.skipped.toLocaleString()} (no longer on AniList)`);
 
   if (stopRequested) {
     monitor?.stop(formatMonitorStats(stats));

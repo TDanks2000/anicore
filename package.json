@@ -3,39 +3,44 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "packageManager": "bun@1.3.14",
+  "packageManager": "bun@1.4.2",
   "workspaces": {
     "packages": [
       "apps/*",
       "packages/*"
     ],
     "catalog": {
-      "@api-wrappers/anilist-wrapper": "^2.7.0",
-      "@api-wrappers/tmdb-wrapper": "^2.2.0",
-      "@elysia/cors": "^1.3.3",
-      "@libsql/client": "^0.18.0",
-      "@elysia/openapi": "^1.4.16",
-      "@radix-ui/react-slot": "^1.1.1",
-      "@tailwindcss/vite": "^4.1.11",
-      "@types/react": "^19.0.0",
-      "@types/react-dom": "^19.0.0",
-      "@vitejs/plugin-react": "^4.6.0",
-      "bun-types": "^1.3.14",
-      "class-variance-authority": "^0.7.1",
-      "clsx": "^2.1.1",
-      "drizzle-kit": "^0.31.10",
-      "drizzle-orm": "^0.45.2",
-      "elysia": "^1.4.29",
-      "lucide-react": "^0.468.0",
-      "react": "^19.0.0",
-      "react-dom": "^19.0.0",
-      "tailwind-merge": "^2.6.0",
-      "tailwindcss": "^4.1.11",
-      "typescript": "^7.0.2",
-      "vite": "^6.0.0"
+      "@biomejs/biome": "2.5.15",
+      "@api-wrappers/anilist-wrapper": "4.0.1",
+      "@api-wrappers/tmdb-wrapper": "3.0.0",
+      "@elysia/cors": "1.4.2",
+      "@libsql/client": "0.18.0",
+      "@elysia/openapi": "1.4.16",
+      "@radix-ui/react-slot": "1.4.0",
+      "@tailwindcss/vite": "4.3.3",
+      "@types/react": "19.3.0",
+      "@types/react-dom": "19.3.0",
+      "@vitejs/plugin-react": "6.1.2",
+      "bun-types": "1.4.2",
+      "class-variance-authority": "0.7.1",
+      "clsx": "2.1.1",
+      "drizzle-kit": "0.31.11",
+      "drizzle-orm": "0.45.3",
+      "elysia": "1.4.30",
+      "lucide-react": "1.52.0",
+      "react": "19.3.0",
+      "react-dom": "19.3.0",
+      "tailwind-merge": "3.7.0",
+      "tailwindcss": "4.3.3",
+      "turbo": "2.11.7",
+      "typescript": "7.0.2",
+      "vite": "8.3.3"
     }
   },
   "scripts": {
+    "deps:check": "bun scripts/check-workspace-deps.ts",
+    "deps:update": "bun update --latest --recursive --exact",
+    "benchmark": "cd apps/api && bun run benchmark --",
     "dev": "turbo run dev --ui=stream",
     "dev:api": "turbo run dev --filter=@anicore/api --ui=stream",
     "dev:web": "turbo run dev --filter=@anicore/web --ui=stream",
@@ -64,9 +69,9 @@
     "sync:dry": "cd apps/api && bun run sync:dry --"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.14",
-    "bun-types": "^1.3.14",
-    "turbo": "^2.10.4",
-    "typescript": "^7.0.2"
+    "@biomejs/biome": "catalog:",
+    "bun-types": "catalog:",
+    "turbo": "catalog:",
+    "typescript": "catalog:"
   }
 }

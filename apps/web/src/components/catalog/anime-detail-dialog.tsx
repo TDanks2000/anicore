@@ -155,10 +155,21 @@ export function AnimeDetailDialog({
           <div className="min-h-0 flex-1 overflow-y-auto">
             {loading ? (
               <DetailSkeleton />
-            ) : error ? (
+            ) : error && !full ? (
               <DetailError message={error} onRetry={retry} />
             ) : full ? (
               <div className="flex flex-col gap-6 p-5">
+                {error ? (
+                  <div
+                    role="status"
+                    className="flex items-center justify-between gap-3 rounded-lg border border-border p-3 text-sm"
+                  >
+                    <span>Refresh failed. Showing the last loaded details.</span>
+                    <Button variant="outline" size="sm" onClick={retry}>
+                      Retry
+                    </Button>
+                  </div>
+                ) : null}
                 <Synopsis description={full.description} />
 
                 <dl className="grid grid-cols-2 gap-x-6 gap-y-3 rounded-lg border border-border bg-muted/20 p-4 sm:grid-cols-4">

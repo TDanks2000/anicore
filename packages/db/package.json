@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./performance": "./src/performance.ts",
     ".": "./src/index.ts",
     "./enums": "./src/enums.ts",
     "./errors": "./src/errors.ts",

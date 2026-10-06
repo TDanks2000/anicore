@@ -26,6 +26,7 @@ import {
   MAX_AUTO_SYNC_INTERVAL_MINUTES,
 } from "@anicore/sync-monitor";
 import { isRetryableFileError, atomicWriteJson as writeJson } from "./atomic-write-json";
+import { readEventTail } from "./event-tail";
 
 export type {
   SyncMonitorAutomationStatus,
@@ -474,8 +475,8 @@ export function readSyncMonitorStatus(): SyncMonitorStatus | null {
 }
 
 export function readSyncMonitorEvents(limit = 100): SyncMonitorEvent[] {
-  const boundedLimit = Math.max(1, Math.min(limit, 500));
-  const text = safeReadText(eventsFile());
+  const boundedLimit = Number.isFinite(limit) ? Math.max(1, Math.min(Math.floor(limit), 500)) : 100;
+  const text = readEventTail(eventsFile(), boundedLimit, MAX_EVENT_LINE_BYTES);
   if (!text) return [];
 
   const lines = text.split("\n").filter(Boolean).slice(-boundedLimit);

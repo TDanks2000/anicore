@@ -1,6 +1,14 @@
 import { afterAll, beforeEach, expect, test } from "bun:test";
 import { closeDb, db } from "@anicore/db";
-import { anime, animeExternalLinks, animeMappings, studios, tags } from "@anicore/db/schema";
+import {
+  anime,
+  animeExternalLinks,
+  animeMappings,
+  animeStudioLinks,
+  animeTagLinks,
+  studios,
+  tags,
+} from "@anicore/db/schema";
 import { upsertAnimeFromProvider } from "@anicore/providers";
 import type { ProviderAnimeData } from "@anicore/providers/types";
 import { eq } from "drizzle-orm";
@@ -82,5 +90,92 @@ describeWithDatabase("provider upsert", () => {
     const second = (await (await create({ titleRomaji: "Monster" })).json()) as { slug: string };
     expect([first.slug, second.slug]).toEqual(["monster", "monster-2"]);
     delete process.env.ANICORE_ADMIN_TOKEN;
+  });
+
+  test("unchanged associations retain IDs while shared entity metadata still merges", async () => {
+    const data = record("1", {
+      studios: [
+        { name: "Bones", isMain: true, isAnimationStudio: false, anilistStudioId: 4 },
+        { name: "Other", isMain: false, isAnimationStudio: false },
+      ],
+      tags: [
+        { name: "Space", rank: 90 },
+        { name: "Action", rank: 80 },
+      ],
+      externalLinks: [{ site: "Official", url: "https://example.com" }],
+    });
+    const { animeId } = await upsertAnimeFromProvider(data);
+    const associations = async () => ({
+      studios: await db
+        .select()
+        .from(animeStudioLinks)
+        .where(eq(animeStudioLinks.animeId, animeId))
+        .orderBy(animeStudioLinks.id),
+      tags: await db
+        .select()
+        .from(animeTagLinks)
+        .where(eq(animeTagLinks.animeId, animeId))
+        .orderBy(animeTagLinks.id),
+      links: await db
+        .select()
+        .from(animeExternalLinks)
+        .where(eq(animeExternalLinks.animeId, animeId))
+        .orderBy(animeExternalLinks.id),
+    });
+    const before = await associations();
+    await upsertAnimeFromProvider({
+      ...data,
+      studios: [
+        data.studios![1]!,
+        { ...data.studios![0]!, name: " BONES ", isAnimationStudio: true },
+      ],
+      tags: [
+        { name: "Action", rank: 80 },
+        { name: " SPACE ", rank: 90, isMediaSpoiler: true },
+      ],
+      externalLinks: [
+        data.externalLinks![0]!,
+        { site: "Duplicate ignored", url: "https://example.com" },
+      ],
+    });
+    expect(await associations()).toEqual(before);
+    expect(await db.select().from(studios).where(eq(studios.anilistStudioId, 4))).toMatchObject([
+      { name: "Bones", isAnimationStudio: true },
+    ]);
+    expect(await db.select().from(tags).where(eq(tags.normalizedName, "space"))).toMatchObject([
+      { isMediaSpoiler: true },
+    ]);
+  });
+
+  test("changed fields and authoritative removals still replace associations; omitted fields preserve them", async () => {
+    const data = record("1", {
+      externalLinks: [{ site: "Official", url: "https://example.com", language: "en" }],
+    });
+    const { animeId } = await upsertAnimeFromProvider(data);
+    await upsertAnimeFromProvider(
+      record("1", {
+        studios: [
+          { name: "Studio Bones", isMain: false, isAnimationStudio: true, anilistStudioId: 4 },
+        ],
+        tags: [{ name: "Space", rank: 50 }],
+        externalLinks: [{ site: "Official", url: "https://example.com", language: "ja" }],
+      }),
+    );
+    expect(await db.select().from(animeStudioLinks)).toMatchObject([{ animeId, isMain: false }]);
+    expect(await db.select().from(animeTagLinks)).toMatchObject([{ animeId, rank: 50 }]);
+    expect(await db.select().from(animeExternalLinks)).toMatchObject([{ animeId, language: "ja" }]);
+    await upsertAnimeFromProvider(
+      record("1", { studios: undefined, tags: undefined, externalLinks: undefined }),
+    );
+    expect(await db.select().from(animeStudioLinks)).toHaveLength(1);
+    expect(await db.select().from(animeTagLinks)).toHaveLength(1);
+    expect(await db.select().from(animeExternalLinks)).toHaveLength(1);
+    await upsertAnimeFromProvider(record("1", { studios: [], tags: [], externalLinks: [] }));
+    expect(await db.select().from(animeStudioLinks)).toHaveLength(0);
+    expect(await db.select().from(animeTagLinks)).toHaveLength(0);
+    expect(await db.select().from(animeExternalLinks)).toHaveLength(0);
+    // Removing associations never deletes shared entities.
+    expect(await db.select().from(studios)).toHaveLength(1);
+    expect(await db.select().from(tags)).toHaveLength(1);
   });
 });

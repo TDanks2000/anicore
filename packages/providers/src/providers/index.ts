@@ -86,6 +86,20 @@ function buildAnimeFields(data: ProviderAnimeData) {
 type StudioRow = typeof studios.$inferSelect;
 type TagRow = typeof tags.$inferSelect;
 
+/** Compare persisted fields only; provider order and row IDs do not affect equality. */
+function sameCollection(
+  existing: readonly object[],
+  desired: readonly object[],
+  fields: string[],
+): boolean {
+  if (existing.length !== desired.length) return false;
+  const signatures = (rows: readonly object[]) =>
+    rows.map((row) => JSON.stringify(fields.map((field) => Reflect.get(row, field)))).sort();
+  const left = signatures(existing);
+  const right = signatures(desired);
+  return left.every((value, index) => value === right[index]);
+}
+
 /**
  * Links an anime to its studios, creating any studio not seen before.
  *
@@ -93,26 +107,16 @@ type TagRow = typeof tags.$inferSelect;
  * so a concurrent writer creating the same studio cannot fail this sync.
  */
 async function replaceStudioLinks(tx: Tx, animeId: number, provided: ProviderStudio[]) {
-  await tx.delete(animeStudioLinks).where(eq(animeStudioLinks.animeId, animeId));
   const studioData = dedupeProviderStudios(provided);
-  if (studioData.length === 0) return;
+  if (studioData.length === 0) {
+    await tx.delete(animeStudioLinks).where(eq(animeStudioLinks.animeId, animeId));
+    return;
+  }
 
   const names = studioData.map((studio) => normalizeEntityName(studio.name));
   const anilistIds = studioData
     .map((studio) => studio.anilistStudioId)
     .filter((id): id is number => id != null);
-
-  await tx
-    .insert(studios)
-    .values(
-      studioData.map((studio) => ({
-        name: studio.name,
-        normalizedName: normalizeEntityName(studio.name),
-        isAnimationStudio: studio.isAnimationStudio,
-        anilistStudioId: studio.anilistStudioId ?? null,
-      })),
-    )
-    .onConflictDoNothing();
 
   const rows = await tx
     .select()
@@ -127,6 +131,30 @@ async function replaceStudioLinks(tx: Tx, animeId: number, provided: ProviderStu
   const byAnilistId = new Map(
     rows.filter((row) => row.anilistStudioId !== null).map((row) => [row.anilistStudioId!, row]),
   );
+
+  const missing = studioData.filter(
+    (studio) =>
+      !byName.has(normalizeEntityName(studio.name)) &&
+      (studio.anilistStudioId == null || !byAnilistId.has(studio.anilistStudioId)),
+  );
+  if (missing.length) {
+    const inserted = await tx
+      .insert(studios)
+      .values(
+        missing.map((studio) => ({
+          name: studio.name,
+          normalizedName: normalizeEntityName(studio.name),
+          isAnimationStudio: studio.isAnimationStudio,
+          anilistStudioId: studio.anilistStudioId ?? null,
+        })),
+      )
+      .onConflictDoNothing()
+      .returning();
+    for (const row of inserted) {
+      byName.set(row.normalizedName, row);
+      if (row.anilistStudioId !== null) byAnilistId.set(row.anilistStudioId, row);
+    }
+  }
 
   const links = new Map<number, { animeId: number; studioId: number; isMain: boolean }>();
   for (const studio of studioData) {
@@ -154,28 +182,24 @@ async function replaceStudioLinks(tx: Tx, animeId: number, provided: ProviderStu
     });
   }
 
-  await tx.insert(animeStudioLinks).values([...links.values()]);
+  const desired = [...links.values()];
+  const existing = await tx
+    .select()
+    .from(animeStudioLinks)
+    .where(eq(animeStudioLinks.animeId, animeId));
+  if (!sameCollection(existing, desired, ["studioId", "isMain"])) {
+    await tx.delete(animeStudioLinks).where(eq(animeStudioLinks.animeId, animeId));
+    await tx.insert(animeStudioLinks).values(desired);
+  }
 }
 
 /** Links an anime to its tags, creating any tag not seen before (race-safe). */
 async function replaceTagLinks(tx: Tx, animeId: number, provided: ProviderTag[]) {
-  await tx.delete(animeTagLinks).where(eq(animeTagLinks.animeId, animeId));
   const tagData = dedupeProviderTags(provided);
-  if (tagData.length === 0) return;
-
-  await tx
-    .insert(tags)
-    .values(
-      tagData.map((tag) => ({
-        name: tag.name,
-        normalizedName: normalizeEntityName(tag.name),
-        category: tag.category ?? null,
-        isGeneralSpoiler: tag.isGeneralSpoiler ?? false,
-        isMediaSpoiler: tag.isMediaSpoiler ?? false,
-        isAdult: tag.isAdult ?? false,
-      })),
-    )
-    .onConflictDoNothing();
+  if (tagData.length === 0) {
+    await tx.delete(animeTagLinks).where(eq(animeTagLinks.animeId, animeId));
+    return;
+  }
 
   const rows = await tx
     .select()
@@ -187,6 +211,24 @@ async function replaceTagLinks(tx: Tx, animeId: number, provided: ProviderTag[])
       ),
     );
   const byName = new Map(rows.map((row) => [row.normalizedName, row]));
+  const missing = tagData.filter((tag) => !byName.has(normalizeEntityName(tag.name)));
+  if (missing.length) {
+    const inserted = await tx
+      .insert(tags)
+      .values(
+        missing.map((tag) => ({
+          name: tag.name,
+          normalizedName: normalizeEntityName(tag.name),
+          category: tag.category ?? null,
+          isGeneralSpoiler: tag.isGeneralSpoiler ?? false,
+          isMediaSpoiler: tag.isMediaSpoiler ?? false,
+          isAdult: tag.isAdult ?? false,
+        })),
+      )
+      .onConflictDoNothing()
+      .returning();
+    for (const row of inserted) byName.set(row.normalizedName, row);
+  }
 
   const links: Array<{ animeId: number; tagId: number; rank: number | null }> = [];
   for (const tag of tagData) {
@@ -211,32 +253,41 @@ async function replaceTagLinks(tx: Tx, animeId: number, provided: ProviderTag[])
     links.push({ animeId, tagId: row.id, rank: tag.rank ?? null });
   }
 
-  await tx.insert(animeTagLinks).values(links);
+  const existing = await tx.select().from(animeTagLinks).where(eq(animeTagLinks.animeId, animeId));
+  if (!sameCollection(existing, links, ["tagId", "rank"])) {
+    await tx.delete(animeTagLinks).where(eq(animeTagLinks.animeId, animeId));
+    await tx.insert(animeTagLinks).values(links);
+  }
 }
 
 async function upsertRelatedData(animeId: number, data: ProviderAnimeData, tx: Tx): Promise<void> {
-  // Studios, tags and external links are authoritative: replace them each sync.
+  // Collections are authoritative, but unchanged associations retain their rows.
   if (data.studios !== undefined) await replaceStudioLinks(tx, animeId, data.studios);
   if (data.tags !== undefined) await replaceTagLinks(tx, animeId, data.tags);
 
   if (data.externalLinks !== undefined) {
-    await tx.delete(animeExternalLinks).where(eq(animeExternalLinks.animeId, animeId));
-    if (data.externalLinks.length) {
-      // Providers occasionally list one URL twice; keep the first.
-      await tx
-        .insert(animeExternalLinks)
-        .values(
-          data.externalLinks.map((link) => ({
-            animeId,
-            site: link.site,
-            url: link.url,
-            type: link.type ?? null,
-            language: link.language ?? null,
-            color: link.color ?? null,
-            icon: link.icon ?? null,
-          })),
-        )
-        .onConflictDoNothing();
+    // Providers occasionally list one URL twice; keep the first.
+    const byUrl = new Map<string, typeof animeExternalLinks.$inferInsert>();
+    for (const link of data.externalLinks) {
+      if (!byUrl.has(link.url))
+        byUrl.set(link.url, {
+          animeId,
+          site: link.site,
+          url: link.url,
+          type: link.type ?? null,
+          language: link.language ?? null,
+          color: link.color ?? null,
+          icon: link.icon ?? null,
+        });
+    }
+    const desired = [...byUrl.values()];
+    const existing = await tx
+      .select()
+      .from(animeExternalLinks)
+      .where(eq(animeExternalLinks.animeId, animeId));
+    if (!sameCollection(existing, desired, ["site", "url", "type", "language", "color", "icon"])) {
+      await tx.delete(animeExternalLinks).where(eq(animeExternalLinks.animeId, animeId));
+      if (desired.length) await tx.insert(animeExternalLinks).values(desired);
     }
   }
 

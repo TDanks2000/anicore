@@ -26,6 +26,9 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
+      - name: Workspace dependency versions
+        run: bun run deps:check
+
       - name: Lint and format
         run: bunx biome ci .
 

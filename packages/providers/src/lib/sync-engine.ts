@@ -1,3 +1,4 @@
+import { performanceEnabled, recordDuration } from "@anicore/db/performance";
 import type { DryPluginResult, ProviderAnimeData, ProviderPlugin } from "../providers/types";
 import { ANILIST_RATE_MS, isNotFoundError, isRateLimitError } from "./anilist-rate-limit";
 import { appendUnmatched, loadUnmatched } from "./cache";
@@ -123,7 +124,17 @@ export class SyncEngine {
     if (!active.length) return;
 
     bar.setStage(active.map((p) => p.name).join("+"));
-    const results = await Promise.allSettled(active.map((p) => p.sync(String(id), anilistData)));
+    const results = await Promise.allSettled(
+      active.map(async (p) => {
+        const started = performanceEnabled() ? performance.now() : null;
+        try {
+          return await p.sync(String(id), anilistData);
+        } finally {
+          if (started !== null)
+            recordDuration(`sync.provider.${p.name}`, performance.now() - started);
+        }
+      }),
+    );
     const failures: string[] = [];
 
     for (let j = 0; j < active.length; j++) {

@@ -2,6 +2,7 @@
   "name": "@anicore/api",
   "version": "0.1.0",
   "scripts": {
+    "benchmark": "bun src/scripts/benchmark-api.ts",
     "build": "tsc --noEmit",
     "db:audit-mappings": "bun src/scripts/audit-mappings-command.ts",
     "db:audit-languages": "bun src/scripts/audit-language-status.ts",

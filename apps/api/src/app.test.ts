@@ -1,8 +1,9 @@
-import { afterAll, afterEach, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, describe, expect, spyOn, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { closeDb } from "@anicore/db";
+import { flushPerformanceMetrics } from "@anicore/db/performance";
 import { app, readableValidationMessage } from "./app";
 import { SyncMonitor } from "./lib/sync-monitor";
 
@@ -43,6 +44,32 @@ describe("app contract", () => {
 
     expect(response.status).toBe(200);
     expect(await json(response)).toEqual({ ok: true, name: "anicore" });
+  });
+
+  test("opt-in HTTP measurements use route templates without leaking request values", async () => {
+    const previous = process.env.ANICORE_PERFORMANCE;
+    const info = spyOn(console, "info").mockImplementation(() => {});
+    process.env.ANICORE_PERFORMANCE = "1";
+    try {
+      const response = await app.handle(
+        new Request("http://localhost/anime/secret-id?q=secret-query", {
+          headers: { Authorization: "Bearer secret-token" },
+        }),
+      );
+      expect(response.status).toBe(400);
+      await response.text();
+      await Bun.sleep(0);
+      flushPerformanceMetrics();
+      expect(info).toHaveBeenCalledTimes(1);
+      const output = String(info.mock.calls[0]![0]);
+      expect(JSON.parse(output).measurements["http.GET /anime/:id"].count).toBe(1);
+      expect(output).not.toContain("secret");
+    } finally {
+      delete process.env.ANICORE_PERFORMANCE;
+      flushPerformanceMetrics();
+      if (previous !== undefined) process.env.ANICORE_PERFORMANCE = previous;
+      info.mockRestore();
+    }
   });
 
   test("returns 400 for invalid anime ids", async () => {

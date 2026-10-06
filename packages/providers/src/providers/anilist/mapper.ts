@@ -1,8 +1,8 @@
+import type { AniListOperations } from "@api-wrappers/anilist-wrapper";
 import type { ProviderAnimeData } from "../types";
-import type { anilistClient } from "./client";
 
-type AnilistGetByIdResult = Awaited<ReturnType<typeof anilistClient.anime.getAnimeById>>;
-type AnilistMedia = NonNullable<AnilistGetByIdResult["Media"]>;
+// ReturnType selects the last (selected-query) overload, not our default query.
+type AnilistMedia = NonNullable<AniListOperations.GetAnimeByIdQuery["Media"]>;
 
 function resolveTitle(media: AnilistMedia): string {
   return media.title?.romaji ?? media.title?.english ?? media.title?.native ?? String(media.id);

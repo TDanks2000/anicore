@@ -1,3 +1,4 @@
+import { performanceEnabled, recordDuration } from "@anicore/db/performance";
 import { cors } from "@elysia/cors";
 import { openapi } from "@elysia/openapi";
 import { Elysia } from "elysia";
@@ -50,7 +51,18 @@ function validationIssues(error: unknown): ValidationIssue[] {
   }));
 }
 
+const requestStarts = new WeakMap<Request, number>();
+
 export const app = new Elysia()
+  .onRequest(({ request }) => {
+    if (performanceEnabled()) requestStarts.set(request, performance.now());
+  })
+  .onAfterResponse({ as: "global" }, ({ request, route }) => {
+    const started = requestStarts.get(request);
+    if (started === undefined) return;
+    requestStarts.delete(request);
+    recordDuration(`http.${request.method} ${route || "unmatched"}`, performance.now() - started);
+  })
   // Log blocked cross-origin requests only, so misconfigured origins are visible
   // without drowning the log in normal traffic.
   .onRequest(({ request }) => {

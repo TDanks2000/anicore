@@ -10,6 +10,7 @@ import { migrate } from "drizzle-orm/libsql/migrator";
 
 import { getDatabaseConfig } from "./db-config";
 import { isBusyError } from "./errors";
+import { flushPerformanceMetrics, performanceEnabled, recordDuration } from "./performance";
 import * as providerMappingSchema from "./provider-mapping-schema";
 import * as coreSchema from "./schema";
 
@@ -82,7 +83,9 @@ const insideTransaction = new AsyncLocalStorage<boolean>();
 
 async function withProcessLock<T>(operation: () => Promise<T>): Promise<T> {
   if (insideTransaction.getStore()) return operation();
+  const started = performanceEnabled() ? performance.now() : null;
   const release = await processLock.acquire();
+  if (started !== null) recordDuration("db.lock_wait", performance.now() - started);
   try {
     return await operation();
   } finally {
@@ -111,7 +114,15 @@ function wrapClient(raw: Client, ready: Promise<void>): Client {
       if (!guarded.has(property)) return value.bind(target);
       return async (...args: unknown[]) => {
         await ready;
-        return withProcessLock(() => retryWhileBusy(() => value.apply(target, args)));
+        return withProcessLock(async () => {
+          const started = performanceEnabled() ? performance.now() : null;
+          try {
+            return await retryWhileBusy(() => value.apply(target, args));
+          } finally {
+            if (started !== null)
+              recordDuration(`db.${String(property)}`, performance.now() - started);
+          }
+        });
       };
     },
   });
@@ -143,9 +154,14 @@ function createDb() {
   instance.transaction = ((callback, config) =>
     insideTransaction.getStore()
       ? transaction(callback, config)
-      : withProcessLock(() =>
-          insideTransaction.run(true, () => transaction(callback, config)),
-        )) as typeof instance.transaction;
+      : withProcessLock(async () => {
+          const started = performanceEnabled() ? performance.now() : null;
+          try {
+            return await insideTransaction.run(true, () => transaction(callback, config));
+          } finally {
+            if (started !== null) recordDuration("db.transaction", performance.now() - started);
+          }
+        })) as typeof instance.transaction;
   return instance;
 }
 
@@ -304,6 +320,7 @@ export async function tryAcquireSyncLease(): Promise<SyncLease | null> {
 }
 
 export async function closeDb(): Promise<void> {
+  flushPerformanceMetrics();
   if (!clientInstance) return;
   clientInstance.close();
   clientInstance = null;
