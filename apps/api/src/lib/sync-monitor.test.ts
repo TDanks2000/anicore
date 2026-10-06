@@ -3,7 +3,13 @@ import * as fs from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { atomicWriteJson } from "./atomic-write-json";
-import { readSyncMonitorStatus, SyncMonitor, writeSyncMonitorControlState } from "./sync-monitor";
+import {
+  appendSyncMonitorEvent,
+  readSyncMonitorEvents,
+  readSyncMonitorStatus,
+  SyncMonitor,
+  writeSyncMonitorControlState,
+} from "./sync-monitor";
 
 const originalRename = fs.renameSync;
 let directory: string;
@@ -46,6 +52,15 @@ afterEach(() => {
 });
 
 describe("atomic monitor writes", () => {
+  test("bounds serialized events and invalidates cached tails on file changes", () => {
+    appendSyncMonitorEvent("error", "\u0001".repeat(30000));
+    const first = readSyncMonitorEvents();
+    expect(first).toHaveLength(1);
+    first[0]!.message = "Mutated caller value";
+    expect(readSyncMonitorEvents()[0]!.message).not.toBe("Mutated caller value");
+    appendSyncMonitorEvent("info", "New event");
+    expect(readSyncMonitorEvents().at(-1)!.message).toBe("New event");
+  });
   for (const code of ["EPERM", "EACCES", "EBUSY"]) {
     test(`retries ${code} without exposing a partial snapshot`, () => {
       const path = join(directory, "status.json");

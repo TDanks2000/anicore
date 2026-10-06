@@ -1,3 +1,6 @@
+import { readDb } from "@anicore/db";
+import { animeMappings, syncStageState } from "@anicore/db/schema";
+import { sql } from "drizzle-orm";
 import { Elysia, t } from "elysia";
 
 import { notFound } from "../../lib/errors";
@@ -86,13 +89,40 @@ const createAnimeBody = t.Object({
 });
 
 export const animeRoutes = new Elysia({ prefix: "/anime", detail: { tags: ["Anime"] } })
+  .get("/revision", async () => {
+    const [row] = await readDb.all<{ revision: number }>(
+      sql`select coalesce((select revision from catalogue_revision where id=1),0) as revision`,
+    );
+    return row!;
+  })
+  .get(
+    "/:id/freshness",
+    async ({ params }) => {
+      await assertAnimeExists(params.id);
+      return readDb
+        .select({
+          stage: syncStageState.stage,
+          successAt: syncStageState.successAt,
+          nextDueAt: syncStageState.nextDueAt,
+          retryAt: syncStageState.retryAt,
+          failures: syncStageState.failures,
+        })
+        .from(syncStageState)
+        .where(
+          sql`${syncStageState.anilistId} in (select cast(provider_id as integer) from ${animeMappings} where anime_id=${params.id} and provider='anilist')`,
+        );
+    },
+    { params: idParams },
+  )
   .get(
     "/",
     async ({ query, set }) => {
-      const { items, total } = await listAnime(query);
+      const { items, total, nextCursor } = await listAnime(query);
       // The body stays a bare array for compatibility; the dashboard reads the
       // total from this header to render pagination.
       set.headers["X-Total-Count"] = String(total);
+      if (query.pagination === "cursor")
+        set.headers["X-Next-Cursor"] = nextCursor === null ? "" : String(nextCursor);
       return items;
     },
     {
@@ -105,6 +135,9 @@ export const animeRoutes = new Elysia({ prefix: "/anime", detail: { tags: ["Anim
         status: optionalString,
         sort: optionalAnimeSort,
         order: optionalAnimeOrder,
+        projection: t.Optional(t.Union([t.Literal("full"), t.Literal("summary")])),
+        pagination: t.Optional(t.Union([t.Literal("offset"), t.Literal("cursor")])),
+        afterId: t.Optional(positiveInteger),
       }),
     },
   )

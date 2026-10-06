@@ -1,0 +1,1 @@
+CREATE INDEX `anime_catalogue_id_idx` ON `anime` (`id`);

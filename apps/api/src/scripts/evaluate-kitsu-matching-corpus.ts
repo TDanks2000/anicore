@@ -19,6 +19,7 @@ const REQUEST_DELAY_MS = 200;
 const PROGRESS_INTERVAL = 25;
 
 export interface KitsuMatchingCorpusCase {
+  cohort?: string;
   hints: MatchHints;
   expectedKitsuId: string;
   candidates: KitsuSearchNode[];
@@ -32,6 +33,7 @@ export interface KitsuMatchingCorpus {
 }
 
 interface AuthoritativeKitsuMappingRow extends Record<string, unknown> {
+  hasSegments?: number;
   animeId: number;
   titleRomaji: string;
   titleEnglish: string | null;
@@ -47,6 +49,7 @@ interface AuthoritativeKitsuMappingRow extends Record<string, unknown> {
 }
 
 export interface CorpusCommandOptions {
+  coverage?: boolean;
   sampleSize: number;
   seed: number;
   outPath: string;
@@ -56,8 +59,13 @@ export function parseCorpusCommandArgs(args: string[], cwd = process.cwd()): Cor
   let sampleSize = DEFAULT_SAMPLE_SIZE;
   let seed = DEFAULT_SEED;
   let outPath = resolve(cwd, DEFAULT_OUT_PATH);
+  let coverage = false;
 
   for (const arg of args) {
+    if (arg === "--coverage") {
+      coverage = true;
+      continue;
+    }
     if (arg.startsWith("--sample=")) {
       const value = Number(arg.slice("--sample=".length));
       if (!Number.isInteger(value) || value <= 0) {
@@ -88,7 +96,7 @@ export function parseCorpusCommandArgs(args: string[], cwd = process.cwd()): Cor
     throw new Error(`Unknown evaluate-kitsu-matching-corpus argument: ${arg}`);
   }
 
-  return { sampleSize, seed, outPath };
+  return { sampleSize, seed, outPath, ...(coverage ? { coverage: true } : {}) };
 }
 
 /**
@@ -106,7 +114,7 @@ async function loadAuthoritativeRows(): Promise<AuthoritativeKitsuMappingRow[]> 
   return queryRows<AuthoritativeKitsuMappingRow>(sql`
     select
       "animeId", "titleRomaji", "titleEnglish", "titleNative", "synonymsJson", season,
-      "seasonYear", "startDate", "episodeCount", format, "anilistId", "expectedKitsuId"
+      "seasonYear", "startDate", "episodeCount", format, "anilistId", "expectedKitsuId", "hasSegments"
     from (
     select
       row_number() over (
@@ -123,6 +131,7 @@ async function loadAuthoritativeRows(): Promise<AuthoritativeKitsuMappingRow[]> 
       a.start_date as "startDate",
       a.episode_count as "episodeCount",
       a.format,
+      exists(select 1 from anime_provider_segments s join anime_provider_mappings pm on pm.id=s.anime_provider_mapping_id where pm.anime_id=a.id) as "hasSegments",
       anilist.provider_id as "anilistId",
       kitsu.provider_id as "expectedKitsuId"
     from anime a
@@ -198,6 +207,7 @@ export function stratifiedSample(
   rows: AuthoritativeKitsuMappingRow[],
   sampleSize: number,
   seed: number,
+  coverage = false,
 ): AuthoritativeKitsuMappingRow[] {
   if (rows.length <= sampleSize) {
     return [...rows].sort((a, b) => a.animeId - b.animeId);
@@ -205,7 +215,7 @@ export function stratifiedSample(
 
   const groups = new Map<string, AuthoritativeKitsuMappingRow[]>();
   for (const row of rows) {
-    const key = normalizeFormatKey(row.format);
+    const key = coverage ? corpusCohort(row) : normalizeFormatKey(row.format);
     const list = groups.get(key) ?? [];
     list.push(row);
     groups.set(key, list);
@@ -213,12 +223,16 @@ export function stratifiedSample(
 
   const formatKeys = [...groups.keys()].sort();
   const total = rows.length;
+  if (coverage && sampleSize < formatKeys.length)
+    throw new Error(`Coverage sample needs at least ${formatKeys.length} cases for all cohorts`);
 
   const quotas = formatKeys.map((key) => {
     const groupSize = groups.get(key)!.length;
-    const raw = (groupSize / total) * sampleSize;
-    const floor = Math.floor(raw);
-    return { key, groupSize, floor, remainder: raw - floor };
+    const raw = coverage
+      ? ((groupSize - 1) / (total - formatKeys.length)) * (sampleSize - formatKeys.length)
+      : (groupSize / total) * sampleSize;
+    const floor = Math.floor(raw) + (coverage ? 1 : 0);
+    return { key, groupSize, floor, remainder: raw - Math.floor(raw) };
   });
 
   const desired = new Map(quotas.map((quota) => [quota.key, quota.floor]));
@@ -247,6 +261,16 @@ export function stratifiedSample(
   }
 
   return sampled.sort((a, b) => a.animeId - b.animeId);
+}
+
+export function corpusCohort(
+  row: Pick<AuthoritativeKitsuMappingRow, "format" | "titleRomaji" | "hasSegments">,
+): string {
+  const sequel =
+    /\b(?:season\s*[2-9]|[2-9](?:nd|rd|th)?\s*season|part\s*[2-9]|II|III|IV)\b|\s[2-9]$/.test(
+      row.titleRomaji,
+    );
+  return `${normalizeFormatKey(row.format)}:${sequel ? "sequel" : "base"}:${row.hasSegments ? "segmented" : "single"}`;
 }
 
 function isValidExistingCase(value: unknown): value is KitsuMatchingCorpusCase {
@@ -310,7 +334,7 @@ async function buildCorpus(options: CorpusCommandOptions): Promise<KitsuMatching
     throw new Error("No authoritative kitsu mappings (provider='kitsu', source='api') were found");
   }
 
-  const sampledRows = stratifiedSample(rows, options.sampleSize, options.seed);
+  const sampledRows = stratifiedSample(rows, options.sampleSize, options.seed, options.coverage);
   const existingByAnilistId = await loadExistingCases(options.outPath, options.seed);
 
   const cases: KitsuMatchingCorpusCase[] = [];
@@ -321,13 +345,18 @@ async function buildCorpus(options: CorpusCommandOptions): Promise<KitsuMatching
     const row = sampledRows[index]!;
     const existing = existingByAnilistId.get(row.anilistId);
 
-    if (existing) {
-      cases.push(existing);
+    if (existing && existing.expectedKitsuId === row.expectedKitsuId) {
+      cases.push({ ...existing, cohort: corpusCohort(row) });
       reusedCount += 1;
     } else {
       const hints = buildHints(row);
       const candidates = await fetchCandidatesForHints(hints);
-      cases.push({ hints, expectedKitsuId: row.expectedKitsuId, candidates });
+      cases.push({
+        hints,
+        expectedKitsuId: row.expectedKitsuId,
+        candidates,
+        cohort: corpusCohort(row),
+      });
       fetchedCount += 1;
     }
 

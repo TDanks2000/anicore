@@ -1,3 +1,5 @@
+import { withRequestDeadline } from "./request";
+
 export type SyncMonitorState =
   | "idle"
   | "running"
@@ -349,20 +351,26 @@ export class SyncMonitorClient {
     init: Omit<RequestInit, "headers" | "signal"> = {},
     signal?: AbortSignal,
   ): Promise<T> {
-    const response = await this.fetcher(`${this.baseUrl}${path}`, {
-      ...init,
-      signal: combineSignals(signal, AbortSignal.timeout(this.timeoutMs)),
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${this.accessCode}`,
+    return withRequestDeadline(
+      async (requestSignal) => {
+        const response = await this.fetcher(`${this.baseUrl}${path}`, {
+          ...init,
+          signal: requestSignal,
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${this.accessCode}`,
+          },
+        });
+
+        if (!response.ok) {
+          throw new SyncMonitorRequestError(response, await readErrorDetail(response));
+        }
+
+        return response.json() as Promise<T>;
       },
-    });
-
-    if (!response.ok) {
-      throw new SyncMonitorRequestError(response, await readErrorDetail(response));
-    }
-
-    return response.json() as Promise<T>;
+      signal,
+      this.timeoutMs,
+    );
   }
 }
 
@@ -373,22 +381,6 @@ function hasErrorMessage(value: unknown): value is { error: string } {
     "error" in value &&
     typeof value.error === "string"
   );
-}
-
-/** Merges abort signals so a caller's cancel and the request timeout both apply. */
-function combineSignals(...signals: (AbortSignal | undefined)[]): AbortSignal {
-  const active = signals.filter((signal): signal is AbortSignal => Boolean(signal));
-  if (active.length === 1) return active[0]!;
-
-  const controller = new AbortController();
-  for (const signal of active) {
-    if (signal.aborted) {
-      controller.abort(signal.reason);
-      break;
-    }
-    signal.addEventListener("abort", () => controller.abort(signal.reason), { once: true });
-  }
-  return controller.signal;
 }
 
 async function readErrorDetail(response: Response): Promise<string | null> {

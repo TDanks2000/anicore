@@ -10,6 +10,19 @@ afterEach(() => {
 });
 
 describe("anime api", () => {
+  test("caller cancellation aborts catalogue reads", async () => {
+    globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const signal = init!.signal!;
+      return new Promise<Response>((_, reject) => {
+        signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+      });
+    }) as typeof fetch;
+    const caller = new AbortController();
+    const request = fetchAnimeList("http://localhost:3000", DEFAULT_ANIME_QUERY, caller.signal);
+    caller.abort();
+    await expect(request).rejects.toMatchObject({ name: "AbortError" });
+  });
+
   test("builds list params, omitting empty filters and mapping the page to an offset", () => {
     const params = buildAnimeListParams({
       ...DEFAULT_ANIME_QUERY,
@@ -45,7 +58,9 @@ describe("anime api", () => {
 
     const result = await fetchAnimeList("http://localhost:3000/", DEFAULT_ANIME_QUERY);
 
-    expect(requestedUrl).toBe("http://localhost:3000/anime?limit=50&offset=0&sort=id&order=asc");
+    expect(requestedUrl).toBe(
+      "http://localhost:3000/anime?limit=50&offset=0&sort=id&order=asc&projection=summary",
+    );
     expect(result.total).toBe(42);
     expect(result.items).toHaveLength(1);
   });

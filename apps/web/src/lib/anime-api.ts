@@ -1,3 +1,4 @@
+import { withRequestDeadline } from "@anicore/sync-monitor/request";
 import type { AnimeCatalogQuery } from "./anime-query";
 
 /**
@@ -235,14 +236,16 @@ function readTotal(response: Response): number | null {
 }
 
 async function getJson<T>(url: string, signal?: AbortSignal): Promise<T> {
-  const response = await fetch(url, {
-    signal,
-    headers: { Accept: "application/json" },
-  });
-  if (!response.ok) {
-    throw new Error(await readErrorMessage(response));
-  }
-  return (await response.json()) as T;
+  return withRequestDeadline(async (requestSignal) => {
+    const response = await fetch(url, {
+      signal: requestSignal,
+      headers: { Accept: "application/json" },
+    });
+    if (!response.ok) {
+      throw new Error(await readErrorMessage(response));
+    }
+    return (await response.json()) as T;
+  }, signal);
 }
 
 export async function fetchAnimeList(
@@ -252,17 +255,20 @@ export async function fetchAnimeList(
 ): Promise<AnimeListResponse> {
   const base = baseUrl.replace(/\/+$/, "");
   const params = buildAnimeListParams(query);
-  const response = await fetch(`${base}/anime?${params.toString()}`, {
-    signal,
-    headers: { Accept: "application/json" },
-  });
+  params.set("projection", "summary");
+  return withRequestDeadline(async (requestSignal) => {
+    const response = await fetch(`${base}/anime?${params.toString()}`, {
+      signal: requestSignal,
+      headers: { Accept: "application/json" },
+    });
 
-  if (!response.ok) {
-    throw new Error(await readErrorMessage(response));
-  }
+    if (!response.ok) {
+      throw new Error(await readErrorMessage(response));
+    }
 
-  const items = (await response.json()) as AnimeListItem[];
-  return { items, total: readTotal(response) };
+    const items = (await response.json()) as AnimeListItem[];
+    return { items, total: readTotal(response) };
+  }, signal);
 }
 
 export function fetchAnimeFull(
@@ -272,6 +278,28 @@ export function fetchAnimeFull(
 ): Promise<AnimeFull> {
   const base = baseUrl.replace(/\/+$/, "");
   return getJson<AnimeFull>(`${base}/anime/${animeId}/full`, signal);
+}
+
+export function fetchCatalogueRevision(
+  baseUrl: string,
+  signal?: AbortSignal,
+): Promise<{ revision: number }> {
+  return getJson(`${baseUrl.replace(/\/+$/, "")}/anime/revision`, signal);
+}
+
+export interface ProviderFreshness {
+  stage: string;
+  successAt: number | null;
+  nextDueAt: number | null;
+  retryAt: number | null;
+  failures: number;
+}
+export function fetchProviderFreshness(
+  baseUrl: string,
+  animeId: number,
+  signal?: AbortSignal,
+): Promise<ProviderFreshness[]> {
+  return getJson(`${baseUrl.replace(/\/+$/, "")}/anime/${animeId}/freshness`, signal);
 }
 
 export function fetchAnimeLanguageStatus(

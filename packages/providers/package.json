@@ -33,7 +33,8 @@
     "./lib/logger": "./src/lib/logger.ts",
     "./lib/proxy": "./src/lib/proxy.ts",
     "./lib/slug": "./src/lib/slug.ts",
-    "./lib/sync-engine": "./src/lib/sync-engine.ts"
+    "./lib/sync-engine": "./src/lib/sync-engine.ts",
+    "./lib/stage-state": "./src/lib/stage-state.ts"
   },
   "scripts": {
     "test": "bun test",

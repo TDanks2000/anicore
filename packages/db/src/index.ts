@@ -30,6 +30,9 @@ const schema = {
 
 let clientInstance: Client | null = null;
 let dbInstance: ReturnType<typeof createDb> | null = null;
+let readiness: Promise<void> | null = null;
+let readClientInstance: Client | null = null;
+let readDbInstance: ReturnType<typeof createDb> | null = null;
 
 /**
  * Retries an operation that failed because another connection holds the
@@ -79,6 +82,7 @@ class AsyncLock {
  * the global `db` rather than `tx`, bypasses it instead of deadlocking.
  */
 const processLock = new AsyncLock();
+const readLock = new AsyncLock();
 const insideTransaction = new AsyncLocalStorage<boolean>();
 
 async function withProcessLock<T>(operation: () => Promise<T>): Promise<T> {
@@ -141,6 +145,7 @@ function getClient(): Client {
     mkdirSync(dirname(path), { recursive: true });
     const raw = createClient({ url });
     const ready = prepareDatabase(raw);
+    readiness = ready;
     // Surface failures through the first query rather than as an unhandled rejection.
     ready.catch(() => {});
     clientInstance = wrapClient(raw, ready);
@@ -202,6 +207,59 @@ export const db = new Proxy({} as ReturnType<typeof createDb>, {
 });
 
 export type Db = typeof db;
+
+/** Independent, serialized read connection; the write client's safeguards remain intact. */
+function getReadDb() {
+  if (!readDbInstance) {
+    getClient();
+    const raw = createClient({ url: getDatabaseConfig().url });
+    const ready = readiness!.then(() => raw.execute("PRAGMA query_only = ON"));
+    ready.catch(() => {});
+    readClientInstance = raw;
+    const client = new Proxy(raw, {
+      get(target, property) {
+        if (property !== "execute") {
+          if (["transaction", "batch", "migrate", "executeMultiple"].includes(String(property))) {
+            return () => {
+              throw new Error("Read connection only supports SELECT statements");
+            };
+          }
+          const value = Reflect.get(target, property, target);
+          return typeof value === "function" ? value.bind(target) : value;
+        }
+        return async (
+          statement: string | { sql: string; args?: import("@libsql/client").InArgs },
+        ) => {
+          const text = typeof statement === "string" ? statement : statement.sql;
+          if (!/^\s*select\b/i.test(text))
+            throw new Error("Read connection only supports SELECT statements");
+          await ready;
+          const started = performanceEnabled() ? performance.now() : null;
+          const release = await readLock.acquire();
+          if (started !== null) recordDuration("db.read_lock_wait", performance.now() - started);
+          const executing = performanceEnabled() ? performance.now() : null;
+          try {
+            return await retryWhileBusy(() => raw.execute(statement));
+          } finally {
+            if (executing !== null)
+              recordDuration("db.read_execute", performance.now() - executing);
+            release();
+          }
+        };
+      },
+    });
+    readDbInstance = drizzle(client, { schema });
+  }
+  return readDbInstance;
+}
+
+export const readDb = new Proxy({} as ReturnType<typeof createDb>, {
+  get(_target, property) {
+    const instance = getReadDb();
+    const value = Reflect.get(instance, property, instance);
+    return typeof value === "function" ? value.bind(instance) : value;
+  },
+});
 export interface SyncLease {
   release(succeeded?: boolean): Promise<void>;
 }
@@ -321,6 +379,10 @@ export async function tryAcquireSyncLease(): Promise<SyncLease | null> {
 
 export async function closeDb(): Promise<void> {
   flushPerformanceMetrics();
+  readClientInstance?.close();
+  readClientInstance = null;
+  readDbInstance = null;
+  readiness = null;
   if (!clientInstance) return;
   clientInstance.close();
   clientInstance = null;

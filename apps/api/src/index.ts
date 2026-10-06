@@ -1,6 +1,7 @@
 import { assertDatabaseConfigured, closeDb } from "@anicore/db";
 import { installProxyFetch } from "@anicore/providers/lib/proxy";
 import { app } from "./app";
+import { startAuditScheduler } from "./lib/audit-scheduler";
 import { startAutomaticSyncScheduler } from "./lib/automatic-sync";
 import { stopApiStartedSyncProcess } from "./lib/sync-process";
 
@@ -20,6 +21,7 @@ const hostname = process.env.HOST ?? "localhost";
 
 app.listen({ hostname, port });
 const automaticSyncScheduler = startAutomaticSyncScheduler();
+const auditScheduler = startAuditScheduler();
 let shuttingDown = false;
 
 async function shutdown(signal: "SIGINT" | "SIGTERM"): Promise<void> {
@@ -31,6 +33,7 @@ async function shutdown(signal: "SIGINT" | "SIGTERM"): Promise<void> {
   try {
     await app.stop();
     await stopApiStartedSyncProcess();
+    await auditScheduler.stop();
     await closeDb();
     process.exit(0);
   } catch (error) {

@@ -15,6 +15,28 @@ import {
   syncRunStatuses,
 } from "./enums";
 
+export const syncStageState = sqliteTable(
+  "sync_stage_state",
+  {
+    key: text("key").primaryKey(),
+    anilistId: integer("anilist_id").notNull(),
+    stage: text("stage").notNull(),
+    successAt: integer("success_at"),
+    nextDueAt: integer("next_due_at"),
+    attemptedAt: integer("attempted_at").notNull(),
+    retryAt: integer("retry_at"),
+    failures: integer("failures").notNull().default(0),
+    error: text("error"),
+    payloadJson: text("payload_json"),
+  },
+  (table) => [index("sync_stage_anilist_idx").on(table.anilistId)],
+);
+
+export const catalogueRevision = sqliteTable("catalogue_revision", {
+  id: integer("id").primaryKey(),
+  revision: integer("revision").notNull().default(0),
+});
+
 export const anime = sqliteTable(
   "anime",
   {
@@ -81,6 +103,25 @@ export const anime = sqliteTable(
     startDateIdx: index("anime_start_date_idx").on(table.startDate),
     trendingIdx: index("anime_trending_idx").on(table.trending),
     meanScoreIdx: index("anime_mean_score_idx").on(table.meanScore),
+    catalogueTitleIdx: index("anime_catalogue_title_idx").on(
+      sql`lower(${table.titleRomaji})`,
+      table.id,
+    ),
+    // A compact covering index lets deep ID pages skip rows without loading descriptions.
+    catalogueIdIdx: index("anime_catalogue_id_idx").on(table.id),
+    catalogueScoreIdx: index("anime_catalogue_score_idx").on(
+      sql`${table.averageScore} desc`,
+      table.id,
+    ),
+    cataloguePopularityIdx: index("anime_catalogue_popularity_idx").on(
+      sql`${table.popularity} desc`,
+      table.id,
+    ),
+    catalogueFormatScoreIdx: index("anime_catalogue_format_score_idx").on(
+      table.format,
+      sql`${table.averageScore} desc`,
+      table.id,
+    ),
   }),
 );
 

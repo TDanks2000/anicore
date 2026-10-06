@@ -1,4 +1,4 @@
-import { db } from "@anicore/db";
+import { db, readDb } from "@anicore/db";
 import type { EpisodeKind } from "@anicore/db/enums";
 import { syncAnimeLanguageEvidenceFromEpisodeStatuses } from "@anicore/db/language-status";
 import { episodeLanguageStatus, episodes } from "@anicore/db/schema";
@@ -21,7 +21,7 @@ import {
 } from "../mappings/mappings.service";
 
 export async function listEpisodes(query: { limit: number; offset: number }) {
-  return db
+  return readDb
     .select()
     .from(episodes)
     .orderBy(asc(episodes.id))
@@ -30,13 +30,13 @@ export async function listEpisodes(query: { limit: number; offset: number }) {
 }
 
 export async function getEpisode(id: number) {
-  const [row] = await db.select().from(episodes).where(eq(episodes.id, id)).limit(1);
+  const [row] = await readDb.select().from(episodes).where(eq(episodes.id, id)).limit(1);
   if (!row) throw notFound("Episode not found");
   return row;
 }
 
 function listLanguageStatusesForEpisode(episode: { animeId: number; number: number }) {
-  return db
+  return readDb
     .select()
     .from(episodeLanguageStatus)
     .where(

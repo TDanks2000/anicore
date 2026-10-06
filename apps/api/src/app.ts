@@ -90,7 +90,7 @@ export const app = new Elysia()
       methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       // The dashboard reads list totals from this header, so browsers must be
       // allowed to expose it on cross-origin reads.
-      exposeHeaders: ["X-Total-Count"],
+      exposeHeaders: ["X-Total-Count", "X-Next-Cursor"],
       credentials: false,
       preflight: true,
     }),

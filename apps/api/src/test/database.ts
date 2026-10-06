@@ -33,8 +33,9 @@ export async function resetTestDatabase(): Promise<void> {
   await prepareTestDatabase();
   const tables = await db.all<{ name: string }>(sql`
     select name
-    from sqlite_master
+    from pragma_table_list
     where type = 'table'
+      and schema = 'main'
       and name not glob 'sqlite_*'
       and name <> '__drizzle_migrations'
   `);

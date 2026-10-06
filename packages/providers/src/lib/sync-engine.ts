@@ -47,6 +47,8 @@ class AdaptiveController {
     private readonly failureThreshold = 0.25,
     private readonly backoffBatches = 10,
   ) {
+    if (!Number.isInteger(maxConcurrency) || maxConcurrency < 1 || maxConcurrency > 32)
+      throw new RangeError("Sync concurrency must be between 1 and 32");
     this._concurrency = maxConcurrency;
   }
 
@@ -62,6 +64,8 @@ class AdaptiveController {
   }
 
   setMaxConcurrency(nextMax: number): boolean {
+    if (!Number.isInteger(nextMax) || nextMax < 1 || nextMax > 32)
+      throw new RangeError("Sync concurrency must be between 1 and 32");
     const normalized = Math.max(1, Math.floor(nextMax));
     if (normalized === this.maxConcurrency) return false;
 
@@ -105,7 +109,15 @@ export class SyncEngine {
   /** Per-plugin sets of AniList IDs that previously had no match. */
   readonly unmatchedSets: Map<string, Set<number>>;
 
-  constructor(readonly plugins: ProviderPlugin[]) {
+  constructor(
+    readonly plugins: ProviderPlugin[],
+    private readonly runStage?: <T>(
+      id: number,
+      name: string,
+      data: ProviderAnimeData,
+      operation: () => Promise<T>,
+    ) => Promise<T>,
+  ) {
     this.unmatchedSets = new Map(plugins.map((p) => [p.name, loadUnmatched(p.name)]));
   }
 
@@ -128,7 +140,15 @@ export class SyncEngine {
       active.map(async (p) => {
         const started = performanceEnabled() ? performance.now() : null;
         try {
-          return await p.sync(String(id), anilistData);
+          const operation = async () => {
+            const result = await p.sync(String(id), anilistData);
+            if (result.status === "error")
+              throw new Error(result.message ?? "Provider returned an error");
+            return result;
+          };
+          return this.runStage
+            ? await this.runStage(id, p.name, anilistData, operation)
+            : await p.sync(String(id), anilistData);
         } finally {
           if (started !== null)
             recordDuration(`sync.provider.${p.name}`, performance.now() - started);
@@ -277,8 +297,9 @@ export class SyncEngine {
 
   /**
    * Parallel iteration — fetches up to `concurrency` IDs simultaneously, then
-   * processes (upserts + plugins) each sequentially once the whole batch is
-   * fetched. Sleeps `batchSize × rateLimitMs` from the batch start so the
+   * processes (upserts + plugins) each sequentially as its fetch becomes ready.
+   * The remaining fetches form a bounded queue. Sleeps for the counted fetch
+   * budget from the batch start so the
    * total request budget stays within the AniList rate limit regardless of how
    * fast the fetches resolve.
    *
@@ -289,6 +310,7 @@ export class SyncEngine {
   async iterateParallel<TFetched>(
     options: IterateOptions & {
       concurrency: number;
+      getFetchBudgetCost?: (id: number) => number;
       rateLimitMs?: number;
       getRateLimitMs?: () => number | Promise<number>;
       getConcurrency?: () => number | Promise<number>;
@@ -333,6 +355,7 @@ export class SyncEngine {
       onBatchEnd,
       onConcurrencyChange,
       beforeBatch,
+      getFetchBudgetCost,
     } = options;
 
     const bar = log.progress(endIndex - startIndex, label);
@@ -391,12 +414,18 @@ export class SyncEngine {
           );
         }
       };
-      const fetchResults = await Promise.allSettled(
-        batchIds.map((id, j) => fetchFn(id, batchIndices[j]!, (kind) => recordFetchIssue(j, kind))),
-      );
-
-      for (let j = 0; j < fetchResults.length; j++) {
-        const result = fetchResults[j]!;
+      // Bounded prefetch window: consume in checkpoint order as soon as each
+      // item is ready, while the remaining network requests continue.
+      const fetchResults = batchIds.map(async (id, j): Promise<PromiseSettledResult<TFetched>> => {
+        let result: PromiseSettledResult<TFetched>;
+        try {
+          result = {
+            status: "fulfilled",
+            value: await fetchFn(id, batchIndices[j]!, (kind) => recordFetchIssue(j, kind)),
+          };
+        } catch (reason) {
+          result = { status: "rejected", reason };
+        }
         if (result.status === "rejected") {
           if (!issueReported.has(j)) {
             const enteredBackoff = ctrl.record(
@@ -415,13 +444,16 @@ export class SyncEngine {
         } else if (!issueReported.has(j)) {
           ctrl.record("ok");
         }
-      }
+        return result;
+      });
 
       // Phase 2: sequential DB upsert + downstream sync
+      let fetchBudgetCost = 0;
       for (let j = 0; j < batchIds.length; j++) {
         const id = batchIds[j]!;
         const idx = batchIndices[j]!;
-        const fetched = fetchResults[j]!;
+        const fetched = await fetchResults[j]!;
+        fetchBudgetCost += Math.max(0, getFetchBudgetCost?.(id) ?? 1);
         let outcome: SyncOutcome;
         let extra: Record<string, number> | undefined;
 
@@ -457,7 +489,7 @@ export class SyncEngine {
       if (i < endIndex) {
         // Budget: batchSize fetches × rateLimitMs each, counting from batch start
         const elapsed = Date.now() - batchStart;
-        const sleepMs = Math.max(0, batchIds.length * activeRateLimitMs - elapsed);
+        const sleepMs = Math.max(0, fetchBudgetCost * activeRateLimitMs - elapsed);
         if (sleepMs > 0) {
           bar.setStage(`waiting ${(sleepMs / 1000).toFixed(1)}s… (${ctrl.statusLabel})`);
           await Bun.sleep(sleepMs);

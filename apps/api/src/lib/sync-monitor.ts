@@ -1,13 +1,5 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import {
-  appendFileSync,
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import type {
   SyncMonitorBatch,
   SyncMonitorControlCommand,
@@ -27,6 +19,7 @@ import {
 } from "@anicore/sync-monitor";
 import { isRetryableFileError, atomicWriteJson as writeJson } from "./atomic-write-json";
 import { readEventTail } from "./event-tail";
+import { appendRotatingLog } from "./rotating-log";
 
 export type {
   SyncMonitorAutomationStatus,
@@ -474,8 +467,18 @@ export function readSyncMonitorStatus(): SyncMonitorStatus | null {
   }
 }
 
+let eventTailCache: { key: string; events: SyncMonitorEvent[] } | null = null;
 export function readSyncMonitorEvents(limit = 100): SyncMonitorEvent[] {
   const boundedLimit = Number.isFinite(limit) ? Math.max(1, Math.min(Math.floor(limit), 500)) : 100;
+  let key: string;
+  try {
+    const stat = statSync(eventsFile(), { bigint: true });
+    key = `${eventsFile()}|${boundedLimit}|${stat.ino}|${stat.size}|${stat.mtimeNs}|${stat.ctimeNs}`;
+  } catch {
+    eventTailCache = null;
+    return [];
+  }
+  if (eventTailCache?.key === key) return eventTailCache.events.map((event) => ({ ...event }));
   const text = readEventTail(eventsFile(), boundedLimit, MAX_EVENT_LINE_BYTES);
   if (!text) return [];
 
@@ -490,7 +493,8 @@ export function readSyncMonitorEvents(limit = 100): SyncMonitorEvent[] {
       // Ignore partial lines left by interrupted writes.
     }
   }
-  return events;
+  eventTailCache = { key, events };
+  return events.map((event) => ({ ...event }));
 }
 
 export function appendSyncMonitorEvent(
@@ -499,8 +503,25 @@ export function appendSyncMonitorEvent(
   extra: Omit<SyncMonitorEvent, "at" | "level" | "message"> = {},
 ): void {
   ensureMonitorDir();
-  const event: SyncMonitorEvent = { at: nowIso(), level, message, ...extra };
-  appendFileSync(eventsFile(), `${JSON.stringify(event)}\n`);
+  const event: SyncMonitorEvent = {
+    at: nowIso(),
+    level,
+    message: message.slice(0, 8000),
+    ...extra,
+  };
+  let serialized = JSON.stringify(event);
+  while (Buffer.byteLength(serialized) > MAX_EVENT_LINE_BYTES && event.message.length > 0) {
+    event.message = event.message.slice(0, Math.floor(event.message.length / 2));
+    serialized = JSON.stringify(event);
+  }
+  if (Buffer.byteLength(serialized) > MAX_EVENT_LINE_BYTES) {
+    serialized = JSON.stringify({
+      at: event.at,
+      level,
+      message: "Oversized monitor event metadata omitted",
+    });
+  }
+  appendRotatingLog(eventsFile(), `${serialized}\n`);
 }
 
 export class SyncMonitor {

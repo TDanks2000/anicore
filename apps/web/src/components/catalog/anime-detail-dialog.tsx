@@ -2,6 +2,7 @@ import { CircleAlert, ExternalLink, X } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 
 import { AnimeCover } from "@/components/catalog/anime-cover";
+import { ProviderFreshnessPanel } from "@/components/catalog/provider-freshness";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -58,13 +59,15 @@ export function AnimeDetailDialog({
   anime,
   apiUrl,
   onClose,
+  revision,
 }: {
   anime: AnimeListItem | null;
   apiUrl: string;
   onClose: () => void;
+  revision?: string | null;
 }) {
   const animeId = anime?.id ?? null;
-  const { data, loading, error, retry } = useAnimeDetail(apiUrl, animeId);
+  const { data, loading, error, retry } = useAnimeDetail(apiUrl, animeId, revision);
   const [language, setLanguage] = useState("en");
   const { toast } = useToast();
 
@@ -79,7 +82,8 @@ export function AnimeDetailDialog({
     }
   }, [animeId, error, toast]);
 
-  const full = data?.full ?? null;
+  const full = data?.full.id === animeId ? data.full : null;
+  const shownAnime = full ?? anime;
   const episodeStatuses = data?.language.episodes ?? [];
   const languageEvidence = data?.language.evidence ?? [];
   const languages = useMemo(
@@ -116,35 +120,39 @@ export function AnimeDetailDialog({
       {anime ? (
         <div className={cn("flex flex-col", PANEL_HEIGHT)}>
           <header className="flex items-start gap-4 border-b border-border p-5">
-            <AnimeCover item={anime} className="h-28 w-20 rounded-lg" iconClassName="size-5" />
+            <AnimeCover
+              item={shownAnime!}
+              className="h-28 w-20 rounded-lg"
+              iconClassName="size-5"
+            />
             <div className="min-w-0 flex-1">
               <h2
                 id="anime-detail-title"
                 className="text-lg font-semibold leading-tight tracking-tight"
               >
-                {anime.titleRomaji}
+                {shownAnime!.titleRomaji}
               </h2>
-              <TitleAlternates anime={anime} />
+              <TitleAlternates anime={shownAnime!} />
               <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-                {anime.format ? (
-                  <Badge variant={animeFormatVariant(anime.format)}>
-                    {animeFormatLabel(anime.format)}
+                {shownAnime!.format ? (
+                  <Badge variant={animeFormatVariant(shownAnime!.format)}>
+                    {animeFormatLabel(shownAnime!.format)}
                   </Badge>
                 ) : null}
-                {anime.status ? (
-                  <Badge variant={animeStatusVariant(anime.status)}>
-                    {animeStatusLabel(anime.status)}
+                {shownAnime!.status ? (
+                  <Badge variant={animeStatusVariant(shownAnime!.status)}>
+                    {animeStatusLabel(shownAnime!.status)}
                   </Badge>
                 ) : null}
-                {anime.season || anime.seasonYear !== null ? (
+                {shownAnime!.season || shownAnime!.seasonYear !== null ? (
                   <Badge variant="outline">
-                    {formatSeasonYear(anime.season, anime.seasonYear)}
+                    {formatSeasonYear(shownAnime!.season, shownAnime!.seasonYear)}
                   </Badge>
                 ) : null}
-                {anime.episodeCount !== null ? (
-                  <Badge variant="outline">{anime.episodeCount} episodes</Badge>
+                {shownAnime!.episodeCount !== null ? (
+                  <Badge variant="outline">{shownAnime!.episodeCount} episodes</Badge>
                 ) : null}
-                <ScoreChip score={anime.averageScore} />
+                <ScoreChip score={shownAnime!.averageScore} />
               </div>
             </div>
             <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close details">
@@ -171,6 +179,7 @@ export function AnimeDetailDialog({
                   </div>
                 ) : null}
                 <Synopsis description={full.description} />
+                <ProviderFreshnessPanel apiUrl={apiUrl} animeId={full.id} revision={revision} />
 
                 <dl className="grid grid-cols-2 gap-x-6 gap-y-3 rounded-lg border border-border bg-muted/20 p-4 sm:grid-cols-4">
                   <Fact

@@ -123,6 +123,7 @@ export async function syncDubStatusForAnime(animeId: number): Promise<DubSyncRes
 /** Providers fail independently so a schedule outage cannot suppress cast evidence. */
 export async function syncLanguageStatusForAnime(
   animeId: number,
+  runStage?: <T>(name: string, operation: () => Promise<T>) => Promise<T>,
 ): Promise<{ errors: string[]; warnings: string[] }> {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -135,7 +136,11 @@ export async function syncLanguageStatusForAnime(
     ["kitsu-languages", syncKitsuLanguages],
   ] as const) {
     try {
-      await sync(animeId);
+      const operation = async () => {
+        await sync(animeId);
+      };
+      if (runStage) await runStage(name, operation);
+      else await operation();
     } catch (error) {
       // The cooldown was already announced once; repeating it per anime is noise.
       if (error instanceof JikanCircuitOpenError) continue;

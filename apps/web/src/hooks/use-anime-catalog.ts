@@ -11,9 +11,12 @@ import {
   DEFAULT_ANIME_QUERY,
   toggleAnimeSort,
 } from "@/lib/anime-query";
+import { DetailCache } from "@/lib/detail-cache";
 import { useDebouncedValue } from "./use-debounced-value";
 
 const SEARCH_DEBOUNCE_MS = 300;
+const PAGE_TTL_MS = 30_000;
+const MAX_CACHED_PAGES = 20;
 
 interface CatalogData {
   key: string;
@@ -22,10 +25,9 @@ interface CatalogData {
 }
 
 /**
- * Fetches one page of the anime catalog. Search is debounced; while a keystroke
- * is settling no request is sent, and when the effective query changes the old
- * rows are treated as stale so the table can show skeletons instead of data
- * that no longer matches the controls.
+ * Keeps a bounded cache of pages for 30 seconds, then refreshes visible pages
+ * while retaining their rows. Search is debounced and cached rows only appear
+ * when their query and server match the current controls.
  */
 export function useAnimeCatalog(baseUrl: string) {
   const [query, setQuery] = useState<AnimeCatalogQuery>(DEFAULT_ANIME_QUERY);
@@ -45,34 +47,53 @@ export function useAnimeCatalog(baseUrl: string) {
   const [fetching, setFetching] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
   const generation = useRef(0);
+  const cache = useRef(new DetailCache<CatalogData>(PAGE_TTL_MS, MAX_CACHED_PAGES));
 
   useEffect(() => {
+    const gen = ++generation.current;
     if (settling) return;
 
-    const controller = new AbortController();
-    const gen = ++generation.current;
-    setFetching(true);
-    setError(null);
-
-    fetchAnimeList(baseUrl, effectiveQuery, controller.signal)
-      .then((response) => {
-        if (gen !== generation.current) return;
-        setData({ ...response, key: requestKey });
-      })
-      .catch((err: unknown) => {
-        if (controller.signal.aborted || gen !== generation.current) return;
-        setError(err instanceof Error ? err.message : String(err));
-      })
-      .finally(() => {
-        if (gen === generation.current) setFetching(false);
-      });
-
-    return () => controller.abort();
+    let controller: AbortController | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let cancelled = false;
+    const load = async () => {
+      if (cancelled) return;
+      const cached = cache.current.get(requestKey);
+      if (cached) setData(cached.value);
+      setError(null);
+      setFetching(!cached?.fresh);
+      if (!cached?.fresh) {
+        controller = new AbortController();
+        try {
+          const response = await fetchAnimeList(baseUrl, effectiveQuery, controller.signal);
+          if (cancelled || gen !== generation.current) return;
+          const next = { ...response, key: requestKey };
+          cache.current.set(requestKey, next);
+          setData(next);
+        } catch (err) {
+          if (cancelled || gen !== generation.current) return;
+          setError(err instanceof Error ? err.message : String(err));
+        } finally {
+          if (!cancelled && gen === generation.current) setFetching(false);
+        }
+      }
+      if (!cancelled) timer = setTimeout(() => void tick(), PAGE_TTL_MS);
+    };
+    const tick = () => {
+      if (document.hidden) timer = setTimeout(() => void tick(), PAGE_TTL_MS);
+      else void load();
+    };
+    void load();
+    return () => {
+      cancelled = true;
+      controller?.abort();
+      if (timer) clearTimeout(timer);
+    };
   }, [baseUrl, effectiveQuery, requestKey, reloadToken, settling]);
 
-  const rows = data?.items ?? [];
-  const total = data?.total ?? null;
-  const ready = data !== null && data.key === requestKey;
+  const ready = !settling && data !== null && data.key === requestKey;
+  const rows = ready ? data.items : [];
+  const total = ready ? data.total : null;
   const loading = (fetching || settling) && !ready;
   const refreshing = fetching && ready;
 
@@ -101,6 +122,9 @@ export function useAnimeCatalog(baseUrl: string) {
   }, []);
 
   const refresh = useCallback(() => {
+    // The underlying catalogue may have changed; revisiting other pages must
+    // not reuse a snapshot that predates this explicit refresh.
+    cache.current.invalidateAll();
     setReloadToken((token) => token + 1);
   }, []);
 

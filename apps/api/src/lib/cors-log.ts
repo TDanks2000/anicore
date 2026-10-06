@@ -1,6 +1,6 @@
-import { appendFileSync, mkdirSync } from "node:fs";
-import { dirname, isAbsolute, resolve } from "node:path";
+import { isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { appendRotatingLog } from "./rotating-log";
 
 /** Where CORS request lines are appended when ANICORE_CORS_LOG is unset. */
 export const DEFAULT_CORS_LOG_PATH = fileURLToPath(
@@ -25,8 +25,7 @@ export function logCors(line: string): void {
   console.log(line);
   try {
     const target = resolveCorsLogPath();
-    mkdirSync(dirname(target), { recursive: true });
-    appendFileSync(target, formatted, "utf8");
+    appendRotatingLog(target, formatted);
   } catch (error) {
     console.error("[cors] failed to write CORS log", error);
   }

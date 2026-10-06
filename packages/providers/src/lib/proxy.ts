@@ -334,6 +334,9 @@ export function installProxyFetch(): void {
   const rawFetch = globalThis.fetch.bind(globalThis);
 
   globalThis.fetch = (async (input: FetchInput, init?: FetchInit) => {
+    const caller = init?.signal ?? (input instanceof Request ? input.signal : undefined);
+    const budget = AbortSignal.timeout(30_000);
+    init = { ...init, signal: caller ? AbortSignal.any([caller, budget]) : budget };
     const settings = readProxySettings();
     if (settings.mode === "direct") return rawFetch(input, init);
     const configuredProxy =

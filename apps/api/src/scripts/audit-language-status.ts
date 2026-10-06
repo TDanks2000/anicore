@@ -1,6 +1,6 @@
 import { mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import { closeDb, db } from "@anicore/db";
+import { closeDb, readDb as db } from "@anicore/db";
 import {
   normalizeLanguageCode,
   resolveAnimeStatusFromEvidence,

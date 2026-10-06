@@ -1,8 +1,8 @@
 import { Activity, type LucideIcon, Moon, RefreshCw, Sun, Table2 } from "lucide-react";
-import { useEffect } from "react";
+import { lazy, useEffect } from "react";
 
-import { AnimeCatalogView } from "@/components/catalog/anime-catalog-view";
-import { type ConnectionDisplay, MonitorView } from "@/components/monitor/monitor-view";
+import { AsyncContent } from "@/components/async-content";
+import type { ConnectionDisplay } from "@/components/monitor/monitor-view";
 import { StatusDot } from "@/components/monitor/status-dot";
 import { Button } from "@/components/ui/button";
 import { useDashboardView } from "@/hooks/use-dashboard-view";
@@ -10,6 +10,13 @@ import { type ConnectionState, useSyncMonitor } from "@/hooks/use-sync-monitor";
 import { cn } from "@/lib/utils";
 import { type DashboardView, VIEW_HASHES } from "@/lib/views";
 import { useTheme } from "./theme-provider";
+
+const loadCatalog = () => import("@/components/catalog/anime-catalog-view");
+const loadMonitor = () => import("@/components/monitor/monitor-view");
+const AnimeCatalogView = lazy(() =>
+  loadCatalog().then((module) => ({ default: module.AnimeCatalogView })),
+);
+const MonitorView = lazy(() => loadMonitor().then((module) => ({ default: module.MonitorView })));
 
 const CONNECTION: Record<ConnectionState, ConnectionDisplay> = {
   idle: { label: "Idle", tone: "neutral", pulse: false },
@@ -98,11 +105,16 @@ export function App() {
       </header>
 
       <main className="mx-auto flex w-full max-w-[1920px] flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 xl:px-10">
-        {view === "monitor" ? (
-          <MonitorView monitor={monitor} connection={connection} />
-        ) : (
-          <AnimeCatalogView apiUrl={monitor.apiUrl} />
-        )}
+        <AsyncContent
+          key={view}
+          label={`Loading ${view === "monitor" ? "sync monitor" : "anime catalog"}…`}
+        >
+          {view === "monitor" ? (
+            <MonitorView monitor={monitor} connection={connection} />
+          ) : (
+            <AnimeCatalogView apiUrl={monitor.apiUrl} />
+          )}
+        </AsyncContent>
       </main>
     </div>
   );
@@ -124,6 +136,12 @@ function ViewLink({
   return (
     <a
       href={VIEW_HASHES[view]}
+      onPointerEnter={() => {
+        void (view === "catalog" ? loadCatalog() : loadMonitor()).catch(() => {});
+      }}
+      onFocus={() => {
+        void (view === "catalog" ? loadCatalog() : loadMonitor()).catch(() => {});
+      }}
       aria-current={active ? "page" : undefined}
       className={cn(
         "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-ring",

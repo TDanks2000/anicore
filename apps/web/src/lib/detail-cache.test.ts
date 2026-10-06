@@ -2,6 +2,18 @@ import { describe, expect, test } from "bun:test";
 import { DetailCache } from "./detail-cache";
 
 describe("detail cache", () => {
+  test("catalogue pages use their own limits and refreshing invalidates every page", () => {
+    const cache = new DetailCache<number>(30_000, 2);
+    cache.set("server#page1", 1, 1000);
+    cache.set("server#page2", 2, 1000);
+    expect(cache.get("server#page1", 30_999)?.fresh).toBe(true);
+    expect(cache.get("server#page1", 31_000)?.fresh).toBe(false);
+    cache.set("server#page3", 3, 31_000);
+    expect(cache.get("server#page2", 31_000)).toBeUndefined();
+    cache.invalidateAll();
+    expect(cache.get("server#page1", 31_000)).toEqual({ value: 1, fresh: false });
+    expect(cache.get("server#page3", 31_000)).toEqual({ value: 3, fresh: false });
+  });
   test("expires without losing the last good result; refresh restores freshness", () => {
     const cache = new DetailCache<string>();
     cache.set("server#1", "old", 1000);

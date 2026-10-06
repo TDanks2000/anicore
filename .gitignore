@@ -26,6 +26,8 @@ mapping-audit.json
 
 # Kitsu matching evaluation corpus/report artifacts
 data/eval/
+data/audits/
+apps/api/data/audits/
 apps/api/data/eval/
 
 # Scratch diagnostic output accidentally committed historically

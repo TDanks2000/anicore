@@ -47,6 +47,46 @@ describe("SyncEngine.syncPlugins", () => {
 });
 
 describe("SyncEngine.iterateParallel", () => {
+  test("rejects unbounded or invalid prefetch windows", async () => {
+    const engine = new SyncEngine([]);
+    for (const concurrency of [0, 33, Number.POSITIVE_INFINITY]) {
+      await expect(
+        engine.iterateParallel(
+          { ids: [1], startIndex: 0, endIndex: 1, label: "bounded", concurrency, rateLimitMs: 0 },
+          async () => 1,
+          async () => ({ outcome: "updated" }),
+        ),
+      ).rejects.toThrow("between 1 and 32");
+    }
+  });
+  test("processes in order while later bounded fetches are still pending", async () => {
+    const engine = new SyncEngine([]);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const processed: number[] = [];
+    await engine.iterateParallel(
+      {
+        ids: [1, 2],
+        startIndex: 0,
+        endIndex: 2,
+        label: "pipeline",
+        concurrency: 2,
+        rateLimitMs: 0,
+      },
+      async (id) => {
+        if (id === 2) await gate;
+        return id;
+      },
+      async (id) => {
+        processed.push(id);
+        if (id === 1) release();
+        return { outcome: "updated" };
+      },
+    );
+    expect(processed).toEqual([1, 2]);
+  });
   test("fetches a batch in parallel before processing it sequentially", async () => {
     const engine = new SyncEngine([]);
     const calls: string[] = [];

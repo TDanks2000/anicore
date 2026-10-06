@@ -1,4 +1,4 @@
-import { db } from "@anicore/db";
+import { type db, readDb } from "@anicore/db";
 import type { SQL } from "drizzle-orm";
 
 export type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -14,5 +14,5 @@ export type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
  * milliseconds, so row types should say `number` for those columns.
  */
 export async function queryRows<T>(query: SQL): Promise<T[]> {
-  return db.all<T>(query);
+  return readDb.all<T>(query);
 }

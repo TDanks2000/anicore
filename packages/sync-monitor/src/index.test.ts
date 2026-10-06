@@ -3,6 +3,27 @@ import { describe, expect, test } from "bun:test";
 import { SyncMonitorClient, SyncMonitorRequestError } from "./index";
 
 describe("SyncMonitorClient", () => {
+  test("keeps the deadline active when response headers arrive but the body stalls", async () => {
+    const fetcher = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const signal = init!.signal!;
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            signal.addEventListener("abort", () => controller.error(signal.reason), { once: true });
+          },
+        }),
+        { headers: { "Content-Type": "application/json" } },
+      );
+    }) as typeof fetch;
+    const client = new SyncMonitorClient({
+      baseUrl: "http://localhost:3000",
+      accessCode: "test",
+      timeoutMs: 10,
+      fetcher,
+    });
+    await expect(client.getSnapshot()).rejects.toMatchObject({ name: "TimeoutError" });
+  });
+
   test("includes API error details in rejected requests", async () => {
     const fetcher: typeof fetch = Object.assign(
       async () =>

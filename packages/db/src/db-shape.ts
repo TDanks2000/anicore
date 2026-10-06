@@ -1,5 +1,8 @@
 export const expectedTables = [
   "anime",
+  "anime_search",
+  "catalogue_revision",
+  "sync_stage_state",
   "anime_external_links",
   "anime_language_evidence",
   "anime_language_status",
@@ -18,6 +21,11 @@ export const expectedTables = [
 export const legacyTables = ["anime_studios", "anime_tags", "episode_audio_status"] as const;
 
 export const expectedIndexes = [
+  { tableName: "anime", indexName: "anime_catalogue_id_idx" },
+  { tableName: "anime", indexName: "anime_catalogue_title_idx" },
+  { tableName: "anime", indexName: "anime_catalogue_score_idx" },
+  { tableName: "anime", indexName: "anime_catalogue_popularity_idx" },
+  { tableName: "anime", indexName: "anime_catalogue_format_score_idx" },
   { tableName: "anime_mappings", indexName: "anime_mappings_provider_id_idx" },
   {
     tableName: "anime_language_status",

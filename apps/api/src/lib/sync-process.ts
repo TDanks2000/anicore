@@ -39,7 +39,7 @@ export function buildSyncStartArgs(options: SyncMonitorStartOptions = {}): strin
 }
 
 export function buildAutomaticSyncArgs(): string[] {
-  return ["--monitor", "--refresh-ids", "--from-index=0"];
+  return ["--monitor", "--refresh-ids", "--from-index=0", "--selective"];
 }
 
 export function hasApiStartedSyncProcess(): boolean {

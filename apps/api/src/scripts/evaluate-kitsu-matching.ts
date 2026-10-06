@@ -17,6 +17,7 @@ const DEFAULT_REPORT_PATH = "data/eval/kitsu-matching-report.json";
 const TOP_ABSTENTIONS_LIMIT = 20;
 
 export interface KitsuMatchingCorpusCase {
+  cohort?: string;
   hints: MatchHints;
   expectedKitsuId: string;
   candidates: KitsuSearchNode[];
@@ -39,6 +40,7 @@ export interface KitsuMatchingCorpus {
 export type CaseClassification = "correct" | "wrong" | "abstained";
 
 export interface GradedCase {
+  cohort?: string;
   classification: CaseClassification;
   /** False when the correct Kitsu record never appeared in the candidate list. */
   expectedReachable: boolean;
@@ -90,6 +92,7 @@ export interface AbstentionDetail {
 }
 
 export interface EvaluationReport {
+  byCohort: Array<Metrics & { cohort: string }>;
   ok: boolean;
   generatedAt: string;
   corpus: { generatedAt: string; seed: number; sampleSize: number };
@@ -148,6 +151,7 @@ export function gradeCase(testCase: KitsuMatchingCorpusCase): GradedCase {
 
   return {
     classification,
+    cohort: testCase.cohort,
     expectedReachable: expectedEntry !== null,
     format: normalizeFormatKey(testCase.hints.format),
     animeTitle: testCase.hints.titleRomaji,
@@ -249,12 +253,28 @@ export function passesMinPrecision(overall: Metrics, minPrecision: number | null
 export function buildEvaluationReport(
   corpus: KitsuMatchingCorpus,
   minPrecision: number | null,
+  cohortGate?: { minPrecision?: number; minCases?: number },
 ): EvaluationReport {
   const graded = corpus.cases.map(gradeCase);
   const overall = computeMetrics(graded);
+  const byCohort = [...new Set(graded.map((row) => row.cohort ?? row.format))]
+    .sort()
+    .map((cohort) => ({
+      cohort,
+      ...computeMetrics(graded.filter((row) => (row.cohort ?? row.format) === cohort)),
+    }));
 
   return {
-    ok: passesMinPrecision(overall, minPrecision),
+    ok:
+      passesMinPrecision(overall, minPrecision) &&
+      (!cohortGate ||
+        (byCohort.length > 0 &&
+          byCohort.every(
+            (group) =>
+              group.total >= (cohortGate.minCases ?? 0) &&
+              passesMinPrecision(group, cohortGate.minPrecision ?? null),
+          ))),
+    byCohort,
     generatedAt: new Date().toISOString(),
     corpus: {
       generatedAt: corpus.generatedAt,
@@ -270,6 +290,7 @@ export function buildEvaluationReport(
 }
 
 export interface EvaluateCommandOptions {
+  cohortGate?: { minPrecision?: number; minCases?: number };
   corpusPath: string;
   writePath: string | null;
   minPrecision: number | null;
@@ -284,9 +305,24 @@ export function parseEvaluateCommandArgs(
   let writePath: string | null = null;
   let minPrecision: number | null = null;
   let verbose = false;
+  let cohortGate: EvaluateCommandOptions["cohortGate"];
 
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index]!;
+    if (arg.startsWith("--min-cohort-precision=")) {
+      const value = Number(arg.slice("--min-cohort-precision=".length));
+      if (!Number.isFinite(value) || value < 0 || value > 1)
+        throw new Error("Cohort precision must be between 0 and 1");
+      cohortGate = { ...cohortGate, minPrecision: value };
+      continue;
+    }
+    if (arg.startsWith("--min-cohort-cases=")) {
+      const value = Number(arg.slice("--min-cohort-cases=".length));
+      if (!Number.isInteger(value) || value < 1)
+        throw new Error("Cohort cases must be a positive integer");
+      cohortGate = { ...cohortGate, minCases: value };
+      continue;
+    }
 
     if (arg.startsWith("--corpus=")) {
       const value = arg.slice("--corpus=".length).trim();
@@ -330,7 +366,7 @@ export function parseEvaluateCommandArgs(
     throw new Error(`Unknown evaluate-kitsu-matching argument: ${arg}`);
   }
 
-  return { corpusPath, writePath, minPrecision, verbose };
+  return { corpusPath, writePath, minPrecision, verbose, ...(cohortGate ? { cohortGate } : {}) };
 }
 
 function isValidCorpusCase(value: unknown): value is KitsuMatchingCorpusCase {
@@ -426,12 +462,12 @@ export function printReport(report: EvaluationReport, verbose: boolean): void {
 }
 
 async function main(): Promise<void> {
-  const { corpusPath, writePath, minPrecision, verbose } = parseEvaluateCommandArgs(
+  const { corpusPath, writePath, minPrecision, verbose, cohortGate } = parseEvaluateCommandArgs(
     Bun.argv.slice(2),
   );
 
   const corpus = await loadCorpus(corpusPath);
-  const report = buildEvaluationReport(corpus, minPrecision);
+  const report = buildEvaluationReport(corpus, minPrecision, cohortGate);
 
   printReport(report, verbose);
 

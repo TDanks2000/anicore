@@ -182,8 +182,22 @@ still merging shared metadata and applying authoritative removals. Anime refresh
 timestamps retain their previous behavior. The dashboard keeps up to 50 anime
 details per hook, considers them fresh for one minute, and revalidates expired
 details in the background while preserving the last loaded result on failure.
-Monitor event reads scan only a bounded tail, not the full history; oversized or
-malformed lines remain ignored. Log files themselves are not rotated automatically.
+Catalogue pages use a separate 20-page, 30-second cache with background refresh;
+manual Refresh invalidates all cached pages. Indexed substring search and common
+sorts preserve the existing matching and ordering rules. See the
+[catalogue benchmark results and migration tradeoffs](docs/catalogue-performance.md).
+Run `bun --cwd apps/api src/scripts/benchmark-catalogue.ts` for an isolated,
+temporary-database benchmark that never opens the application database.
+Dashboard views and the detail dialog load on demand, with view prefetch on
+navigation hover/focus. Catalogue/detail reads have the same 15-second deadline
+as monitor requests, including body consumption. See
+[dashboard bundle results and request reliability](docs/dashboard-performance.md).
+Monitor event reads use a bounded, file-change-cached tail; oversized or malformed
+lines remain ignored. Monitor/CORS logs rotate at approximately 5 MiB with three
+archives. The dashboard invalidates caches when metadata or language revisions
+change. See [the remaining improvement implementation and operational commands](docs/remaining-improvements.md)
+for independent reads, selective syncs, stage retries, audits, cursor pagination
+and verified backup/restore.
 
 ### Schema changes
 
@@ -292,7 +306,7 @@ Review each finding's sampled identities and provider evidence before choosing a
 
 ### Remote sync monitor
 
-When the API starts, it also starts AniCore's automatic sync scheduler. By default, the scheduler runs once every 24 hours, starts immediately when no recent run exists, refreshes the AniList ID list, and performs a real sync from index `0`. It never starts another process while a manual or automatic sync is active. Change the enabled state or interval from the dashboard's Runtime Config card; the settings persist in `data/sync-monitor/runtime-config.json`.
+When the API starts, it also starts AniCore's automatic sync scheduler. By default, the scheduler runs once every 24 hours, starts immediately when no recent run exists, refreshes the AniList ID list, and visits IDs from index `0` to refresh due provider stages. Selective runs perform a full reconciliation at least every 30 days after the last complete reconciliation. It never starts another process while a manual or automatic sync is active. Change the enabled state or interval from the dashboard's Runtime Config card; the settings persist in `data/sync-monitor/runtime-config.json`.
 
 The scheduler lives inside the API process, so keep `bun run dev` or `bun run start` running for unattended syncs. On shutdown, the API stops future scheduling, asks any sync child it started to stop gracefully, and terminates it if it does not respond within five seconds.
 

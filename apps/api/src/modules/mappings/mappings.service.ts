@@ -1,4 +1,4 @@
-import { db } from "@anicore/db";
+import { db, readDb } from "@anicore/db";
 import type { MappingSource, Provider } from "@anicore/db/enums";
 import {
   animeProviderMappings,
@@ -222,7 +222,7 @@ export async function insertEpisodeMappings(
 // ── Anime mappings ────────────────────────────────────────────────────────────
 
 export async function listAnimeMappings(animeId: number) {
-  return db
+  return readDb
     .select()
     .from(animeMappings)
     .where(eq(animeMappings.animeId, animeId))
@@ -234,7 +234,7 @@ export async function listAnimeMappings(animeId: number) {
  * AniList cours), with the episode ranges each anime occupies in them.
  */
 export async function listAnimeSegmentMappings(animeId: number) {
-  const rows = await db
+  const rows = await readDb
     .select({
       id: animeProviderMappings.id,
       provider: providerEntities.provider,
@@ -302,7 +302,7 @@ export async function listAnimeSegmentMappings(animeId: number) {
 }
 
 export async function findAnimeByMapping(identity: MappingIdentity) {
-  const [row] = await db
+  const [row] = await readDb
     .select({ mapping: animeMappings, anime })
     .from(animeMappings)
     .innerJoin(anime, eq(animeMappings.animeId, anime.id))
@@ -448,7 +448,7 @@ export async function deleteAnimeMapping(identity: MappingIdentity) {
 // ── Episode mappings ──────────────────────────────────────────────────────────
 
 export async function listEpisodeMappings(episodeId: number) {
-  return db
+  return readDb
     .select()
     .from(episodeMappings)
     .where(eq(episodeMappings.episodeId, episodeId))
@@ -456,7 +456,7 @@ export async function listEpisodeMappings(episodeId: number) {
 }
 
 export async function findEpisodeByMapping(identity: MappingIdentity) {
-  const [row] = await db
+  const [row] = await readDb
     .select({ mapping: episodeMappings, episode: episodes })
     .from(episodeMappings)
     .innerJoin(episodes, eq(episodeMappings.episodeId, episodes.id))

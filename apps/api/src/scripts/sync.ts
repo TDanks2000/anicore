@@ -21,6 +21,12 @@ import {
 import { log, type ProgressBar } from "@anicore/providers/lib/logger";
 import { installProxyFetch } from "@anicore/providers/lib/proxy";
 import {
+  hasFailedStages,
+  readStage,
+  refreshTtl,
+  runSyncStage,
+} from "@anicore/providers/lib/stage-state";
+import {
   type DryPluginEntry,
   type PerIdResult,
   SyncEngine,
@@ -67,6 +73,10 @@ const FROM_INDEX = readIntegerFlag("--from-index=", 0);
 const LIMIT = readIntegerFlag("--limit=", 1);
 const DEFAULT_PARALLEL = 4;
 const PARALLEL = readIntegerFlag("--parallel=", 1) ?? DEFAULT_PARALLEL;
+const SELECTIVE = flag("--selective");
+const RECONCILE = flag("--reconcile");
+const forceForId = new Map<number, boolean>();
+const requestedSourceIds = new Set<number>();
 
 function readIntegerFlag(prefix: string, minimum: number): number | undefined {
   try {
@@ -583,14 +593,28 @@ async function processFetchedAnime(
   monitor?: SyncMonitor | null,
 ): Promise<PerIdResult> {
   monitor?.stage("database-upsert", index, id);
-  const result = await upsertAnimeFromProvider(anilistData);
+  const force = forceForId.get(id) ?? true;
+  const ttl = refreshTtl(anilistData.status);
+  const result = await runSyncStage(
+    id,
+    "anime-upsert",
+    ttl,
+    () => upsertAnimeFromProvider(anilistData),
+    force,
+  );
 
   monitor?.stage("provider-plugins", index, id);
   await engine.syncPlugins(id, anilistData, bar);
 
   bar.setStage("episode-titles");
   monitor?.stage("episode-titles", index, id);
-  await enrichEpisodeTitlesForAnime(result.animeId, anilistData).catch((err) =>
+  await runSyncStage(
+    id,
+    "episode-titles",
+    ttl,
+    () => enrichEpisodeTitlesForAnime(result.animeId, anilistData),
+    force,
+  ).catch((err) =>
     log.warn(
       `Episode title enrichment failed for ID ${id}: ${err instanceof Error ? err.message : String(err)}`,
     ),
@@ -599,13 +623,17 @@ async function processFetchedAnime(
   bar.setStage("audio");
   monitor?.stage("audio-sub", index, id);
   monitor?.stage("audio-dub", index, id);
-  const languageSync = await syncLanguageStatusForAnime(result.animeId);
+  const languageSync = await syncLanguageStatusForAnime(result.animeId, (name, operation) =>
+    runSyncStage(id, `language:${name}`, refreshTtl(anilistData.status, true), operation, force),
+  );
   for (const error of languageSync.errors)
     log.warn(`Language status sync failed for ID ${id}: ${error}`);
   for (const warning of languageSync.warnings)
     log.warn(`Optional language provider for ID ${id}: ${warning}`);
+  if (languageSync.errors.length)
+    throw new Error(`Language sync failed: ${languageSync.errors.join("; ")}`);
 
-  return { outcome: result.created ? "created" : "updated" };
+  return { outcome: result.created && force ? "created" : "updated" };
 }
 
 async function main(): Promise<void> {
@@ -712,7 +740,20 @@ async function main(): Promise<void> {
     refreshRuntimeConfig(monitor);
   }
 
-  const engine = new SyncEngine(PLUGINS);
+  const reconciliation = await readStage(0, "reconciliation");
+  const fullReconciliation =
+    RECONCILE ||
+    (SELECTIVE &&
+      (!reconciliation?.successAt || Date.now() - reconciliation.successAt >= 30 * 24 * 3600_000));
+  const engine = new SyncEngine(PLUGINS, (id, name, data, operation) =>
+    runSyncStage(
+      id,
+      `provider:${name}`,
+      refreshTtl(data.status),
+      operation,
+      forceForId.get(id) ?? true,
+    ),
+  );
   let processedSinceCheckpoint = 0;
   let checkpointState = createSyncCheckpointState();
 
@@ -722,6 +763,8 @@ async function main(): Promise<void> {
     endIndex,
     label: "Sync",
     onAfterEach: async ({ stats: s, index }: { stats: SyncStats; index: number }) => {
+      forceForId.delete(ids[index]!);
+      requestedSourceIds.delete(ids[index]!);
       checkpointState = advanceSyncCheckpoint(progress, s, index, checkpointState);
       monitor?.update({ stats: formatMonitorStats(s), currentIndex: index });
       const checkpointEvery =
@@ -736,6 +779,7 @@ async function main(): Promise<void> {
   const stats = await engine.iterateParallel(
     {
       ...iterateOptions,
+      getFetchBudgetCost: (id: number) => (requestedSourceIds.has(id) ? 1 : 0),
       concurrency: initialRuntimeConfig.parallel,
       getRateLimitMs: monitor ? () => refreshRuntimeConfig(monitor).rateLimitMs : undefined,
       rateLimitMs: initialRuntimeConfig.rateLimitMs,
@@ -769,9 +813,32 @@ async function main(): Promise<void> {
     async (id, index, reportIssue) => {
       monitor?.stage("anilist-fetch", index, id);
       try {
-        return await withAnilistRetry(
-          () => fetchAnilistAnime(id),
-          () => reportIssue("rate-limit"),
+        const missing = (await lookupAnimeMapping("anilist", String(id))) === null;
+        const prior = await readStage(id, "anilist-fetch");
+        const recentlyMissing =
+          prior?.payloadJson === "null" &&
+          prior.failures === 0 &&
+          (prior.nextDueAt ?? 0) > Date.now();
+        const force =
+          RECONCILE ||
+          (missing && !recentlyMissing) ||
+          ((!SELECTIVE || fullReconciliation) && !(await hasFailedStages(id)));
+        forceForId.set(id, force);
+        return await runSyncStage(
+          id,
+          "anilist-fetch",
+          (data: ProviderAnimeData | null) => (data ? refreshTtl(data.status) : 30 * 24 * 3600_000),
+          () => {
+            requestedSourceIds.add(id);
+            return withAnilistRetry(
+              () => fetchAnilistAnime(id),
+              () => reportIssue("rate-limit"),
+            ).catch((error) => {
+              if (isNotFoundError(error)) return null;
+              throw error;
+            });
+          },
+          force,
         );
       } catch (err) {
         // AniList's ID list has entries that were since deleted. Retrying them
@@ -794,6 +861,15 @@ async function main(): Promise<void> {
   );
 
   await saveProgress(progress);
+  if (
+    fullReconciliation &&
+    stats.failed === 0 &&
+    !stopRequested &&
+    startIndex === 0 &&
+    endIndex === ids.length
+  ) {
+    await runSyncStage(0, "reconciliation", 30 * 24 * 3600_000, async () => true, true);
+  }
 
   const incompleteMessage =
     stats.failed > 0

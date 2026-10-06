@@ -1,4 +1,4 @@
-import { db } from "@anicore/db";
+import { db, readDb } from "@anicore/db";
 import {
   recalculateAnimeLanguageStatus,
   syncAnimeLanguageEvidenceFromEpisodeStatuses,
@@ -47,7 +47,7 @@ export interface AnimeLanguageStatusResult {
 }
 
 export async function getEpisodeById(episodeId: number): Promise<Episode | null> {
-  const [row] = await db.select().from(episodes).where(eq(episodes.id, episodeId)).limit(1);
+  const [row] = await readDb.select().from(episodes).where(eq(episodes.id, episodeId)).limit(1);
 
   return row ?? null;
 }
@@ -71,7 +71,7 @@ export async function listAnimeLanguageStatus(
     conditions.push(eq(animeLanguageStatus.mediaType, filters.mediaType));
   }
 
-  const statusRows = await db
+  const statusRows = await readDb
     .select()
     .from(animeLanguageStatus)
     .where(and(...conditions))
@@ -89,7 +89,7 @@ export async function listAnimeLanguageStatus(
     evidenceConditions.push(eq(animeLanguageEvidence.mediaType, filters.mediaType));
   }
 
-  const evidenceRows = await db
+  const evidenceRows = await readDb
     .select()
     .from(animeLanguageEvidence)
     .where(and(...evidenceConditions))
@@ -107,7 +107,7 @@ export async function listAnimeLanguageStatus(
     episodeConditions.push(eq(episodeLanguageStatus.mediaType, filters.mediaType));
   }
 
-  const episodeRows = await db
+  const episodeRows = await readDb
     .select()
     .from(episodeLanguageStatus)
     .where(and(...episodeConditions))
@@ -133,7 +133,7 @@ export async function getResolvedAnimeLanguageStatus(input: {
   const languageCode = normalizeLanguageCode(input.languageCode);
 
   const [statusRow, evidenceRows, episodeRows, canonicalRows] = await Promise.all([
-    db
+    readDb
       .select()
       .from(animeLanguageStatus)
       .where(
@@ -144,7 +144,7 @@ export async function getResolvedAnimeLanguageStatus(input: {
         ),
       )
       .limit(1),
-    db
+    readDb
       .select()
       .from(animeLanguageEvidence)
       .where(
@@ -155,7 +155,7 @@ export async function getResolvedAnimeLanguageStatus(input: {
         ),
       )
       .orderBy(desc(animeLanguageEvidence.confidence), desc(animeLanguageEvidence.createdAt)),
-    db
+    readDb
       .select()
       .from(episodeLanguageStatus)
       .where(
@@ -166,7 +166,7 @@ export async function getResolvedAnimeLanguageStatus(input: {
         ),
       )
       .orderBy(asc(episodeLanguageStatus.episodeNumber)),
-    db
+    readDb
       .select({ number: episodes.number })
       .from(episodes)
       .where(and(eq(episodes.animeId, input.animeId), eq(episodes.kind, "normal"))),
@@ -346,7 +346,7 @@ export async function getEpisodeLanguageStatusesForEpisode(episodeId: number) {
   const episode = await getEpisodeById(episodeId);
   if (!episode) return null;
 
-  const rows = await db
+  const rows = await readDb
     .select()
     .from(episodeLanguageStatus)
     .where(
@@ -390,7 +390,7 @@ export async function upsertLegacyEpisodeAudioStatus(input: {
 }
 
 export async function listLanguageStatusReviewQueue(page: { limit: number; offset: number }) {
-  return db
+  return readDb
     .select()
     .from(animeLanguageStatus)
     .where(

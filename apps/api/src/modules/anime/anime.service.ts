@@ -1,4 +1,4 @@
-import { db } from "@anicore/db";
+import { db, readDb } from "@anicore/db";
 import {
   anime,
   animeExternalLinks,
@@ -10,11 +10,24 @@ import {
   tags,
 } from "@anicore/db/schema";
 import { insertAnimeWithUniqueSlug } from "@anicore/providers";
-import { toJsonArray } from "@anicore/providers/lib/json";
+import { fromJsonArray, toJsonArray } from "@anicore/providers/lib/json";
 import { slugCandidates } from "@anicore/providers/lib/slug";
-import { type AnyColumn, and, asc, desc, eq, or, type SQL, sql } from "drizzle-orm";
+import {
+  type AnyColumn,
+  and,
+  asc,
+  desc,
+  eq,
+  getTableColumns,
+  gt,
+  inArray,
+  lt,
+  or,
+  type SQL,
+  sql,
+} from "drizzle-orm";
 
-import { conflict, notFound } from "../../lib/errors";
+import { badRequest, conflict, notFound } from "../../lib/errors";
 import { optionalText } from "../../lib/validators";
 import {
   type AnimeMappingInput,
@@ -51,6 +64,9 @@ export interface AnimeListQuery {
   status?: string;
   sort?: AnimeSortField;
   order?: AnimeSortOrder;
+  projection?: "full" | "summary";
+  pagination?: "offset" | "cursor";
+  afterId?: number;
 }
 
 /** Escapes LIKE metacharacters so user input only ever matches literally. */
@@ -72,7 +88,7 @@ function searchConditions(search: string): { where: SQL; rank: SQL } {
   const prefix = `${escapeLikePattern(search)}%`;
   const exact = search.toLowerCase();
 
-  const where = or(
+  const literal = or(
     likeEscaped(anime.titleRomaji, contains),
     likeEscaped(anime.titleEnglish, contains),
     likeEscaped(anime.titleNative, contains),
@@ -80,6 +96,18 @@ function searchConditions(search: string): { where: SQL; rank: SQL } {
     likeEscaped(anime.synonymsJson, contains),
     likeEscaped(anime.slug, contains),
   )!;
+
+  // Trigrams only narrow candidates; the original LIKE conditions remain the
+  // source of truth for ASCII case, JSON synonyms, escapes and exact results.
+  // FTS needs >=3 Unicode characters. NUL has special LIKE termination semantics.
+  const useIndex = !search.includes("\0") && Array.from(search).length >= 3;
+  const phrase = `"${search.replaceAll('"', '""')}"`;
+  const where = useIndex
+    ? and(
+        sql`${anime.id} in (select rowid from anime_search where anime_search match ${phrase})`,
+        literal,
+      )!
+    : literal;
 
   // Exact title matches first, then prefix matches, then everything else.
   const rank = sql`case
@@ -140,23 +168,75 @@ export async function listAnime(query: AnimeListQuery) {
   if (query.seasonYear !== undefined) conditions.push(eq(anime.seasonYear, query.seasonYear));
 
   const where = conditions.length ? and(...conditions) : undefined;
+  if (query.afterId !== undefined && query.pagination !== "cursor")
+    throw badRequest("afterId requires cursor pagination");
+  if (query.pagination === "cursor" && (query.offset !== 0 || (query.sort && query.sort !== "id")))
+    throw badRequest("Cursor pagination requires offset=0 and id sorting");
+  if (query.pagination === "cursor" && ranked && !query.sort)
+    throw badRequest("Search cursor pagination requires sort=id");
+  const pageWhere =
+    query.pagination === "cursor" && query.afterId !== undefined
+      ? and(
+          where,
+          query.order === "desc" ? lt(anime.id, query.afterId) : gt(anime.id, query.afterId),
+        )
+      : where;
+  const order = listOrder(query, ranked);
+  const columns = getTableColumns(anime);
+  const {
+    description,
+    bannerImage,
+    trailerVideoId,
+    trailerSite,
+    trailerThumbnail,
+    hashtag,
+    ...summary
+  } = columns;
+  const selection = query.projection === "summary" ? summary : columns;
+  const limit = query.limit + (query.pagination === "cursor" ? 1 : 0);
+  // Large offsets first select a small page of IDs from covering indexes,
+  // then hydrate those rows. Both steps remain one SQL statement/snapshot.
+  const pageIds = readDb
+    .select({ id: anime.id })
+    .from(anime)
+    .where(pageWhere)
+    .orderBy(...order)
+    .limit(query.limit)
+    .offset(query.offset);
+  const page =
+    query.offset >= 1000
+      ? readDb
+          .select(selection)
+          .from(anime)
+          .where(inArray(anime.id, pageIds))
+          .orderBy(...order)
+      : readDb
+          .select(selection)
+          .from(anime)
+          .where(pageWhere)
+          .orderBy(...order)
+          .limit(limit)
+          .offset(query.offset);
 
   const [rows, countRows] = await Promise.all([
-    db
-      .select()
-      .from(anime)
-      .where(where)
-      .orderBy(...listOrder(query, ranked))
-      .limit(query.limit)
-      .offset(query.offset),
-    db.select({ total: sql<number>`count(*)` }).from(anime).where(where),
+    page,
+    readDb.select({ total: sql<number>`count(*)` }).from(anime).where(where),
   ]);
 
-  return { items: rows.map(formatAnime), total: countRows[0]?.total ?? 0 };
+  const hasNext = query.pagination === "cursor" && rows.length > query.limit;
+  const visible = rows.slice(0, query.limit);
+  return {
+    items: visible.map((row) => {
+      const { genresJson, synonymsJson, ...rest } = row;
+      return { ...rest, genres: fromJsonArray(genresJson), synonyms: fromJsonArray(synonymsJson) };
+    }),
+    total: countRows[0]?.total ?? 0,
+    nextCursor: hasNext ? visible.at(-1)!.id : null,
+  };
 }
 
 async function findAnimeRow(id: number) {
-  const [row] = await db.select().from(anime).where(eq(anime.id, id)).limit(1);
+  const [row] = await readDb.select().from(anime).where(eq(anime.id, id)).limit(1);
   return row ?? null;
 }
 
@@ -167,12 +247,12 @@ export async function getAnime(id: number) {
 }
 
 export async function assertAnimeExists(id: number): Promise<void> {
-  const [row] = await db.select({ id: anime.id }).from(anime).where(eq(anime.id, id)).limit(1);
+  const [row] = await readDb.select({ id: anime.id }).from(anime).where(eq(anime.id, id)).limit(1);
   if (!row) throw notFound("Anime not found");
 }
 
 export function listAnimeEpisodes(animeId: number) {
-  return db
+  return readDb
     .select()
     .from(episodes)
     .where(eq(episodes.animeId, animeId))
@@ -180,7 +260,7 @@ export function listAnimeEpisodes(animeId: number) {
 }
 
 export function getStudiosForAnime(animeId: number) {
-  return db
+  return readDb
     .select({
       id: studios.id,
       name: studios.name,
@@ -195,7 +275,7 @@ export function getStudiosForAnime(animeId: number) {
 }
 
 export function getTagsForAnime(animeId: number) {
-  return db
+  return readDb
     .select({
       id: tags.id,
       name: tags.name,
@@ -212,7 +292,7 @@ export function getTagsForAnime(animeId: number) {
 }
 
 export function listAnimeExternalLinks(animeId: number) {
-  return db
+  return readDb
     .select()
     .from(animeExternalLinks)
     .where(eq(animeExternalLinks.animeId, animeId))
@@ -220,7 +300,7 @@ export function listAnimeExternalLinks(animeId: number) {
 }
 
 export function listAnimeRelations(animeId: number) {
-  return db
+  return readDb
     .select()
     .from(animeRelationLinks)
     .where(eq(animeRelationLinks.animeId, animeId))

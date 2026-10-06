@@ -1,7 +1,7 @@
 import { RefreshCw, Table2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { lazy, useEffect, useRef, useState } from "react";
 
-import { AnimeDetailDialog } from "@/components/catalog/anime-detail-dialog";
+import { AsyncContent } from "@/components/async-content";
 import { AnimePagination } from "@/components/catalog/anime-pagination";
 import { AnimeTable } from "@/components/catalog/anime-table";
 import { AnimeToolbar } from "@/components/catalog/anime-toolbar";
@@ -9,13 +9,32 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/components/ui/toast";
 import { useAnimeCatalog } from "@/hooks/use-anime-catalog";
+import { useCatalogueRevision } from "@/hooks/use-catalogue-revision";
 import type { AnimeListItem } from "@/lib/anime-api";
 import { hasActiveAnimeFilters } from "@/lib/anime-query";
 
+const AnimeDetailDialog = lazy(() =>
+  import("@/components/catalog/anime-detail-dialog").then((module) => ({
+    default: module.AnimeDetailDialog,
+  })),
+);
+
 export function AnimeCatalogView({ apiUrl }: { apiUrl: string }) {
   const catalog = useAnimeCatalog(apiUrl);
+  const revision = useCatalogueRevision(apiUrl);
+  const previousRevision = useRef<string | null>(null);
+  useEffect(() => {
+    if (
+      revision !== null &&
+      previousRevision.current !== null &&
+      previousRevision.current !== revision
+    )
+      catalog.refresh();
+    previousRevision.current = revision;
+  }, [revision, catalog.refresh]);
   const searchRef = useRef<HTMLInputElement>(null);
   const [selected, setSelected] = useState<AnimeListItem | null>(null);
+  const [detailsRequested, setDetailsRequested] = useState(false);
 
   // "/" jumps to search, like most data tools.
   useEffect(() => {
@@ -95,6 +114,12 @@ export function AnimeCatalogView({ apiUrl }: { apiUrl: string }) {
             onClear={catalog.clearFilters}
           />
 
+          {catalog.ready && catalog.error ? (
+            <p role="status" className="text-sm text-destructive">
+              Couldn't refresh the catalog. Showing the last loaded page. Use Refresh to try again.
+            </p>
+          ) : null}
+
           <div className="relative">
             {catalog.refreshing ? (
               <div
@@ -114,7 +139,10 @@ export function AnimeCatalogView({ apiUrl }: { apiUrl: string }) {
                 onSort={catalog.sortBy}
                 onClearFilters={catalog.clearFilters}
                 onRetry={catalog.refresh}
-                onSelect={setSelected}
+                onSelect={(item) => {
+                  setDetailsRequested(true);
+                  setSelected(item);
+                }}
               />
             </div>
           </div>
@@ -130,7 +158,16 @@ export function AnimeCatalogView({ apiUrl }: { apiUrl: string }) {
         </CardContent>
       </Card>
 
-      <AnimeDetailDialog anime={selected} apiUrl={apiUrl} onClose={() => setSelected(null)} />
+      {detailsRequested ? (
+        <AsyncContent key={apiUrl} label={selected ? "Loading anime details…" : ""}>
+          <AnimeDetailDialog
+            anime={selected}
+            apiUrl={apiUrl}
+            revision={revision}
+            onClose={() => setSelected(null)}
+          />
+        </AsyncContent>
+      ) : null}
     </div>
   );
 }
