@@ -34,6 +34,11 @@ test("resources paginate managed cache files and bound previews", () => {
   expect(getDashboardResources().cache.totalFiles).toBe(56);
   expect(getDashboardResources().cache.files).toHaveLength(50);
   expect(getDashboardResources(50).cache.files).toHaveLength(6);
+  const filtered = getDashboardResources(0, "JIKAN/55").cache;
+  expect(filtered.totalFiles).toBe(56);
+  expect(filtered.totalMatches).toBe(1);
+  expect(filtered.files.map((file) => file.name)).toEqual(["jikan/55.json"]);
+  expect(getDashboardResources(0, "missing").cache.totalMatches).toBe(0);
   expect(previewCache("anilist_ids.txt")).toMatchObject({ truncated: true });
   expect(previewCache("anilist_ids.txt").content.length).toBe(8192);
   expect(() => previewCache("../private.txt")).toThrow("Unknown cache file");

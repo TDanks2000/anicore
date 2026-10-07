@@ -10,12 +10,14 @@ export function MetricCard({
   value,
   hint,
   tone = "default",
+  compact = false,
 }: {
   icon: LucideIcon;
   label: string;
   value: string;
   hint?: string;
   tone?: "default" | "primary" | "success" | "warning" | "destructive";
+  compact?: boolean;
 }) {
   const toneClass = {
     default: "bg-secondary text-secondary-foreground",
@@ -27,23 +29,42 @@ export function MetricCard({
 
   return (
     <Card className="hover:shadow-md">
-      <CardContent className="flex items-center gap-4 p-5">
+      <CardContent className={cn("flex items-center", compact ? "gap-3 p-4" : "gap-4 p-5")}>
         <div
           className={cn(
-            "flex size-11 shrink-0 items-center justify-center rounded-lg [&_svg]:size-5",
+            "flex shrink-0 items-center justify-center rounded-lg [&_svg]:size-5",
+            compact ? "hidden size-9 sm:flex" : "size-11",
             toneClass,
           )}
         >
           <Icon />
         </div>
         <div className="flex min-w-0 flex-col gap-0.5">
-          <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          <span
+            className={cn(
+              "font-medium uppercase tracking-wide text-muted-foreground",
+              compact ? "text-[10px]" : "text-xs",
+            )}
+          >
             {label}
           </span>
-          <span className="truncate text-2xl font-semibold tracking-tight tabular-nums">
+          <span
+            className={cn(
+              "truncate font-semibold tracking-tight tabular-nums",
+              compact ? "text-xl" : "text-2xl",
+            )}
+            title={value}
+          >
             {value}
           </span>
-          {hint ? <span className="truncate text-xs text-muted-foreground">{hint}</span> : null}
+          {hint ? (
+            <span
+              className={cn("truncate text-xs text-muted-foreground", compact && "hidden sm:block")}
+              title={hint}
+            >
+              {hint}
+            </span>
+          ) : null}
         </div>
       </CardContent>
     </Card>

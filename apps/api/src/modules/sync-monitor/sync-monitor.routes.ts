@@ -12,6 +12,7 @@ import {
 } from "../../lib/dashboard-resources";
 import { conflict, HttpError } from "../../lib/errors";
 import {
+  clearSyncMonitorEvents,
   getSyncMonitorFileInfo,
   getSyncMonitorPublicConfig,
   isSyncMonitorAuthorized,
@@ -153,9 +154,22 @@ export const syncMonitorRoutes = new Elysia({
   .get("/events", ({ query }) => ({ events: readSyncMonitorEvents(query.limit) }), {
     query: t.Object({ limit: t.Integer({ minimum: 1, maximum: 1000, default: 100 }) }),
   })
+  .post("/events/clear", () => {
+    try {
+      clearSyncMonitorEvents();
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "EEXIST")
+        throw conflict("Logs are rotating. Try clearing them again in a moment.");
+      throw error;
+    }
+    return snapshotPayload(100);
+  })
   .get("/config", () => configPayload())
-  .get("/resources", ({ query }) => getDashboardResources(query.offset), {
-    query: t.Object({ offset: t.Integer({ minimum: 0, default: 0 }) }),
+  .get("/resources", ({ query }) => getDashboardResources(query.offset, query.search), {
+    query: t.Object({
+      offset: t.Integer({ minimum: 0, default: 0 }),
+      search: t.Optional(t.String({ maxLength: 200 })),
+    }),
   })
   .patch(
     "/resources/proxy",

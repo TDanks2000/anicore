@@ -19,7 +19,7 @@ import {
 } from "@anicore/sync-monitor";
 import { isRetryableFileError, atomicWriteJson as writeJson } from "./atomic-write-json";
 import { readEventTail } from "./event-tail";
-import { appendRotatingLog } from "./rotating-log";
+import { appendRotatingLog, clearRotatingLog } from "./rotating-log";
 
 export type {
   SyncMonitorAutomationStatus,
@@ -483,6 +483,12 @@ export function readSyncMonitorStatus(): SyncMonitorStatus | null {
 }
 
 let eventTailCache: { key: string; events: SyncMonitorEvent[] } | null = null;
+export function clearSyncMonitorEvents(): void {
+  ensureMonitorDir();
+  clearRotatingLog(eventsFile());
+  eventTailCache = null;
+}
+
 export function readSyncMonitorEvents(limit = 100): SyncMonitorEvent[] {
   const boundedLimit = Number.isFinite(limit) ? Math.max(1, Math.min(Math.floor(limit), 500)) : 100;
   let key: string;

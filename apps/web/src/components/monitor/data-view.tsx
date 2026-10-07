@@ -1,4 +1,4 @@
-import { ConnectionSection } from "@/components/monitor/connection-section";
+import { ConnectionBar } from "@/components/monitor/connection-bar";
 import { ResourcesCard } from "@/components/monitor/resources-card";
 import type { SyncMonitorState } from "@/hooks/use-sync-monitor";
 
@@ -11,16 +11,7 @@ export function DataCacheView({ monitor }: { monitor: SyncMonitorState }) {
           Manage cached data, AniList IDs, and proxy settings.
         </p>
       </div>
-      <ConnectionSection
-        apiUrl={monitor.apiUrl}
-        onApiUrlChange={monitor.setApiUrl}
-        accessCode={monitor.accessCode}
-        onAccessCodeChange={monitor.setAccessCode}
-        lastRefresh={monitor.lastRefresh}
-        connectionState={monitor.connectionState}
-        status={monitor.statusPayload?.status ?? null}
-        active={monitor.statusPayload?.active ?? false}
-      />
+      <ConnectionBar monitor={monitor} />
       <ResourcesCard
         key={`${monitor.apiUrl}:${monitor.accessCode}`}
         client={monitor.client}

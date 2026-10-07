@@ -1,4 +1,4 @@
-import { ConnectionSection } from "@/components/monitor/connection-section";
+import { ConnectionBar } from "@/components/monitor/connection-bar";
 import { EventsCard } from "@/components/monitor/events-card";
 import type { SyncMonitorState } from "@/hooks/use-sync-monitor";
 
@@ -11,17 +11,14 @@ export function LogsView({ monitor }: { monitor: SyncMonitorState }) {
           Live sync events, warnings, and errors, newest first.
         </p>
       </div>
-      <ConnectionSection
-        apiUrl={monitor.apiUrl}
-        onApiUrlChange={monitor.setApiUrl}
-        accessCode={monitor.accessCode}
-        onAccessCodeChange={monitor.setAccessCode}
+      <ConnectionBar monitor={monitor} />
+      <EventsCard
+        key={`${monitor.apiUrl}:${monitor.accessCode}`}
+        events={monitor.events}
+        onClear={monitor.clearLogs}
+        connected={monitor.connectionState === "ready" && !monitor.stale}
         lastRefresh={monitor.lastRefresh}
-        connectionState={monitor.connectionState}
-        status={monitor.statusPayload?.status ?? null}
-        active={monitor.statusPayload?.active ?? false}
       />
-      <EventsCard events={monitor.events} />
     </>
   );
 }

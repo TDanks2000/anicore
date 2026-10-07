@@ -241,6 +241,7 @@ export interface DashboardResources {
     offset: number;
     totalFiles: number;
     totalBytes: number;
+    totalMatches?: number;
   };
 }
 
@@ -303,8 +304,16 @@ export class SyncMonitorClient {
     return this.getJson<SyncMonitorConfigResponse>("/sync-monitor/config");
   }
 
-  async getResources(offset = 0, signal?: AbortSignal): Promise<DashboardResources> {
-    return this.getJson(`/sync-monitor/resources?offset=${encodeURIComponent(offset)}`, signal);
+  /** Clears saved sync events and archives, then returns the latest snapshot. */
+  async clearEvents(): Promise<SyncMonitorSnapshotResponse> {
+    return this.postJson("/sync-monitor/events/clear");
+  }
+
+  async getResources(offset = 0, signal?: AbortSignal, search = ""): Promise<DashboardResources> {
+    return this.getJson(
+      `/sync-monitor/resources?offset=${encodeURIComponent(offset)}${search ? `&search=${encodeURIComponent(search)}` : ""}`,
+      signal,
+    );
   }
 
   async updateProxy(patch: DashboardProxyPatch): Promise<DashboardResources> {

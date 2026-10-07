@@ -227,6 +227,32 @@ export function useSyncMonitor() {
     setStatusPayload((previous) => (previous ? { ...previous, ...next } : previous));
   }, []);
 
+  const clearLogs = useCallback(async () => {
+    if (!client) throw new Error("Connect to the API before clearing logs.");
+    const gen = ++generation.current;
+    abortRef.current?.abort();
+    abortRef.current = null;
+    refreshingRef.current = true;
+    try {
+      const snapshot = await client.clearEvents();
+      if (gen !== generation.current) return;
+      revisionRef.current = null;
+      applySnapshot(snapshot);
+      setLastRefresh(snapshot.serverTime);
+      setError(null);
+      setStale(false);
+      setConnectionState("ready");
+    } finally {
+      if (gen === generation.current) {
+        refreshingRef.current = false;
+        if (rerunRef.current) {
+          rerunRef.current = false;
+          void refresh(true);
+        }
+      }
+    }
+  }, [applySnapshot, client, refresh]);
+
   return {
     apiUrl,
     setApiUrl,
@@ -243,6 +269,7 @@ export function useSyncMonitor() {
     lastRefresh,
     refresh,
     applyControl,
+    clearLogs,
   };
 }
 

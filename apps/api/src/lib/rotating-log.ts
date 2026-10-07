@@ -12,6 +12,28 @@ import {
 } from "node:fs";
 import { dirname } from "node:path";
 
+/** Clear the current log and its bounded archives without racing a rotation. */
+export function clearRotatingLog(path: string, archives = 3): void {
+  mkdirSync(dirname(path), { recursive: true });
+  const lock = `${path}.rotate-lock`;
+  const descriptor = openSync(lock, "wx", 0o600);
+  try {
+    writeFileSync(descriptor, String(process.pid));
+    // Truncate in place so an active writer can continue using the same file.
+    writeFileSync(path, "", "utf8");
+    for (let index = 1; index <= archives; index++) {
+      try {
+        unlinkSync(`${path}.${index}`);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
+    }
+  } finally {
+    closeSync(descriptor);
+    unlinkSync(lock);
+  }
+}
+
 /** Bounded archives, with a process lock for API/sync writers sharing a log. */
 export function appendRotatingLog(
   path: string,

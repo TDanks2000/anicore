@@ -87,7 +87,7 @@ export function previewCache(name: string) {
     content = content.split(/\r?\n/).filter(Boolean).map(maskProxyUrl).join("\n");
   return { name, content, truncated: lstatSync(path).size > count };
 }
-export function getDashboardResources(offset = 0): DashboardResources {
+export function getDashboardResources(offset = 0, search = ""): DashboardResources {
   const settings = readProxySettings();
   const envProxy = ["ANICORE_PROXY_URL", "HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"]
     .map((key) => process.env[key]?.trim())
@@ -111,6 +111,8 @@ export function getDashboardResources(offset = 0): DashboardResources {
       clearable: name.endsWith("_unmatched.txt") || name.startsWith("jikan/"),
     };
   });
+  const query = search.trim().toLowerCase();
+  const matchingFiles = files.filter((file) => file.name.toLowerCase().includes(query));
   const countPool = (name: string) => {
     const path = cachePath(name);
     if (!existsSync(path)) return 0;
@@ -142,9 +144,10 @@ export function getDashboardResources(offset = 0): DashboardResources {
       },
     },
     cache: {
-      files: files.slice(offset, offset + 50),
+      files: matchingFiles.slice(offset, offset + 50),
       offset,
       totalFiles: files.length,
+      totalMatches: matchingFiles.length,
       totalBytes: files.reduce((sum, file) => sum + file.bytes, 0),
     },
   };
