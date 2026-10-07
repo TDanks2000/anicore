@@ -14,4 +14,11 @@ describe("dashboard views", () => {
     expect(viewFromHash("#/monitor")).toBe("monitor");
     expect(viewFromHash("#/unknown")).toBe("monitor");
   });
+
+  test("data and logs have deep links", () => {
+    expect(viewFromHash("#/data")).toBe("data");
+    expect(viewFromHash("#data")).toBe("data");
+    expect(viewFromHash("#/logs")).toBe("logs");
+    expect(viewFromHash("#/logs?level=error")).toBe("logs");
+  });
 });

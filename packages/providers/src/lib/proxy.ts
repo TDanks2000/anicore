@@ -188,7 +188,10 @@ function shouldBypassProxy(
     });
 }
 
-async function loadFreeProxyList(rawFetch: typeof fetch): Promise<string[]> {
+async function loadFreeProxyList(
+  rawFetch: typeof fetch,
+  signal?: AbortSignal | null,
+): Promise<string[]> {
   if (freeProxyList && Date.now() - freeProxyListLoadedAt < FREE_PROXY_CACHE_TTL_MS) {
     return freeProxyList;
   }
@@ -205,7 +208,9 @@ async function loadFreeProxyList(rawFetch: typeof fetch): Promise<string[]> {
     try {
       const response = await rawFetch(FREE_PROXY_LIST_URL, {
         headers: { Accept: "text/plain" },
-        signal: AbortSignal.timeout(10_000),
+        signal: signal
+          ? AbortSignal.any([signal, AbortSignal.timeout(10_000)])
+          : AbortSignal.timeout(10_000),
       });
 
       if (!response.ok) {
@@ -235,11 +240,11 @@ async function loadFreeProxyList(rawFetch: typeof fetch): Promise<string[]> {
 
 /**
  * The APIs routed through free proxies answer errors in JSON. An HTML or
- * empty error response (other than a 404, which origins also serve as pages)
+ * empty error response (including a proxy's own 404 page)
  * comes from the proxy itself.
  */
 export function isProxyErrorPage(response: Pick<Response, "status" | "headers">): boolean {
-  if (response.status < 400 || response.status === 404) return false;
+  if (response.status < 400) return false;
   const type = response.headers.get("content-type")?.toLowerCase() ?? "";
   return !type.includes("json");
 }
@@ -250,28 +255,45 @@ function nextFreeProxy(proxies: string[]): string {
   return proxy;
 }
 
+/** Reserve time for a direct request when the free proxy pool stalls. */
+export async function withProxyFallbackBudget<T>(
+  operation: (signal: AbortSignal) => Promise<T>,
+  fallback: () => Promise<T>,
+  callerSignal?: AbortSignal | null,
+  budgetMs = 5_000,
+): Promise<T> {
+  const budget = AbortSignal.timeout(budgetMs);
+  const signal = callerSignal ? AbortSignal.any([callerSignal, budget]) : budget;
+  try {
+    return await operation(signal);
+  } catch (error) {
+    if (callerSignal?.aborted || !budget.aborted) throw error;
+    return fallback();
+  }
+}
+
 async function fetchWithFreeProxyFallback(
   rawFetch: typeof fetch,
   input: FetchInput,
   init: FetchInit | undefined,
   maxAttempts = freeProxyMaxAttempts(),
   timeoutMs = proxyAttemptTimeoutMs(),
-): Promise<Response> {
+): Promise<Response | null> {
   let proxies: string[];
   let untestedSet: Set<string>;
   try {
     const knownDead = loadDeadProxySet();
     const knownWorking = loadWorkingProxyList().filter((proxy) => !knownDead.has(proxy));
-    const freshProxies = (await loadFreeProxyList(rawFetch)).filter(
+    const freshProxies = (await loadFreeProxyList(rawFetch, init?.signal)).filter(
       (proxy) => !knownDead.has(proxy),
     );
     proxies = unique([...knownWorking, ...freshProxies]);
     untestedSet = new Set(freshProxies);
   } catch {
-    return rawFetch(input, init);
+    return null;
   }
 
-  if (!proxies.length) return rawFetch(input, init);
+  if (!proxies.length) return null;
 
   const callerSignal = init?.signal;
   const attempts = Math.min(proxies.length, maxAttempts);
@@ -296,6 +318,7 @@ async function fetchWithFreeProxyFallback(
       // is the proxy's own refusal rather than the API's answer. Either way the
       // proxy is unusable; returning its page failed whole anime with 400/405.
       if (response.status === 407 || isProxyErrorPage(response)) {
+        await response.body?.cancel().catch(() => {});
         if (isUntested) removeProxyFromUntestedList(proxy);
         try {
           markDeadProxy(proxy);
@@ -324,7 +347,7 @@ async function fetchWithFreeProxyFallback(
     }
   }
 
-  return rawFetch(input, init);
+  return null;
 }
 
 export function installProxyFetch(): void {
@@ -367,13 +390,19 @@ export function installProxyFetch(): void {
       settings.mode === "free" ||
       (settings.mode === "environment" && envEnabled(process.env.ANICORE_USE_FREE_PROXY))
     ) {
-      return fetchWithFreeProxyFallback(
-        rawFetch,
-        input,
-        init,
-        settings.maxAttempts,
-        settings.timeoutMs,
+      const response = await withProxyFallbackBudget(
+        (signal) =>
+          fetchWithFreeProxyFallback(
+            rawFetch,
+            input,
+            { ...init, signal },
+            settings.maxAttempts,
+            settings.timeoutMs,
+          ),
+        async () => null,
+        init.signal,
       );
+      return response ?? rawFetch(input, init);
     }
 
     return rawFetch(input, init);

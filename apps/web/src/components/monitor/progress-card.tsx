@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import { completionPercent, formatMs, statusVariant } from "@/lib/format";
 import { displayRunState } from "@/lib/monitor-state";
+import { VIEW_HASHES } from "@/lib/views";
 import { Stat } from "./stats";
 
 export function ProgressCard(props: {
@@ -86,6 +87,17 @@ export function ProgressCard(props: {
               />
               <Stat label="Skipped" value={status?.stats.skipped ?? 0} />
             </div>
+            {(status?.stats.failed ?? 0) > 0 ? (
+              <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm">
+                <p className="break-words">{lastError ?? "Some IDs failed to sync."}</p>
+                <a
+                  className="mt-2 inline-block font-medium text-primary underline underline-offset-4"
+                  href={VIEW_HASHES.logs}
+                >
+                  View errors in Logs
+                </a>
+              </div>
+            ) : null}
             {status ? <RuntimeSnapshot status={status} /> : null}
           </>
         )}

@@ -1,4 +1,13 @@
-import { Activity, type LucideIcon, Moon, RefreshCw, Sun, Table2 } from "lucide-react";
+import {
+  Activity,
+  Database,
+  type LucideIcon,
+  Moon,
+  RefreshCw,
+  Sun,
+  Table2,
+  TerminalSquare,
+} from "lucide-react";
 import { lazy, useEffect } from "react";
 
 import { AsyncContent } from "@/components/async-content";
@@ -13,10 +22,21 @@ import { useTheme } from "./theme-provider";
 
 const loadCatalog = () => import("@/components/catalog/anime-catalog-view");
 const loadMonitor = () => import("@/components/monitor/monitor-view");
+const loadData = () => import("@/components/monitor/data-view");
+const loadLogs = () => import("@/components/monitor/logs-view");
 const AnimeCatalogView = lazy(() =>
   loadCatalog().then((module) => ({ default: module.AnimeCatalogView })),
 );
 const MonitorView = lazy(() => loadMonitor().then((module) => ({ default: module.MonitorView })));
+const DataCacheView = lazy(() => loadData().then((module) => ({ default: module.DataCacheView })));
+const LogsView = lazy(() => loadLogs().then((module) => ({ default: module.LogsView })));
+const VIEW_LOADERS = { monitor: loadMonitor, catalog: loadCatalog, data: loadData, logs: loadLogs };
+const VIEW_LABELS: Record<DashboardView, string> = {
+  monitor: "Sync Monitor",
+  catalog: "Anime Catalog",
+  data: "Data & Cache",
+  logs: "Logs",
+};
 
 const CONNECTION: Record<ConnectionState, ConnectionDisplay> = {
   idle: { label: "Idle", tone: "neutral", pulse: false },
@@ -28,6 +48,8 @@ const CONNECTION: Record<ConnectionState, ConnectionDisplay> = {
 const VIEW_TITLES: Record<DashboardView, string> = {
   monitor: "Sync Monitor · AniCore",
   catalog: "Anime Catalog · AniCore",
+  data: "Data & Cache · AniCore",
+  logs: "Logs · AniCore",
 };
 
 export function App() {
@@ -64,9 +86,7 @@ export function App() {
             </div>
             <div className="hidden leading-tight sm:block">
               <div className="text-sm font-semibold tracking-tight">AniCore</div>
-              <div className="text-xs text-muted-foreground">
-                {view === "catalog" ? "Anime Catalog" : "Sync Monitor"}
-              </div>
+              <div className="text-xs text-muted-foreground">{VIEW_LABELS[view]}</div>
             </div>
 
             <nav
@@ -75,11 +95,13 @@ export function App() {
             >
               <ViewLink view="monitor" current={view} icon={Activity} label="Monitor" />
               <ViewLink view="catalog" current={view} icon={Table2} label="Catalog" />
+              <ViewLink view="data" current={view} icon={Database} label="Data & Cache" />
+              <ViewLink view="logs" current={view} icon={TerminalSquare} label="Logs" />
             </nav>
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
-            {view === "monitor" ? (
+            {view !== "catalog" ? (
               <span className="hidden items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground md:inline-flex">
                 <StatusDot tone={connection.tone} pulse={connection.pulse} />
                 {connection.label}
@@ -94,7 +116,7 @@ export function App() {
             >
               {resolvedTheme === "dark" ? <Sun /> : <Moon />}
             </Button>
-            {view === "monitor" ? (
+            {view !== "catalog" ? (
               <Button variant="outline" size="sm" onClick={() => void monitor.refresh(true)}>
                 <RefreshCw />
                 <span className="hidden sm:inline">Refresh</span>
@@ -105,12 +127,13 @@ export function App() {
       </header>
 
       <main className="mx-auto flex w-full max-w-[1920px] flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 xl:px-10">
-        <AsyncContent
-          key={view}
-          label={`Loading ${view === "monitor" ? "sync monitor" : "anime catalog"}…`}
-        >
+        <AsyncContent key={view} label={`Loading ${VIEW_LABELS[view].toLowerCase()}…`}>
           {view === "monitor" ? (
             <MonitorView monitor={monitor} connection={connection} />
+          ) : view === "data" ? (
+            <DataCacheView monitor={monitor} />
+          ) : view === "logs" ? (
+            <LogsView monitor={monitor} />
           ) : (
             <AnimeCatalogView apiUrl={monitor.apiUrl} />
           )}
@@ -137,10 +160,10 @@ function ViewLink({
     <a
       href={VIEW_HASHES[view]}
       onPointerEnter={() => {
-        void (view === "catalog" ? loadCatalog() : loadMonitor()).catch(() => {});
+        void VIEW_LOADERS[view]().catch(() => {});
       }}
       onFocus={() => {
-        void (view === "catalog" ? loadCatalog() : loadMonitor()).catch(() => {});
+        void VIEW_LOADERS[view]().catch(() => {});
       }}
       aria-current={active ? "page" : undefined}
       className={cn(

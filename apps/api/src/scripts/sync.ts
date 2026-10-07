@@ -656,15 +656,24 @@ async function processFetchedAnime(
   );
 
   bar.setStage("audio");
-  monitor?.stage("audio-sub", index, id);
-  monitor?.stage("audio-dub", index, id);
-  const languageSync = await syncLanguageStatusForAnime(result.animeId, (name, operation) =>
-    runSyncStage(id, `language:${name}`, animeRefreshTtl(anilistData, true), operation, force),
-  );
-  for (const error of languageSync.errors)
+  const languageSync = await syncLanguageStatusForAnime(result.animeId, (name, operation) => {
+    monitor?.stage(`language:${name}`, index, id);
+    return runSyncStage(
+      id,
+      `language:${name}`,
+      animeRefreshTtl(anilistData, true),
+      operation,
+      force,
+    );
+  });
+  for (const error of languageSync.errors) {
     log.warn(`Language status sync failed for ID ${id}: ${error}`);
-  for (const warning of languageSync.warnings)
+    monitor?.event("warn", error, { anilistId: id, stage: "language-sync" });
+  }
+  for (const warning of languageSync.warnings) {
     log.warn(`Optional language provider for ID ${id}: ${warning}`);
+    monitor?.event("warn", warning, { anilistId: id, stage: "language-sync" });
+  }
   if (languageSync.errors.length)
     throw new Error(`Language sync failed: ${languageSync.errors.join("; ")}`);
 
@@ -918,7 +927,14 @@ async function main(): Promise<void> {
         monitor?.event("info", message, { stage: "anilist-fetch" });
         return { outcome: "skipped" };
       }
-      return processFetchedAnime(id, index, anilistData, engine, bar, monitor);
+      try {
+        return await processFetchedAnime(id, index, anilistData, engine, bar, monitor);
+      } catch (error) {
+        if (!(error instanceof SyncStoppedError)) {
+          monitor?.recordError(error instanceof Error ? error.message : String(error), index, id);
+        }
+        throw error;
+      }
     },
   );
 

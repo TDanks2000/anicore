@@ -1,7 +1,10 @@
 import type { SyncMonitorEvent } from "@anicore/sync-monitor";
 import { AlertTriangle, CircleAlert, Info, TerminalSquare } from "lucide-react";
+import { useState } from "react";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Select, SelectItem } from "@/components/ui/select";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -27,6 +30,8 @@ const LEVEL_STYLES = {
 } as const;
 
 export function EventsCard({ events }: { events: SyncMonitorEvent[] }) {
+  const [query, setQuery] = useState("");
+  const [level, setLevel] = useState("all");
   // Newest first. Identical events (same timestamp and text) can legitimately
   // repeat, so the key is content-based with an occurrence suffix.
   const occurrences = new Map<string, number>();
@@ -37,28 +42,51 @@ export function EventsCard({ events }: { events: SyncMonitorEvent[] }) {
       occurrences.set(base, seen + 1);
       return { event, key: `${base}#${seen}` };
     })
-    .reverse();
+    .reverse()
+    .filter(
+      ({ event }) =>
+        (level === "all" || event.level === level) &&
+        `${event.message} ${event.anilistId ?? ""} ${event.stage ?? ""} ${event.event ?? ""}`
+          .toLowerCase()
+          .includes(query.trim().toLowerCase()),
+    );
 
   return (
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between gap-3">
           <div className="flex flex-col gap-1">
-            <CardTitle>Recent Events</CardTitle>
-            <CardDescription>Latest entries from `events.jsonl`.</CardDescription>
+            <CardTitle>Sync Logs</CardTitle>
+            <CardDescription>Recent sync activity updates automatically.</CardDescription>
           </div>
           <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-xs font-medium text-muted-foreground [&_svg]:size-3.5">
             <TerminalSquare />
-            {events.length}
+            {newestFirst.length} / {events.length}
           </span>
         </div>
       </CardHeader>
-      <CardContent>
-        <div className="flex max-h-[460px] flex-col gap-1.5 overflow-auto pr-1">
+      <CardContent className="flex flex-col gap-4">
+        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_180px]">
+          <Input
+            aria-label="Search logs"
+            placeholder="Search message, ID, or stage…"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+          <Select aria-label="Log level" value={level} onValueChange={setLevel}>
+            <SelectItem value="all">All levels</SelectItem>
+            <SelectItem value="error">Errors</SelectItem>
+            <SelectItem value="warn">Warnings</SelectItem>
+            <SelectItem value="info">Info</SelectItem>
+          </Select>
+        </div>
+        <div className="flex max-h-[65vh] flex-col gap-1.5 overflow-auto pr-1">
           {newestFirst.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border py-12 text-center">
               <TerminalSquare className="size-5 text-muted-foreground/60" />
-              <p className="text-sm text-muted-foreground">No events yet</p>
+              <p className="text-sm text-muted-foreground">
+                {events.length ? "No matching logs" : "No events yet"}
+              </p>
             </div>
           ) : (
             newestFirst.map(({ event, key }) => <EventRow key={key} event={event} />)

@@ -3,9 +3,7 @@ import { useCallback, useEffect } from "react";
 
 import { ConnectionSection } from "@/components/monitor/connection-section";
 import { ControlsSection } from "@/components/monitor/controls-section";
-import { EventsCard } from "@/components/monitor/events-card";
 import { ProgressCard } from "@/components/monitor/progress-card";
-import { ResourcesCard } from "@/components/monitor/resources-card";
 import { RuntimeConfigCard } from "@/components/monitor/runtime-config-card";
 import { MetricCard } from "@/components/monitor/stats";
 import { StatusDot, type StatusTone } from "@/components/monitor/status-dot";
@@ -147,14 +145,8 @@ export function MonitorView({
             runtime={runtime}
             automation={configPayload?.automation ?? null}
           />
-          <EventsCard events={monitor.events} />
         </div>
       </section>
-      <ResourcesCard
-        key={`${monitor.apiUrl}:${monitor.accessCode}`}
-        client={client}
-        active={active}
-      />
     </>
   );
 }
