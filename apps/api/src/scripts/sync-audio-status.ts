@@ -4,12 +4,17 @@ import { anime, animeMappings, episodeLanguageStatus, episodes } from "@anicore/
 import { syncAnilistCastLanguages } from "@anicore/providers/anilist/languages";
 import { type DubSyncResult, syncDubStatus } from "@anicore/providers/animeschedule/sync";
 import { syncCrunchyrollLanguages } from "@anicore/providers/crunchyroll/sync";
-import { JikanCircuitOpenError, syncVoiceCastLanguages } from "@anicore/providers/jikan/sync";
+import { syncVoiceCastLanguages } from "@anicore/providers/jikan/sync";
 import { syncKitsuLanguages } from "@anicore/providers/kitsu/languages";
 import { log } from "@anicore/providers/lib/logger";
 import { installProxyFetch } from "@anicore/providers/lib/proxy";
 import { and, asc, eq, isNotNull, lte, sql } from "drizzle-orm";
 import { derivedAirdateLanguageAssertions } from "../lib/derived-airdate-language";
+import {
+  isCrunchyrollAccessFailure,
+  isOptionalJikanFailure,
+  syncLanguageProviders,
+} from "../lib/language-sync";
 import { parseIntegerFlag } from "../lib/sync-cli";
 
 const args = process.argv.slice(2);
@@ -134,30 +139,7 @@ export async function syncLanguageStatusForAnime(
   animeId: number,
   runStage?: <T>(name: string, operation: () => Promise<T>) => Promise<T>,
 ): Promise<{ errors: string[]; warnings: string[] }> {
-  const errors: string[] = [];
-  const warnings: string[] = [];
-  for (const [name, sync] of Object.entries(LANGUAGE_SYNC_PROVIDERS)) {
-    try {
-      const operation = async () => {
-        await sync(animeId);
-      };
-      if (runStage) await runStage(name, operation);
-      else await operation();
-    } catch (error) {
-      // The cooldown was already announced once; repeating it per anime is noise.
-      if (error instanceof JikanCircuitOpenError) continue;
-      const message = `${name}: ${error instanceof Error ? error.message : String(error)}`;
-      if (name === "jikan" && isOptionalJikanFailure(message)) warnings.push(message);
-      else errors.push(message);
-    }
-  }
-  return { errors, warnings };
-}
-
-function isOptionalJikanFailure(message: string): boolean {
-  return /\b(429|5\d\d)\b|timed out|timeout|connection|temporarily unavailable|failed to fetch/i.test(
-    message,
-  );
+  return syncLanguageProviders(animeId, LANGUAGE_SYNC_PROVIDERS, runStage);
 }
 
 // ── Pass 1: Derived original audio ────────────────────────────────────────────
@@ -333,10 +315,14 @@ export async function runDubPass(
       if (result.status === "matched") crunchyrollEpisodes++;
       if (result.status === "series-only") crunchyrollSeriesOnly++;
     } catch (err) {
-      errors++;
-      log.error(
-        `Crunchyroll animeId=${row.animeId}: ${err instanceof Error ? err.message : String(err)}`,
-      );
+      const message = `Crunchyroll animeId=${row.animeId}: ${err instanceof Error ? err.message : String(err)}`;
+      if (isCrunchyrollAccessFailure(err)) {
+        warnings++;
+        log.warn(message);
+      } else {
+        errors++;
+        log.error(message);
+      }
     }
     try {
       const result = await syncAnilistCastLanguages(row.animeId);

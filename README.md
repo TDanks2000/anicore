@@ -247,6 +247,13 @@ Language codes are stored by their primary subtag (`pt-BR`, `Portuguese (BR)` an
 
 #### Crunchyroll episode tracks
 
+Crunchyroll access challenges are reported as provider warnings instead of dumping
+HTML or failing the entire language pass. The client pauses requests for 15 minutes,
+preserves existing evidence and retries later; its durable stage remains failed
+until a real refresh succeeds. Ordinary authorization and identity failures remain
+errors. See [phase implementation progress](docs/phase-progress.md) for the new
+read-only Review workspace and mapping/coverage inspector.
+
 Crunchyroll lists every audio version and subtitle locale per episode, so it is the only source that maps dubs and subtitles onto individual episodes of finished shows. Its seasons rarely match AniList entries one to one (Attack on Titan's 22-episode third season is two AniList entries; One Piece spans 24 arc seasons numbered absolutely), so each anime is aligned to a slice of the Crunchyroll series and recorded as a segment mapping (`anime_provider_mappings` + `anime_provider_segments`, e.g. Crunchyroll 50–59 → local 1–10) with a `crunchyroll` episode mapping per episode.
 
 - The series comes from the anime's own Crunchyroll link (modern `/series/<id>` links directly, pre-2022 slug links by matching `slug_title`). Without a link, only a series whose title matches exactly, that launched no later than the anime, and whose episode aired on the anime's premiere date is accepted, recorded with `fuzzy` provenance and confidence 90.

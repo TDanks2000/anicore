@@ -4,9 +4,10 @@ import { waitForProvider } from "../../lib/provider-wait";
 const BASE = "https://www.crunchyroll.com";
 // The public web client's anonymous grant: catalogue metadata only, no account.
 const ANONYMOUS_CLIENT = "Basic Y3Jfd2ViOg==";
-// Cloudflare challenges clients that claim to be a browser without a browser's
-// TLS fingerprint; an honest product identifier is accepted.
+// Identify the application honestly; upstream may still challenge any request.
 const USER_AGENT = "anicore/0.1 (+https://github.com/TDanks2000/anicore)";
+const DEVICE_ID = crypto.randomUUID();
+const CHALLENGE_COOLDOWN_MS = 15 * 60_000;
 const RATE_MS = 300;
 const GUID = /^[A-Z0-9]{6,40}$/;
 
@@ -46,24 +47,84 @@ export interface CrunchyrollEpisode {
 let token: { value: string; expiresAt: number } | null = null;
 let queue: Promise<void> = Promise.resolve();
 let lastRequestAt = 0;
+let blockedUntil = 0;
+
+/** An upstream access challenge, never a successful empty catalogue. */
+export class CrunchyrollAccessBlockedError extends Error {
+  constructor(
+    public readonly retryAt: number,
+    status?: number,
+  ) {
+    super(
+      `Crunchyroll access blocked: Cloudflare challenge${status ? ` (HTTP ${status})` : ""}; ` +
+        `retry after ${new Date(retryAt).toISOString()}. Existing evidence is preserved; other language providers can continue.`,
+    );
+  }
+}
+
+function assertAccessAvailable(): void {
+  if (blockedUntil > Date.now()) throw new CrunchyrollAccessBlockedError(blockedUntil);
+}
+
+async function assertNotChallenged(response: Response): Promise<void> {
+  let challenged = response.headers.get("cf-mitigated")?.toLowerCase() === "challenge";
+  if (!challenged && response.headers.get("content-type")?.includes("text/html")) {
+    // Read only a bounded prefix for older challenge responses without cf-mitigated.
+    const reader = response.clone().body?.getReader();
+    if (reader) {
+      let prefix = "";
+      let bytes = 0;
+      const decoder = new TextDecoder();
+      try {
+        while (bytes < 8192) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          const chunk = value.subarray(0, 8192 - bytes);
+          bytes += chunk.length;
+          prefix += decoder.decode(chunk, { stream: true });
+        }
+      } finally {
+        void reader.cancel().catch(() => {});
+      }
+      challenged =
+        /<title>\s*Just a moment\.\.\.<\/title>|\/cdn-cgi\/challenge-platform|challenges\.cloudflare\.com/i.test(
+          prefix,
+        );
+    }
+  }
+  if (!challenged) return;
+  blockedUntil = Date.now() + CHALLENGE_COOLDOWN_MS;
+  token = null;
+  void response.body?.cancel().catch(() => {});
+  throw new CrunchyrollAccessBlockedError(blockedUntil, response.status);
+}
 
 /** Test seam: forget the cached anonymous token. */
 export function resetCrunchyrollSession(): void {
   token = null;
+  blockedUntil = 0;
+  lastRequestAt = 0;
 }
 
 async function accessToken(): Promise<string> {
+  assertAccessAvailable();
   if (token && token.expiresAt > Date.now() + 60_000) return token.value;
   const response = await fetch(`${BASE}/auth/v1/token`, {
     method: "POST",
     headers: {
       Authorization: ANONYMOUS_CLIENT,
       "Content-Type": "application/x-www-form-urlencoded",
+      Accept: "application/json",
       "User-Agent": USER_AGENT,
     },
-    body: "grant_type=client_id",
+    body: new URLSearchParams({
+      grant_type: "client_id",
+      client_id: "cr_web",
+      device_id: DEVICE_ID,
+    }),
     signal: AbortSignal.timeout(15_000),
   });
+  await assertNotChallenged(response);
   if (!response.ok) throw new Error(await formatHttpError("Crunchyroll token", response));
   const body = (await response.json()) as { access_token?: unknown; expires_in?: unknown };
   if (typeof body.access_token !== "string" || !body.access_token)
@@ -74,33 +135,44 @@ async function accessToken(): Promise<string> {
 }
 
 /** Serialised, rate-limited GET; `null` means the resource does not exist. */
-async function get<T>(path: string, retried = false): Promise<T | null> {
+async function get<T>(path: string): Promise<T | null> {
   const operation = queue.then(async () => {
-    await waitForProvider(Math.max(0, RATE_MS - (Date.now() - lastRequestAt)));
-    lastRequestAt = Date.now();
-    const url = new URL(path, BASE);
-    url.searchParams.set("locale", "en-US");
-    return fetch(url, {
-      headers: {
-        Authorization: `Bearer ${await accessToken()}`,
-        Accept: "application/json",
-        "User-Agent": USER_AGENT,
-      },
-      signal: AbortSignal.timeout(15_000),
-    });
+    // Include response classification in the queue, so queued callers observe a
+    // challenge before attempting another token or catalogue request.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      assertAccessAvailable();
+      await waitForProvider(Math.max(0, RATE_MS - (Date.now() - lastRequestAt)));
+      lastRequestAt = Date.now();
+      const url = new URL(path, BASE);
+      url.searchParams.set("locale", "en-US");
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${await accessToken()}`,
+          Accept: "application/json",
+          "User-Agent": USER_AGENT,
+        },
+        signal: AbortSignal.timeout(15_000),
+      });
+      await assertNotChallenged(response);
+      if (response.status === 401 && attempt === 0) {
+        token = null;
+        await response.body?.cancel();
+        continue;
+      }
+      if (response.status === 404) {
+        await response.body?.cancel();
+        return null;
+      }
+      if (!response.ok) throw new Error(await formatHttpError("Crunchyroll", response));
+      return (await response.json()) as T;
+    }
+    throw new Error("Crunchyroll authentication retry exhausted");
   });
   queue = operation.then(
     () => undefined,
     () => undefined,
   );
-  const response = await operation;
-  if (response.status === 401 && !retried) {
-    token = null;
-    return get(path, true);
-  }
-  if (response.status === 404) return null;
-  if (!response.ok) throw new Error(await formatHttpError("Crunchyroll", response));
-  return (await response.json()) as T;
+  return operation;
 }
 
 function record(value: unknown): Record<string, unknown> {

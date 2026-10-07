@@ -21,4 +21,10 @@ describe("dashboard views", () => {
     expect(viewFromHash("#/logs")).toBe("logs");
     expect(viewFromHash("#/logs?level=error")).toBe("logs");
   });
+
+  test("review has a deep link", () => {
+    expect(viewFromHash("#/review")).toBe("review");
+    expect(viewFromHash("#review")).toBe("review");
+    expect(viewFromHash("#/review?status=unknown")).toBe("review");
+  });
 });

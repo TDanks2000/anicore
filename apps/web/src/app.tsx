@@ -1,5 +1,6 @@
 import {
   Activity,
+  ClipboardCheck,
   Database,
   type LucideIcon,
   Moon,
@@ -24,16 +25,27 @@ const loadCatalog = () => import("@/components/catalog/anime-catalog-view");
 const loadMonitor = () => import("@/components/monitor/monitor-view");
 const loadData = () => import("@/components/monitor/data-view");
 const loadLogs = () => import("@/components/monitor/logs-view");
+const loadReview = () => import("@/components/review/language-review-view");
+const LanguageReviewView = lazy(() =>
+  loadReview().then((module) => ({ default: module.LanguageReviewView })),
+);
 const AnimeCatalogView = lazy(() =>
   loadCatalog().then((module) => ({ default: module.AnimeCatalogView })),
 );
 const MonitorView = lazy(() => loadMonitor().then((module) => ({ default: module.MonitorView })));
 const DataCacheView = lazy(() => loadData().then((module) => ({ default: module.DataCacheView })));
 const LogsView = lazy(() => loadLogs().then((module) => ({ default: module.LogsView })));
-const VIEW_LOADERS = { monitor: loadMonitor, catalog: loadCatalog, data: loadData, logs: loadLogs };
+const VIEW_LOADERS = {
+  monitor: loadMonitor,
+  catalog: loadCatalog,
+  review: loadReview,
+  data: loadData,
+  logs: loadLogs,
+};
 const VIEW_LABELS: Record<DashboardView, string> = {
   monitor: "Sync Monitor",
   catalog: "Anime Catalog",
+  review: "Language Review",
   data: "Data & Cache",
   logs: "Logs",
 };
@@ -48,6 +60,7 @@ const CONNECTION: Record<ConnectionState, ConnectionDisplay> = {
 const VIEW_TITLES: Record<DashboardView, string> = {
   monitor: "Sync Monitor · AniCore",
   catalog: "Anime Catalog · AniCore",
+  review: "Language Review · AniCore",
   data: "Data & Cache · AniCore",
   logs: "Logs · AniCore",
 };
@@ -95,13 +108,14 @@ export function App() {
             >
               <ViewLink view="monitor" current={view} icon={Activity} label="Monitor" />
               <ViewLink view="catalog" current={view} icon={Table2} label="Catalog" />
+              <ViewLink view="review" current={view} icon={ClipboardCheck} label="Review" />
               <ViewLink view="data" current={view} icon={Database} label="Data & Cache" />
               <ViewLink view="logs" current={view} icon={TerminalSquare} label="Logs" />
             </nav>
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
-            {view !== "catalog" ? (
+            {view !== "catalog" && view !== "review" ? (
               <span className="hidden items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground md:inline-flex">
                 <StatusDot tone={connection.tone} pulse={connection.pulse} />
                 {connection.label}
@@ -116,7 +130,7 @@ export function App() {
             >
               {resolvedTheme === "dark" ? <Sun /> : <Moon />}
             </Button>
-            {view !== "catalog" ? (
+            {view !== "catalog" && view !== "review" ? (
               <Button variant="outline" size="sm" onClick={() => void monitor.refresh(true)}>
                 <RefreshCw />
                 <span className="hidden sm:inline">Refresh</span>
@@ -130,6 +144,8 @@ export function App() {
         <AsyncContent key={view} label={`Loading ${VIEW_LABELS[view].toLowerCase()}…`}>
           {view === "monitor" ? (
             <MonitorView monitor={monitor} connection={connection} />
+          ) : view === "review" ? (
+            <LanguageReviewView key={monitor.apiUrl} apiUrl={monitor.apiUrl} />
           ) : view === "data" ? (
             <DataCacheView monitor={monitor} />
           ) : view === "logs" ? (

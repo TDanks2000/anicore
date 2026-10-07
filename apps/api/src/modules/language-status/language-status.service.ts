@@ -5,6 +5,7 @@ import {
 } from "@anicore/db/language-status";
 import {
   type AnimeLanguageEvidence,
+  anime,
   animeLanguageEvidence,
   animeLanguageStatus,
   type Episode,
@@ -12,7 +13,7 @@ import {
   episodeLanguageStatus,
   episodes,
 } from "@anicore/db/schema";
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray } from "drizzle-orm";
 import {
   type AnimeLanguageStatusValue,
   clampConfidence,
@@ -389,16 +390,30 @@ export async function upsertLegacyEpisodeAudioStatus(input: {
   return toLegacyEpisodeAudioResponse(episode, [row])[0] ?? null;
 }
 
-export async function listLanguageStatusReviewQueue(page: { limit: number; offset: number }) {
-  return readDb
+export interface LanguageReviewQuery {
+  limit: number;
+  offset: number;
+  languageCode?: string;
+  mediaType?: LanguageMediaType;
+  status?: "unknown" | "possible";
+  includeAnime?: boolean;
+}
+
+export async function listLanguageStatusReviewQueue(page: LanguageReviewQuery) {
+  const conditions = [
+    inArray(animeLanguageStatus.status, ["unknown", "possible"]),
+    eq(animeLanguageStatus.isManualOverride, false),
+  ];
+  if (page.languageCode)
+    conditions.push(eq(animeLanguageStatus.languageCode, normalizeLanguageCode(page.languageCode)));
+  if (page.mediaType) conditions.push(eq(animeLanguageStatus.mediaType, page.mediaType));
+  if (page.status) conditions.push(eq(animeLanguageStatus.status, page.status));
+  const where = and(...conditions);
+  // Preserve the original bare status-row array unless enrichment is requested.
+  const rows = await readDb
     .select()
     .from(animeLanguageStatus)
-    .where(
-      and(
-        inArray(animeLanguageStatus.status, ["unknown", "possible"]),
-        eq(animeLanguageStatus.isManualOverride, false),
-      ),
-    )
+    .where(where)
     .orderBy(
       asc(animeLanguageStatus.confidence),
       desc(animeLanguageStatus.updatedAt),
@@ -406,4 +421,19 @@ export async function listLanguageStatusReviewQueue(page: { limit: number; offse
     )
     .limit(page.limit)
     .offset(page.offset);
+  const [total] = await readDb.select({ value: count() }).from(animeLanguageStatus).where(where);
+  if (!page.includeAnime) return { items: rows, total: total?.value ?? 0 };
+
+  const ids = [...new Set(rows.map((row) => row.animeId))];
+  const titles = ids.length
+    ? await readDb
+        .select({ id: anime.id, titleRomaji: anime.titleRomaji, titleEnglish: anime.titleEnglish })
+        .from(anime)
+        .where(inArray(anime.id, ids))
+    : [];
+  const byId = new Map(titles.map((title) => [title.id, title]));
+  return {
+    items: rows.map((row) => ({ ...row, anime: byId.get(row.animeId) ?? null })),
+    total: total?.value ?? 0,
+  };
 }

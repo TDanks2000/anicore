@@ -2,6 +2,7 @@ import { CircleAlert, ExternalLink, X } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 
 import { AnimeCover } from "@/components/catalog/anime-cover";
+import { CoverageInspector } from "@/components/catalog/coverage-inspector";
 import { ProviderFreshnessPanel } from "@/components/catalog/provider-freshness";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -60,16 +61,22 @@ export function AnimeDetailDialog({
   apiUrl,
   onClose,
   revision,
+  initialLanguage,
 }: {
   anime: AnimeListItem | null;
   apiUrl: string;
   onClose: () => void;
   revision?: string | null;
+  initialLanguage?: string;
 }) {
   const animeId = anime?.id ?? null;
   const { data, loading, error, retry } = useAnimeDetail(apiUrl, animeId, revision);
-  const [language, setLanguage] = useState("en");
+  const [language, setLanguage] = useState(initialLanguage ?? "en");
   const { toast } = useToast();
+
+  useEffect(() => {
+    setLanguage(initialLanguage ?? "en");
+  }, [animeId, initialLanguage]);
 
   useEffect(() => {
     if (error && animeId !== null) {
@@ -180,6 +187,13 @@ export function AnimeDetailDialog({
                 ) : null}
                 <Synopsis description={full.description} />
                 <ProviderFreshnessPanel apiUrl={apiUrl} animeId={full.id} revision={revision} />
+                {data ? (
+                  <CoverageInspector
+                    anime={full}
+                    language={data.language}
+                    languageCode={language}
+                  />
+                ) : null}
 
                 <dl className="grid grid-cols-2 gap-x-6 gap-y-3 rounded-lg border border-border bg-muted/20 p-4 sm:grid-cols-4">
                   <Fact
@@ -244,8 +258,8 @@ export function AnimeDetailDialog({
                     </ul>
                   )}
                   <p className="text-xs text-muted-foreground">
-                    Availability confirms that a language track exists. Episode coverage is verified
-                    separately; unknown coverage does not mean unavailable.
+                    Confirmed status establishes that a language track exists. Episode coverage is
+                    verified separately; unknown coverage does not mean unavailable.
                   </p>
                   {languageEvidence.length > 0 ? (
                     <details className="rounded-lg border border-border px-3 py-2">
@@ -280,7 +294,7 @@ export function AnimeDetailDialog({
                                 ) : (
                                   source
                                 )}
-                                <span className="tabular-nums">{item.confidence}%</span>
+                                <span className="tabular-nums">Weight {item.confidence}/100</span>
                               </span>
                             </li>
                           );
@@ -578,11 +592,11 @@ function MediaStatusPill({ label, row }: { label: string; row: AnimeLanguageStat
   return (
     <Badge
       variant={animeLanguageStatusTone(row.status)}
-      title={`Confidence ${row.confidence}%${row.isManualOverride ? " · manually overridden" : ""}`}
+      title={`Evidence weight ${row.confidence}/100${row.isManualOverride ? " · manually overridden" : ""}`}
     >
       {label}: {animeLanguageStatusLabel(row.status)}
       {row.confidence > 0 ? (
-        <span className="tabular-nums opacity-70">{row.confidence}%</span>
+        <span className="tabular-nums opacity-70">Weight {row.confidence}/100</span>
       ) : null}
       {row.isManualOverride ? <span className="opacity-70">manual</span> : null}
     </Badge>
@@ -630,7 +644,7 @@ function EpisodeStatusBadge({ row }: { row?: EpisodeLanguageStatusRow }) {
   return (
     <Badge
       variant={episodeLanguageStatusTone(row.status)}
-      title={`${row.provider} · confidence ${row.confidence}%`}
+      title={`${row.provider} · evidence weight ${row.confidence}/100`}
     >
       {episodeLanguageStatusLabel(row.status)}
     </Badge>

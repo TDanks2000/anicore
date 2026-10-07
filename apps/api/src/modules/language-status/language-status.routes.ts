@@ -106,6 +106,21 @@ export const languageStatusRoutes = new Elysia({ detail: { tags: ["Language stat
       }),
     },
   )
-  .get("/admin/language-status/review-queue", ({ query }) => listLanguageStatusReviewQueue(query), {
-    query: t.Object(paginationQuery),
-  });
+  .get(
+    "/admin/language-status/review-queue",
+    async ({ query, set }) => {
+      const result = await listLanguageStatusReviewQueue(query);
+      set.headers["X-Total-Count"] = String(result.total);
+      set.headers["Cache-Control"] = "no-store";
+      return result.items;
+    },
+    {
+      query: t.Object({
+        ...paginationQuery,
+        languageCode: t.Optional(languageCodeValue),
+        mediaType: t.Optional(languageMediaTypeEnum),
+        status: t.Optional(t.Union([t.Literal("unknown"), t.Literal("possible")])),
+        includeAnime: t.Optional(t.Boolean()),
+      }),
+    },
+  );

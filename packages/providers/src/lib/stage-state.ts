@@ -3,6 +3,15 @@ import { syncStageState } from "@anicore/db/schema";
 import { and, eq, gt } from "drizzle-orm";
 
 const flights = new Map<string, Promise<unknown>>();
+export class SyncStageCooldownError extends Error {
+  constructor(
+    public readonly stage: string,
+    public readonly retryAt: number,
+    public readonly previousError: string | null,
+  ) {
+    super(`${stage} retry cooling down until ${new Date(retryAt).toISOString()}`);
+  }
+}
 export const refreshTtl = (status: string | null | undefined, language = false): number =>
   status === "FINISHED" || status === "CANCELLED"
     ? (language ? 24 : 7 * 24) * 3600_000
@@ -59,7 +68,7 @@ export function runSyncStage<T>(
       }
     }
     if (!force && state?.failures && state.retryAt !== null && state.retryAt > now) {
-      throw new Error(`${stage} retry cooling down until ${new Date(state.retryAt).toISOString()}`);
+      throw new SyncStageCooldownError(stage, state.retryAt, state.error);
     }
     try {
       const value = await operation();
