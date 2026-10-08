@@ -1,8 +1,10 @@
+import { readFileSync } from "node:fs";
 import { Elysia } from "elysia";
 
 // Resolve against this module so docs work from both the repo and API working directories.
-const overview = await Bun.file(new URL("./llms.txt", import.meta.url)).text();
-const integrationGuide = await Bun.file(new URL("./llms-full.txt", import.meta.url)).text();
+// PM2 loads the Bun entry point with require(), so its imports cannot use top-level await.
+const overview = readFileSync(new URL("./llms.txt", import.meta.url), "utf8");
+const integrationGuide = readFileSync(new URL("./llms-full.txt", import.meta.url), "utf8");
 
 export const docsRoutes = new Elysia({ detail: { tags: ["Documentation"] } })
   .get(
