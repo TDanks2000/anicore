@@ -1,0 +1,18 @@
+# AniCore API
+
+> AniCore is a public JSON API for unified anime metadata, episodes, cross-provider IDs, and dub/subtitle availability per language. Production base URL: https://anicore-api.tdanks.com.
+
+Public reads need no API key. All writes and every /admin route require the operator's admin token; /sync-monitor uses a separate access code. Normal app integrations should use public GET routes.
+
+AniCore IDs are internal positive integers, not AniList or other provider IDs. Resolve external IDs through /anime/by/:provider/:providerId before fetching details. AniCore serves stored metadata, not video streams. Unknown language availability must stay unknown; confirmed language existence does not prove complete episode coverage or current regional licensing.
+
+## Integration documentation
+
+- [Full integration guide](https://anicore-api.tdanks.com/llms-full.txt): Routes, response shapes, pagination, authentication, language semantics, and a JavaScript fetch example. Read this before implementing a client.
+- [OpenAPI schema](https://anicore-api.tdanks.com/docs/json): Machine-readable route definitions, request parameters, validation constraints, and security schemes. Response schemas may be incomplete; consult the guide and inspect actual responses before generating client models.
+- [Interactive API reference](https://anicore-api.tdanks.com/docs): Browser-based reference for exploring the API.
+
+## Optional
+
+- [API liveness](https://anicore-api.tdanks.com/health): Returns whether the API process is serving requests.
+- [API readiness](https://anicore-api.tdanks.com/health/ready): Checks database connectivity; returns 503 when unavailable.

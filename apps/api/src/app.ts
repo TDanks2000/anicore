@@ -7,6 +7,7 @@ import { authorizeAdminRequest } from "./lib/admin-auth";
 import { logCors } from "./lib/cors-log";
 import { HttpError, isForeignKeyViolation, isUniqueViolation } from "./lib/errors";
 import { animeRoutes } from "./modules/anime/anime.routes";
+import { docsRoutes } from "./modules/docs/docs.routes";
 import { episodeRoutes } from "./modules/episodes/episodes.routes";
 import { healthRoutes } from "./modules/health/health.routes";
 import { languageStatusRoutes } from "./modules/language-status/language-status.routes";
@@ -168,6 +169,7 @@ export const app = new Elysia()
       },
     }),
   )
+  .use(docsRoutes)
   .use(healthRoutes)
   .use(syncMonitorRoutes)
   .use(languageStatusRoutes)

@@ -46,6 +46,31 @@ describe("app contract", () => {
     expect(await json(response)).toEqual({ ok: true, name: "anicore" });
   });
 
+  test("serves public plain-text agent documentation with reachable reference links", async () => {
+    const response = await app.handle(new Request("http://localhost/llms.txt"));
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+    const overview = await response.text();
+    expect(overview.startsWith("# AniCore API\n")).toBe(true);
+
+    const links = [...overview.matchAll(/\]\((https:\/\/anicore-api\.tdanks\.com[^)]+)\)/g)];
+    expect(links.length).toBeGreaterThanOrEqual(3);
+    // Readiness depends on the database; only documentation links belong in this check.
+    for (const [, url] of links.filter(
+      ([, url]) => !new URL(url!).pathname.startsWith("/health"),
+    )) {
+      const linked = await app.handle(new Request(`http://localhost${new URL(url!).pathname}`));
+      expect(linked.status).toBe(200);
+    }
+
+    const guide = await app.handle(new Request("http://localhost/llms-full.txt"));
+    expect(guide.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+    const content = await guide.text();
+    expect(content).toContain("X-Next-Cursor");
+    expect(content).toContain("/anime/by/:provider/:providerId");
+    expect(content).toContain("CORS_ORIGIN");
+  });
+
   test("opt-in HTTP measurements use route templates without leaking request values", async () => {
     const previous = process.env.ANICORE_PERFORMANCE;
     const info = spyOn(console, "info").mockImplementation(() => {});

@@ -17,6 +17,11 @@ The database file is created and migrated automatically the first time anything 
 
 Interactive API docs are served at `http://localhost:3000/docs` (OpenAPI JSON at `/docs/json`).
 
+For coding agents, share [llms.txt](https://anicore-api.tdanks.com/llms.txt).
+It links to the plain-text [integration guide](https://anicore-api.tdanks.com/llms-full.txt)
+and OpenAPI schema. Both guides are served by the API at the same paths locally;
+their source lives in `apps/api/src/modules/docs` and should be updated when the API changes.
+
 ## Running with PM2
 
 Install Node.js and PM2 (`npm install -g pm2`) alongside Bun, then run from the repository root:

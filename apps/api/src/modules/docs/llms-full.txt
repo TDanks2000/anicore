@@ -1,0 +1,115 @@
+# AniCore API integration guide
+
+> Base URL: https://anicore-api.tdanks.com. AniCore serves stored anime metadata, episodes, cross-provider mappings, and per-language dub/subtitle evidence as JSON. It does not serve video streams.
+
+## Start here
+
+Read /docs/json for current request schemas and accepted enum values. Interactive docs are at /docs. Response schemas may be incomplete: the shapes below describe the service, and clients should tolerate additional fields and nullable metadata. All paths below are relative to the base URL; there is no /api or /v1 prefix.
+
+For a normal application: search /anime, take an item's internal id, fetch /anime/:id/full, then fetch dub-status or subtitle-status as needed. If you already have an external catalogue ID, resolve it with /anime/by/:provider/:providerId instead of treating it as an internal ID. A 404 means the record or mapping is not stored; public GET requests do not import it or call upstream providers.
+
+## Public routes and response shapes
+
+- GET /anime: Bare array of anime objects. See pagination and search below.
+- GET /anime/:id: One anime object, including id, slug, titles, description, format, status, dates, episodeCount, coverImage, genres, and synonyms. Many metadata fields can be null.
+- GET /anime/:id/full: Anime object with mappings, segmentMappings, episodes, studios, tags, externalLinks, and relations arrays.
+- GET /anime/:id/mappings: Array of provider mapping objects.
+- GET /anime/:id/episodes: Array of stored episodes for this anime, ordered by sortNumber, number, then id. This collection is not paginated.
+- GET /anime/:id/studios, /anime/:id/tags, /anime/:id/external-links, /anime/:id/relations: Individual child collections as arrays.
+- GET /anime/by/:provider/:providerId: Anime object with a mapping property.
+- GET /mappings/anime/:provider/:providerId: Object containing anime and mapping properties.
+- GET /mappings/episode/:provider/:providerId: Object containing episode and mapping properties.
+- GET /episodes: Bare array of episodes, ordered by internal id, with limit and offset pagination.
+- GET /episodes/:id: Episode object. id is the internal episode ID; animeId is the internal anime ID; number is its episode number. Display and absolute numbering can differ.
+- GET /episodes/:id/full: Episode object with mappings, languageStatuses, and legacy audioStatuses arrays.
+- GET /episodes/:id/mappings: Array of provider mappings.
+- GET /episodes/:id/audio: Legacy audio status array. Prefer the resolved anime dub/subtitle routes for coverage.
+- GET /anime/:id/language-status: Object with statuses and evidence arrays; optional languageCode and mediaType (audio or subtitle) filters.
+- GET /anime/:id/dub-status?languageCode=en: Resolved audio status and episode coverage; defaults to English.
+- GET /anime/:id/subtitle-status?languageCode=en: Resolved subtitle status and episode coverage; defaults to English.
+- GET /anime/revision: Object with revision, useful for invalidating catalogue caches.
+- GET /anime/:id/freshness: Array of sync stages with successAt, nextDueAt, retryAt, and failures.
+- GET /health: Liveness object { "ok": true, "name": "anicore" }.
+- GET /health/ready: Database readiness; 200 when reachable, 503 when unavailable.
+
+Provider names: anilist, kitsu, thetvdb, mal, tmdb, simkl, anisearch, animeplanet, animeschedule, crunchyroll, other. Provider IDs are strings; URL-encode path values. Mapping confidence is an integer from 0 to 100, with provenance in source (manual, api, import, fuzzy, system). A fuzzy match is not authoritative identity. Segment mappings describe a slice of a provider series; do not assume provider seasons and local anime are one-to-one.
+
+## Search and pagination
+
+GET /anime?q=Cowboy%20Bebop&limit=20&offset=0&projection=summary
+
+- q searches titles, synonyms, and slugs; maximum 200 characters. Without explicit sort, search results rank exact/prefix matches first, while unfiltered lists use ascending id.
+- Optional filters: format, season, seasonYear, status. Text filters are normalized to uppercase by the service.
+- sort: id, title, format, status, seasonYear, episodes, score, popularity. order: asc (default) or desc. Missing sort values come last.
+- limit: integer 1-100, default 50. offset: nonnegative integer, default 0. The response body is an array, not { items, total }.
+- X-Total-Count is the total matching anime count. Read it from the response headers. /episodes does not supply this total header.
+- projection=summary omits description, bannerImage, trailerVideoId, trailerSite, trailerThumbnail, and hashtag. Default projection=full retains them; it does not include the child collections from /anime/:id/full.
+- For cursor pagination, use pagination=cursor&sort=id&limit=50, then send the returned X-Next-Cursor as afterId on the next request. Keep filters and order unchanged. An empty X-Next-Cursor marks the final page. offset must be 0 and sort must be id if supplied; search cursors require explicit sort=id. afterId requires pagination=cursor. Cursor pagination is only supported by /anime.
+
+## Language availability
+
+Language codes are normalized to the primary subtag: pt-BR becomes pt. Regional precision is not retained. dub-status and subtitle-status return animeId, languageCode, mediaType, status, confidence, evidence, coverage, and supporting resolution metadata. coverage contains totals and an episodes array of resolved canonical episode records. Canonical episodes without evidence count as unknown in the totals and may be absent from this array; treat absent episode records as unknown.
+
+Anime-level statuses: unknown, possible, likely, confirmed, partial, not_available. Episode-level statuses: unknown, available, missing, partial. Show unknown as unknown, not unavailable. confirmed establishes that a language track exists; it does not establish that all episodes have released. Check coverage for episode availability. Evidence confidence scores are weights, not measured probabilities. Catalogue evidence does not prove current regional licensing. A finished original broadcast does not prove a completed dub.
+
+## JavaScript example
+
+This example uses public reads and works in a server environment or a browser whose origin the operator has allowed. Handle missing metadata and an empty search result in the app UI.
+
+```js
+const baseUrl = "https://anicore-api.tdanks.com";
+
+async function get(path) {
+  const response = await fetch(`${baseUrl}${path}`, {
+    headers: { Accept: "application/json" },
+    signal: AbortSignal.timeout(15000),
+  });
+  const body = await response.json();
+  if (!response.ok) {
+    throw new Error(`AniCore ${response.status}: ${body.error ?? "Request failed"}`);
+  }
+  return { body, headers: response.headers };
+}
+
+const query = new URLSearchParams({
+  q: "Cowboy Bebop", limit: "20", projection: "summary",
+});
+const { body: results, headers } = await get(`/anime?${query}`);
+const total = Number(headers.get("X-Total-Count") ?? results.length);
+// Let the user choose a result; this example selects the first one.
+if (results.length > 0) {
+  const id = results[0].id;
+  const [{ body: anime }, { body: dub }] = await Promise.all([
+    get(`/anime/${id}/full`),
+    get(`/anime/${id}/dub-status?languageCode=en`),
+  ]);
+  console.log({ total, anime, dub });
+}
+
+// Resolve an AniList ID (1) to an internal AniCore ID:
+const { body: resolved } = await get("/anime/by/anilist/1");
+console.log(resolved.id, resolved.mapping);
+```
+
+## Authentication, CORS, and errors
+
+Public GET routes above require no token. Every POST, PUT, PATCH, DELETE and every /admin route requires the operator's ANICORE_ADMIN_TOKEN, supplied as Authorization: Bearer <token> or X-Anicore-Admin-Token. Never embed this token in a browser/mobile bundle. Use a trusted server for authorized writes. /sync-monitor has its own access code and is an operational interface, not needed for app integrations.
+
+Browser cross-origin access is restricted to the operator's CORS_ORIGIN allow-list; it is not open to arbitrary origins. If your origin is blocked, ask the operator to allow it or make requests through your app's server. X-Total-Count and X-Next-Cursor are exposed to allowed browser origins.
+
+Errors are JSON with an error string. Validation errors also include issues with path and message, for example { "error": "Validation failed", "issues": [{ "path": "/id", "message": "Property 'id' should be integer" }] }. Handle 400 (invalid input), 401 (invalid admin token), 404 (not stored), 409 (conflict), 500 (internal error), and 503 (unavailable database or disabled admin routes). Use timeouts and bounded retry/backoff for transient failures. Do not retry validation errors or automatically retry writes.
+
+## Operator-only writes
+
+These are unnecessary for ordinary public integrations. Consult /docs/json for full bodies and constraints before using them with operator authorization.
+
+- POST /anime: Create an anime; titleRomaji is required, mappings are optional.
+- POST /anime/import/anilist: Import or refresh with { "id": 1 } or { "search": "Cowboy Bebop" }.
+- POST /episodes: Create an episode with animeId and number, optionally mappings and language statuses.
+- POST /episodes/:id/audio: Record legacy audio status.
+- POST /mappings/anime, /mappings/episode: Create provider mappings; PATCH and DELETE /mappings/{anime,episode}/:provider/:providerId update/remove them.
+- POST /admin/anime/:id/language-refresh: Refresh language evidence from providers.
+- POST /admin/anime/:id/language-evidence, /admin/anime/:id/language-override: Record evidence or overrides.
+- GET /admin/language-status/review-queue: Operator review queue.
+
+A provider ID belongs to at most one anime and one episode. Each anime has at most one primary mapping per provider. Episode mappings require an anime-level mapping for that provider; mappings with dependent episode mappings cannot be deleted.
