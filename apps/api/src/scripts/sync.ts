@@ -34,6 +34,7 @@ import { DEFAULT_AUTO_SYNC_INTERVAL_MINUTES } from "@anicore/sync-monitor";
 import { and, eq } from "drizzle-orm";
 import { parseIntegerFlag, selectSyncIds } from "../lib/sync-cli";
 import { SyncControl, SyncStoppedError } from "../lib/sync-control";
+import { loadNewSyncExcludedIds } from "../lib/sync-id-selection";
 import {
   createSyncMonitorBatch,
   ensureSyncMonitorAccessCode,
@@ -367,18 +368,8 @@ async function lookupAnimeMapping(
 
 async function loadSelectedIds(): Promise<number[]> {
   const ids = await loadIds(REFRESH_IDS);
-  const existing = NEW_IDS_ONLY
-    ? await db
-        .select({ id: animeMappings.providerId })
-        .from(animeMappings)
-        .where(eq(animeMappings.provider, "anilist"))
-    : [];
-  const selected = selectSyncIds(
-    ids,
-    new Set(existing.map((row) => Number(row.id))),
-    NEW_IDS_ONLY,
-    REVERSE,
-  );
+  const excluded = NEW_IDS_ONLY ? await loadNewSyncExcludedIds(RECONCILE) : new Set<number>();
+  const selected = selectSyncIds(ids, excluded, NEW_IDS_ONLY, REVERSE);
   if (CUSTOM_SELECTION)
     log.info(
       `Selected ${selected.length.toLocaleString()} ${NEW_IDS_ONLY ? "new" : "all"} IDs, ${REVERSE ? "highest" : "lowest"} first; normal saved progress is unchanged`,
