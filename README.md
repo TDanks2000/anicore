@@ -74,6 +74,10 @@ Reads are public. Every write, and every route under `/admin`, requires the admi
 | `GET` | `/episodes`, `/episodes/:id`, `/episodes/:id/{full,mappings,audio}` | Episodes and their mappings and language status. |
 | `POST` | `/episodes`, `/episodes/:id/audio` | Create an episode, record audio status. |
 | `GET` `POST` `PATCH` `DELETE` | `/mappings/{anime,episode}/...` | Look up, create, update and delete provider mappings. |
+| `GET` | `/mappings/season/:provider/:providerSeriesId` | List numbered seasons and their anime entries, ordered by season and part. Optional `seasonNumber` filters one season. |
+| `POST` | `/mappings/season` | Map `animeId` to `provider`, `providerSeriesId`, `seasonNumber` and optional `partNumber` (default 1), `confidence` and `source`. |
+| `PATCH` `DELETE` | `/mappings/season/:id` | Update season/part numbers, confidence or source, or delete a season mapping. |
+| `GET` | `/anime/:id/season-mappings` | Season mappings for an anime; also included as `seasonMappings` in `/anime/:id/full`. |
 | `POST` | `/admin/anime/:id/language-{evidence,override}` | Record language evidence or a manual override. |
 | `GET` | `/admin/language-status/review-queue` | Low-confidence language statuses to review. |
 | `GET` | `/health`, `/health/ready` | Liveness, and readiness including a database check. |
@@ -89,6 +93,8 @@ GET requests never change data or call external providers. Missing records retur
 - A provider ID belongs to at most one anime (and one episode).
 - Each anime has at most one primary mapping per provider. A provider's first mapping is primary by default; adding another requires the existing primary to stay, or the new one to be marked primary, which demotes the old one. A primary cannot be cleared or deleted while others exist.
 - Episode mappings for a provider require an anime-level mapping for that provider, and an anime-level mapping cannot be deleted while episode mappings depend on it.
+- Season mappings explicitly group separate AniList anime entries under a provider's series ID and numbered season. Use `partNumber: 1`, `2`, etc. for split cours; season 0 is available for specials. Each provider/series/season/part has one anime owner. These mappings are curated, not inferred from airing quarters or sequel relations, and do not alter episode numbering. For example, post two mappings with the same TMDB series ID and `seasonNumber: 3`, but different anime IDs and part numbers, then look them up with `/mappings/season/tmdb/<seriesId>?seasonNumber=3`.
+- The web monitor remembers its code as AES-GCM ciphertext in local storage, with a non-exportable key in IndexedDB. Clear the code field to forget it. This requires HTTPS or localhost and browser storage; otherwise the code stays in memory. Browser encryption protects stored plaintext, but scripts running on the same origin can still use the key.
 
 ### Authentication
 

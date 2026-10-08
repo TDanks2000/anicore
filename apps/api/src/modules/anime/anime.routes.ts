@@ -16,6 +16,7 @@ import {
   sourceEnum,
 } from "../../lib/validators";
 import { findAnimeByMapping, listAnimeMappings } from "../mappings/mappings.service";
+import { listAnimeSeasonMappings } from "../mappings/season-mappings.service";
 import { importAnilistAnime, importAnilistAnimeBySearch } from "./anime.import";
 import {
   animeSortFields,
@@ -213,6 +214,14 @@ export const animeRoutes = new Elysia({ prefix: "/anime", detail: { tags: ["Anim
     async ({ params }) => {
       await assertAnimeExists(params.id);
       return listAnimeRelations(params.id);
+    },
+    { params: idParams },
+  )
+  .get(
+    "/:id/season-mappings",
+    async ({ params }) => {
+      await assertAnimeExists(params.id);
+      return listAnimeSeasonMappings(params.id);
     },
     { params: idParams },
   );

@@ -1,0 +1,2505 @@
+{
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "d63e02af-0bb5-43d3-8341-541a5f564832",
+  "prevId": "1c18bd32-681f-4e7d-bd3e-e554b399a07d",
+  "tables": {
+    "anime": {
+      "name": "anime",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "slug": {
+          "name": "slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "title_romaji": {
+          "name": "title_romaji",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "title_english": {
+          "name": "title_english",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "title_native": {
+          "name": "title_native",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "title_user_preferred": {
+          "name": "title_user_preferred",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "format": {
+          "name": "format",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "season": {
+          "name": "season",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "season_year": {
+          "name": "season_year",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "start_date": {
+          "name": "start_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "end_date": {
+          "name": "end_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "episode_count": {
+          "name": "episode_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "duration_minutes": {
+          "name": "duration_minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "country_of_origin": {
+          "name": "country_of_origin",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "is_adult": {
+          "name": "is_adult",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "genres_json": {
+          "name": "genres_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'[]'"
+        },
+        "synonyms_json": {
+          "name": "synonyms_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'[]'"
+        },
+        "average_score": {
+          "name": "average_score",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "mean_score": {
+          "name": "mean_score",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "popularity": {
+          "name": "popularity",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "favourites": {
+          "name": "favourites",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "trending": {
+          "name": "trending",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "cover_image": {
+          "name": "cover_image",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "cover_image_color": {
+          "name": "cover_image_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "banner_image": {
+          "name": "banner_image",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "trailer_video_id": {
+          "name": "trailer_video_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "trailer_site": {
+          "name": "trailer_site",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "trailer_thumbnail": {
+          "name": "trailer_thumbnail",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "next_episode_number": {
+          "name": "next_episode_number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "next_episode_airs_at": {
+          "name": "next_episode_airs_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "hashtag": {
+          "name": "hashtag",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast((julianday('now') - 2440587.5)*86400000 as integer))"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast((julianday('now') - 2440587.5)*86400000 as integer))"
+        }
+      },
+      "indexes": {
+        "anime_slug_idx": {
+          "name": "anime_slug_idx",
+          "columns": [
+            "slug"
+          ],
+          "isUnique": true
+        },
+        "anime_title_romaji_idx": {
+          "name": "anime_title_romaji_idx",
+          "columns": [
+            "title_romaji"
+          ],
+          "isUnique": false
+        },
+        "anime_title_english_idx": {
+          "name": "anime_title_english_idx",
+          "columns": [
+            "title_english"
+          ],
+          "isUnique": false
+        },
+        "anime_season_idx": {
+          "name": "anime_season_idx",
+          "columns": [
+            "season_year",
+            "season"
+          ],
+          "isUnique": false
+        },
+        "anime_format_idx": {
+          "name": "anime_format_idx",
+          "columns": [
+            "format"
+          ],
+          "isUnique": false
+        },
+        "anime_status_idx": {
+          "name": "anime_status_idx",
+          "columns": [
+            "status"
+          ],
+          "isUnique": false
+        },
+        "anime_source_idx": {
+          "name": "anime_source_idx",
+          "columns": [
+            "source"
+          ],
+          "isUnique": false
+        },
+        "anime_start_date_idx": {
+          "name": "anime_start_date_idx",
+          "columns": [
+            "start_date"
+          ],
+          "isUnique": false
+        },
+        "anime_trending_idx": {
+          "name": "anime_trending_idx",
+          "columns": [
+            "trending"
+          ],
+          "isUnique": false
+        },
+        "anime_mean_score_idx": {
+          "name": "anime_mean_score_idx",
+          "columns": [
+            "mean_score"
+          ],
+          "isUnique": false
+        },
+        "anime_catalogue_title_idx": {
+          "name": "anime_catalogue_title_idx",
+          "columns": [
+            "lower(\"title_romaji\")",
+            "id"
+          ],
+          "isUnique": false
+        },
+        "anime_catalogue_id_idx": {
+          "name": "anime_catalogue_id_idx",
+          "columns": [
+            "id"
+          ],
+          "isUnique": false
+        },
+        "anime_catalogue_score_idx": {
+          "name": "anime_catalogue_score_idx",
+          "columns": [
+            "\"average_score\" desc",
+            "id"
+          ],
+          "isUnique": false
+        },
+        "anime_catalogue_popularity_idx": {
+          "name": "anime_catalogue_popularity_idx",
+          "columns": [
+            "\"popularity\" desc",
+            "id"
+          ],
+          "isUnique": false
+        },
+        "anime_catalogue_format_score_idx": {
+          "name": "anime_catalogue_format_score_idx",
+          "columns": [
+            "format",
+            "\"average_score\" desc",
+            "id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "anime_external_links": {
+      "name": "anime_external_links",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "anime_id": {
+          "name": "anime_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "site": {
+          "name": "site",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "url": {
+          "name": "url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "language": {
+          "name": "language",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "color": {
+          "name": "color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "icon": {
+          "name": "icon",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "anime_external_links_anime_url_idx": {
+          "name": "anime_external_links_anime_url_idx",
+          "columns": [
+            "anime_id",
+            "url"
+          ],
+          "isUnique": true
+        },
+        "anime_external_links_anime_type_idx": {
+          "name": "anime_external_links_anime_type_idx",
+          "columns": [
+            "anime_id",
+            "type"
+          ],
+          "isUnique": false
+        },
+        "anime_external_links_site_idx": {
+          "name": "anime_external_links_site_idx",
+          "columns": [
+            "site"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "anime_external_links_anime_id_anime_id_fk": {
+          "name": "anime_external_links_anime_id_anime_id_fk",
+          "tableFrom": "anime_external_links",
+          "tableTo": "anime",
+          "columnsFrom": [
+            "anime_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "anime_language_evidence": {
+      "name": "anime_language_evidence",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "anime_id": {
+          "name": "anime_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "language_code": {
+          "name": "language_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "media_type": {
+          "name": "media_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "source_url": {
+          "name": "source_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "evidence_type": {
+          "name": "evidence_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "value": {
+          "name": "value",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "confidence": {
+          "name": "confidence",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast((julianday('now') - 2440587.5)*86400000 as integer))"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast((julianday('now') - 2440587.5)*86400000 as integer))"
+        }
+      },
+      "indexes": {
+        "anime_language_evidence_anime_language_media_idx": {
+          "name": "anime_language_evidence_anime_language_media_idx",
+          "columns": [
+            "anime_id",
+            "language_code",
+            "media_type"
+          ],
+          "isUnique": false
+        },
+        "anime_language_evidence_source_idx": {
+          "name": "anime_language_evidence_source_idx",
+          "columns": [
+            "source"
+          ],
+          "isUnique": false
+        },
+        "anime_language_evidence_confidence_idx": {
+          "name": "anime_language_evidence_confidence_idx",
+          "columns": [
+            "confidence"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "anime_language_evidence_anime_id_anime_id_fk": {
+          "name": "anime_language_evidence_anime_id_anime_id_fk",
+          "tableFrom": "anime_language_evidence",
+          "tableTo": "anime",
+          "columnsFrom": [
+            "anime_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "anime_language_status": {
+      "name": "anime_language_status",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "anime_id": {
+          "name": "anime_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "language_code": {
+          "name": "language_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "media_type": {
+          "name": "media_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'unknown'"
+        },
+        "confidence": {
+          "name": "confidence",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "is_manual_override": {
+          "name": "is_manual_override",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "checked_at": {
+          "name": "checked_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast((julianday('now') - 2440587.5)*86400000 as integer))"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast((julianday('now') - 2440587.5)*86400000 as integer))"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast((julianday('now') - 2440587.5)*86400000 as integer))"
+        }
+      },
+      "indexes": {
+        "anime_language_status_anime_language_media_idx": {
+          "name": "anime_language_status_anime_language_media_idx",
+          "columns": [
+            "anime_id",
+            "language_code",
+            "media_type"
+          ],
+          "isUnique": true
+        },
+        "anime_language_status_review_queue_idx": {
+          "name": "anime_language_status_review_queue_idx",
+          "columns": [
+            "status",
+            "confidence",
+            "is_manual_override"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "anime_language_status_anime_id_anime_id_fk": {
+          "name": "anime_language_status_anime_id_anime_id_fk",
+          "tableFrom": "anime_language_status",
+          "tableTo": "anime",
+          "columnsFrom": [
+            "anime_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "anime_mappings": {
+      "name": "anime_mappings",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "anime_id": {
+          "name": "anime_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "provider": {
+          "name": "provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "provider_id": {
+          "name": "provider_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "provider_slug": {
+          "name": "provider_slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "provider_url": {
+          "name": "provider_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "confidence": {
+          "name": "confidence",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 100
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'manual'"
+        },
+        "is_primary": {
+          "name": "is_primary",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast((julianday('now') - 2440587.5)*86400000 as integer))"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast((julianday('now') - 2440587.5)*86400000 as integer))"
+        }
+      },
+      "indexes": {
+        "anime_mappings_provider_id_idx": {
+          "name": "anime_mappings_provider_id_idx",
+          "columns": [
+            "provider",
+            "provider_id"
+          ],
+          "isUnique": true
+        },
+        "anime_mappings_anime_provider_id_idx": {
+          "name": "anime_mappings_anime_provider_id_idx",
+          "columns": [
+            "anime_id",
+            "provider",
+            "provider_id"
+          ],
+          "isUnique": true
+        },
+        "anime_mappings_anime_provider_idx": {
+          "name": "anime_mappings_anime_provider_idx",
+          "columns": [
+            "anime_id",
+            "provider"
+          ],
+          "isUnique": false
+        },
+        "anime_mappings_anime_provider_primary_idx": {
+          "name": "anime_mappings_anime_provider_primary_idx",
+          "columns": [
+            "anime_id",
+            "provider"
+          ],
+          "isUnique": true,
+          "where": "\"anime_mappings\".\"is_primary\""
+        },
+        "anime_mappings_provider_slug_idx": {
+          "name": "anime_mappings_provider_slug_idx",
+          "columns": [
+            "provider",
+            "provider_slug"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "anime_mappings_anime_id_anime_id_fk": {
+          "name": "anime_mappings_anime_id_anime_id_fk",
+          "tableFrom": "anime_mappings",
+          "tableTo": "anime",
+          "columnsFrom": [
+            "anime_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "anime_relation_links": {
+      "name": "anime_relation_links",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "anime_id": {
+          "name": "anime_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "related_anime_id": {
+          "name": "related_anime_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "relation_type": {
+          "name": "relation_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast((julianday('now') - 2440587.5)*86400000 as integer))"
+        }
+      },
+      "indexes": {
+        "anime_relation_links_pair_idx": {
+          "name": "anime_relation_links_pair_idx",
+          "columns": [
+            "anime_id",
+            "related_anime_id"
+          ],
+          "isUnique": true
+        },
+        "anime_relation_links_related_idx": {
+          "name": "anime_relation_links_related_idx",
+          "columns": [
+            "related_anime_id"
+          ],
+          "isUnique": false
+        },
+        "anime_relation_links_type_idx": {
+          "name": "anime_relation_links_type_idx",
+          "columns": [
+            "relation_type"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "anime_relation_links_anime_id_anime_id_fk": {
+          "name": "anime_relation_links_anime_id_anime_id_fk",
+          "tableFrom": "anime_relation_links",
+          "tableTo": "anime",
+          "columnsFrom": [
+            "anime_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "anime_relation_links_related_anime_id_anime_id_fk": {
+          "name": "anime_relation_links_related_anime_id_anime_id_fk",
+          "tableFrom": "anime_relation_links",
+          "tableTo": "anime",
+          "columnsFrom": [
+            "related_anime_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "anime_studio_links": {
+      "name": "anime_studio_links",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "anime_id": {
+          "name": "anime_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "studio_id": {
+          "name": "studio_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "is_main": {
+          "name": "is_main",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        }
+      },
+      "indexes": {
+        "anime_studio_links_anime_studio_idx": {
+          "name": "anime_studio_links_anime_studio_idx",
+          "columns": [
+            "anime_id",
+            "studio_id"
+          ],
+          "isUnique": true
+        },
+        "anime_studio_links_anime_idx": {
+          "name": "anime_studio_links_anime_idx",
+          "columns": [
+            "anime_id"
+          ],
+          "isUnique": false
+        },
+        "anime_studio_links_studio_idx": {
+          "name": "anime_studio_links_studio_idx",
+          "columns": [
+            "studio_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "anime_studio_links_anime_id_anime_id_fk": {
+          "name": "anime_studio_links_anime_id_anime_id_fk",
+          "tableFrom": "anime_studio_links",
+          "tableTo": "anime",
+          "columnsFrom": [
+            "anime_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "anime_studio_links_studio_id_studios_id_fk": {
+          "name": "anime_studio_links_studio_id_studios_id_fk",
+          "tableFrom": "anime_studio_links",
+          "tableTo": "studios",
+          "columnsFrom": [
+            "studio_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "anime_tag_links": {
+      "name": "anime_tag_links",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "anime_id": {
+          "name": "anime_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tag_id": {
+          "name": "tag_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "rank": {
+          "name": "rank",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "anime_tag_links_anime_tag_idx": {
+          "name": "anime_tag_links_anime_tag_idx",
+          "columns": [
+            "anime_id",
+            "tag_id"
+          ],
+          "isUnique": true
+        },
+        "anime_tag_links_anime_idx": {
+          "name": "anime_tag_links_anime_idx",
+          "columns": [
+            "anime_id"
+          ],
+          "isUnique": false
+        },
+        "anime_tag_links_tag_idx": {
+          "name": "anime_tag_links_tag_idx",
+          "columns": [
+            "tag_id"
+          ],
+          "isUnique": false
+        },
+        "anime_tag_links_anime_rank_idx": {
+          "name": "anime_tag_links_anime_rank_idx",
+          "columns": [
+            "anime_id",
+            "rank"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "anime_tag_links_anime_id_anime_id_fk": {
+          "name": "anime_tag_links_anime_id_anime_id_fk",
+          "tableFrom": "anime_tag_links",
+          "tableTo": "anime",
+          "columnsFrom": [
+            "anime_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "anime_tag_links_tag_id_tags_id_fk": {
+          "name": "anime_tag_links_tag_id_tags_id_fk",
+          "tableFrom": "anime_tag_links",
+          "tableTo": "tags",
+          "columnsFrom": [
+            "tag_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "catalogue_revision": {
+      "name": "catalogue_revision",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "revision": {
+          "name": "revision",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "episode_language_status": {
+      "name": "episode_language_status",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "anime_id": {
+          "name": "anime_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "episode_number": {
+          "name": "episode_number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "language_code": {
+          "name": "language_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "media_type": {
+          "name": "media_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'unknown'"
+        },
+        "provider": {
+          "name": "provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'manual'"
+        },
+        "confidence": {
+          "name": "confidence",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "checked_at": {
+          "name": "checked_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast((julianday('now') - 2440587.5)*86400000 as integer))"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast((julianday('now') - 2440587.5)*86400000 as integer))"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast((julianday('now') - 2440587.5)*86400000 as integer))"
+        }
+      },
+      "indexes": {
+        "episode_language_status_anime_episode_language_media_idx": {
+          "name": "episode_language_status_anime_episode_language_media_idx",
+          "columns": [
+            "anime_id",
+            "episode_number",
+            "language_code",
+            "media_type",
+            "provider"
+          ],
+          "isUnique": true
+        },
+        "episode_language_status_status_idx": {
+          "name": "episode_language_status_status_idx",
+          "columns": [
+            "status"
+          ],
+          "isUnique": false
+        },
+        "episode_language_status_provider_idx": {
+          "name": "episode_language_status_provider_idx",
+          "columns": [
+            "provider"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "episode_language_status_anime_id_anime_id_fk": {
+          "name": "episode_language_status_anime_id_anime_id_fk",
+          "tableFrom": "episode_language_status",
+          "tableTo": "anime",
+          "columnsFrom": [
+            "anime_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "episode_mappings": {
+      "name": "episode_mappings",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "episode_id": {
+          "name": "episode_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "provider": {
+          "name": "provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "provider_id": {
+          "name": "provider_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "provider_slug": {
+          "name": "provider_slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "provider_url": {
+          "name": "provider_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "provider_episode_number": {
+          "name": "provider_episode_number",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "confidence": {
+          "name": "confidence",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 100
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'manual'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast((julianday('now') - 2440587.5)*86400000 as integer))"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast((julianday('now') - 2440587.5)*86400000 as integer))"
+        }
+      },
+      "indexes": {
+        "episode_mappings_provider_episode_id_idx": {
+          "name": "episode_mappings_provider_episode_id_idx",
+          "columns": [
+            "provider",
+            "provider_id"
+          ],
+          "isUnique": true
+        },
+        "episode_mappings_episode_provider_id_idx": {
+          "name": "episode_mappings_episode_provider_id_idx",
+          "columns": [
+            "episode_id",
+            "provider",
+            "provider_id"
+          ],
+          "isUnique": true
+        },
+        "episode_mappings_episode_provider_idx": {
+          "name": "episode_mappings_episode_provider_idx",
+          "columns": [
+            "episode_id",
+            "provider"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "episode_mappings_episode_id_episodes_id_fk": {
+          "name": "episode_mappings_episode_id_episodes_id_fk",
+          "tableFrom": "episode_mappings",
+          "tableTo": "episodes",
+          "columnsFrom": [
+            "episode_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "episodes": {
+      "name": "episodes",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "anime_id": {
+          "name": "anime_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "number": {
+          "name": "number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "display_number": {
+          "name": "display_number",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "sort_number": {
+          "name": "sort_number",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "season_number": {
+          "name": "season_number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "absolute_number": {
+          "name": "absolute_number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "title_romaji": {
+          "name": "title_romaji",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "title_english": {
+          "name": "title_english",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "title_native": {
+          "name": "title_native",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "synopsis": {
+          "name": "synopsis",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "air_date": {
+          "name": "air_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "thumbnail": {
+          "name": "thumbnail",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "length_minutes": {
+          "name": "length_minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'normal'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast((julianday('now') - 2440587.5)*86400000 as integer))"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast((julianday('now') - 2440587.5)*86400000 as integer))"
+        }
+      },
+      "indexes": {
+        "episodes_anime_number_kind_idx": {
+          "name": "episodes_anime_number_kind_idx",
+          "columns": [
+            "anime_id",
+            "number",
+            "kind"
+          ],
+          "isUnique": true
+        },
+        "episodes_anime_sort_idx": {
+          "name": "episodes_anime_sort_idx",
+          "columns": [
+            "anime_id",
+            "sort_number"
+          ],
+          "isUnique": false
+        },
+        "episodes_air_date_idx": {
+          "name": "episodes_air_date_idx",
+          "columns": [
+            "air_date"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "episodes_anime_id_anime_id_fk": {
+          "name": "episodes_anime_id_anime_id_fk",
+          "tableFrom": "episodes",
+          "tableTo": "anime",
+          "columnsFrom": [
+            "anime_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "studios": {
+      "name": "studios",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "normalized_name": {
+          "name": "normalized_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "is_animation_studio": {
+          "name": "is_animation_studio",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "anilist_studio_id": {
+          "name": "anilist_studio_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "studios_normalized_name_idx": {
+          "name": "studios_normalized_name_idx",
+          "columns": [
+            "normalized_name"
+          ],
+          "isUnique": true
+        },
+        "studios_name_idx": {
+          "name": "studios_name_idx",
+          "columns": [
+            "name"
+          ],
+          "isUnique": false
+        },
+        "studios_anilist_id_idx": {
+          "name": "studios_anilist_id_idx",
+          "columns": [
+            "anilist_studio_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "sync_runs": {
+      "name": "sync_runs",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "provider": {
+          "name": "provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'running'"
+        },
+        "started_at": {
+          "name": "started_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast((julianday('now') - 2440587.5)*86400000 as integer))"
+        },
+        "finished_at": {
+          "name": "finished_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "items_scanned": {
+          "name": "items_scanned",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "items_created": {
+          "name": "items_created",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "items_updated": {
+          "name": "items_updated",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "items_failed": {
+          "name": "items_failed",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "error_message": {
+          "name": "error_message",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "metadata_json": {
+          "name": "metadata_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'{}'"
+        }
+      },
+      "indexes": {
+        "sync_runs_provider_kind_idx": {
+          "name": "sync_runs_provider_kind_idx",
+          "columns": [
+            "provider",
+            "kind"
+          ],
+          "isUnique": false
+        },
+        "sync_runs_status_idx": {
+          "name": "sync_runs_status_idx",
+          "columns": [
+            "status"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "sync_stage_state": {
+      "name": "sync_stage_state",
+      "columns": {
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "anilist_id": {
+          "name": "anilist_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "stage": {
+          "name": "stage",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "success_at": {
+          "name": "success_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "next_due_at": {
+          "name": "next_due_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "attempted_at": {
+          "name": "attempted_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "retry_at": {
+          "name": "retry_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "failures": {
+          "name": "failures",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "error": {
+          "name": "error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "payload_json": {
+          "name": "payload_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "sync_stage_anilist_idx": {
+          "name": "sync_stage_anilist_idx",
+          "columns": [
+            "anilist_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "tags": {
+      "name": "tags",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "normalized_name": {
+          "name": "normalized_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "category": {
+          "name": "category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "is_general_spoiler": {
+          "name": "is_general_spoiler",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "is_media_spoiler": {
+          "name": "is_media_spoiler",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "is_adult": {
+          "name": "is_adult",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        }
+      },
+      "indexes": {
+        "tags_normalized_name_idx": {
+          "name": "tags_normalized_name_idx",
+          "columns": [
+            "normalized_name"
+          ],
+          "isUnique": true
+        },
+        "tags_name_idx": {
+          "name": "tags_name_idx",
+          "columns": [
+            "name"
+          ],
+          "isUnique": false
+        },
+        "tags_category_idx": {
+          "name": "tags_category_idx",
+          "columns": [
+            "category"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "anime_provider_mappings": {
+      "name": "anime_provider_mappings",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "anime_id": {
+          "name": "anime_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "provider_entity_id": {
+          "name": "provider_entity_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "confidence": {
+          "name": "confidence",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 100
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'manual'"
+        },
+        "is_primary": {
+          "name": "is_primary",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast((julianday('now') - 2440587.5)*86400000 as integer))"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast((julianday('now') - 2440587.5)*86400000 as integer))"
+        }
+      },
+      "indexes": {
+        "anime_provider_mappings_anime_entity_idx": {
+          "name": "anime_provider_mappings_anime_entity_idx",
+          "columns": [
+            "anime_id",
+            "provider_entity_id"
+          ],
+          "isUnique": true
+        },
+        "anime_provider_mappings_anime_idx": {
+          "name": "anime_provider_mappings_anime_idx",
+          "columns": [
+            "anime_id"
+          ],
+          "isUnique": false
+        },
+        "anime_provider_mappings_entity_idx": {
+          "name": "anime_provider_mappings_entity_idx",
+          "columns": [
+            "provider_entity_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "anime_provider_mappings_anime_id_anime_id_fk": {
+          "name": "anime_provider_mappings_anime_id_anime_id_fk",
+          "tableFrom": "anime_provider_mappings",
+          "tableTo": "anime",
+          "columnsFrom": [
+            "anime_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "anime_provider_mappings_provider_entity_id_provider_entities_id_fk": {
+          "name": "anime_provider_mappings_provider_entity_id_provider_entities_id_fk",
+          "tableFrom": "anime_provider_mappings",
+          "tableTo": "provider_entities",
+          "columnsFrom": [
+            "provider_entity_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "anime_provider_mappings_confidence_check": {
+          "name": "anime_provider_mappings_confidence_check",
+          "value": "\"anime_provider_mappings\".\"confidence\" between 0 and 100"
+        }
+      }
+    },
+    "anime_provider_segments": {
+      "name": "anime_provider_segments",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "anime_provider_mapping_id": {
+          "name": "anime_provider_mapping_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "provider_episode_start": {
+          "name": "provider_episode_start",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "provider_episode_end": {
+          "name": "provider_episode_end",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "local_episode_start": {
+          "name": "local_episode_start",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "local_episode_end": {
+          "name": "local_episode_end",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast((julianday('now') - 2440587.5)*86400000 as integer))"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast((julianday('now') - 2440587.5)*86400000 as integer))"
+        }
+      },
+      "indexes": {
+        "anime_provider_segments_range_idx": {
+          "name": "anime_provider_segments_range_idx",
+          "columns": [
+            "anime_provider_mapping_id",
+            "provider_episode_start",
+            "provider_episode_end",
+            "local_episode_start",
+            "local_episode_end"
+          ],
+          "isUnique": true
+        },
+        "anime_provider_segments_mapping_idx": {
+          "name": "anime_provider_segments_mapping_idx",
+          "columns": [
+            "anime_provider_mapping_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "anime_provider_segments_anime_provider_mapping_id_anime_provider_mappings_id_fk": {
+          "name": "anime_provider_segments_anime_provider_mapping_id_anime_provider_mappings_id_fk",
+          "tableFrom": "anime_provider_segments",
+          "tableTo": "anime_provider_mappings",
+          "columnsFrom": [
+            "anime_provider_mapping_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "anime_provider_segments_provider_start_positive_check": {
+          "name": "anime_provider_segments_provider_start_positive_check",
+          "value": "\"anime_provider_segments\".\"provider_episode_start\" > 0"
+        },
+        "anime_provider_segments_local_start_positive_check": {
+          "name": "anime_provider_segments_local_start_positive_check",
+          "value": "\"anime_provider_segments\".\"local_episode_start\" > 0"
+        },
+        "anime_provider_segments_provider_range_check": {
+          "name": "anime_provider_segments_provider_range_check",
+          "value": "\"anime_provider_segments\".\"provider_episode_end\" >= \"anime_provider_segments\".\"provider_episode_start\""
+        },
+        "anime_provider_segments_local_range_check": {
+          "name": "anime_provider_segments_local_range_check",
+          "value": "\"anime_provider_segments\".\"local_episode_end\" >= \"anime_provider_segments\".\"local_episode_start\""
+        },
+        "anime_provider_segments_equal_span_check": {
+          "name": "anime_provider_segments_equal_span_check",
+          "value": "\"anime_provider_segments\".\"provider_episode_end\" - \"anime_provider_segments\".\"provider_episode_start\" = \"anime_provider_segments\".\"local_episode_end\" - \"anime_provider_segments\".\"local_episode_start\""
+        }
+      }
+    },
+    "provider_entities": {
+      "name": "provider_entities",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "provider": {
+          "name": "provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "provider_id": {
+          "name": "provider_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "provider_slug": {
+          "name": "provider_slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "provider_url": {
+          "name": "provider_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast((julianday('now') - 2440587.5)*86400000 as integer))"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast((julianday('now') - 2440587.5)*86400000 as integer))"
+        }
+      },
+      "indexes": {
+        "provider_entities_provider_id_idx": {
+          "name": "provider_entities_provider_id_idx",
+          "columns": [
+            "provider",
+            "provider_id"
+          ],
+          "isUnique": true
+        },
+        "provider_entities_provider_slug_idx": {
+          "name": "provider_entities_provider_slug_idx",
+          "columns": [
+            "provider",
+            "provider_slug"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "season_mappings": {
+      "name": "season_mappings",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "anime_id": {
+          "name": "anime_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "provider": {
+          "name": "provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "provider_series_id": {
+          "name": "provider_series_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "season_number": {
+          "name": "season_number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "part_number": {
+          "name": "part_number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
+        },
+        "confidence": {
+          "name": "confidence",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 100
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'manual'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast((julianday('now') - 2440587.5)*86400000 as integer))"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast((julianday('now') - 2440587.5)*86400000 as integer))"
+        }
+      },
+      "indexes": {
+        "season_mappings_series_season_part_idx": {
+          "name": "season_mappings_series_season_part_idx",
+          "columns": [
+            "provider",
+            "provider_series_id",
+            "season_number",
+            "part_number"
+          ],
+          "isUnique": true
+        },
+        "season_mappings_anime_series_season_idx": {
+          "name": "season_mappings_anime_series_season_idx",
+          "columns": [
+            "anime_id",
+            "provider",
+            "provider_series_id",
+            "season_number"
+          ],
+          "isUnique": true
+        },
+        "season_mappings_anime_idx": {
+          "name": "season_mappings_anime_idx",
+          "columns": [
+            "anime_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "season_mappings_anime_id_anime_id_fk": {
+          "name": "season_mappings_anime_id_anime_id_fk",
+          "tableFrom": "season_mappings",
+          "tableTo": "anime",
+          "columnsFrom": [
+            "anime_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "season_mappings_season_check": {
+          "name": "season_mappings_season_check",
+          "value": "\"season_mappings\".\"season_number\" >= 0"
+        },
+        "season_mappings_part_check": {
+          "name": "season_mappings_part_check",
+          "value": "\"season_mappings\".\"part_number\" > 0"
+        },
+        "season_mappings_confidence_check": {
+          "name": "season_mappings_confidence_check",
+          "value": "\"season_mappings\".\"confidence\" between 0 and 100"
+        }
+      }
+    }
+  },
+  "views": {},
+  "enums": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "indexes": {
+      "anime_catalogue_title_idx": {
+        "columns": {
+          "lower(\"title_romaji\")": {
+            "isExpression": true
+          }
+        }
+      },
+      "anime_catalogue_score_idx": {
+        "columns": {
+          "\"average_score\" desc": {
+            "isExpression": true
+          }
+        }
+      },
+      "anime_catalogue_popularity_idx": {
+        "columns": {
+          "\"popularity\" desc": {
+            "isExpression": true
+          }
+        }
+      },
+      "anime_catalogue_format_score_idx": {
+        "columns": {
+          "\"average_score\" desc": {
+            "isExpression": true
+          }
+        }
+      }
+    }
+  }
+}

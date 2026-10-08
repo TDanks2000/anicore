@@ -7,6 +7,7 @@ export const expectedTables = [
   "anime_language_evidence",
   "anime_language_status",
   "anime_mappings",
+  "season_mappings",
   "anime_relation_links",
   "anime_studio_links",
   "anime_tag_links",
@@ -27,6 +28,7 @@ export const expectedIndexes = [
   { tableName: "anime", indexName: "anime_catalogue_popularity_idx" },
   { tableName: "anime", indexName: "anime_catalogue_format_score_idx" },
   { tableName: "anime_mappings", indexName: "anime_mappings_provider_id_idx" },
+  { tableName: "season_mappings", indexName: "season_mappings_series_season_part_idx" },
   {
     tableName: "anime_language_status",
     indexName: "anime_language_status_anime_language_media_idx",

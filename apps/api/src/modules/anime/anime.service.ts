@@ -36,6 +36,7 @@ import {
   listAnimeSegmentMappings,
   prepareNewAnimeMappings,
 } from "../mappings/mappings.service";
+import { listAnimeSeasonMappings } from "../mappings/season-mappings.service";
 import { formatAnime } from "./anime.format";
 
 /** Fields the public anime list can be ordered by. */
@@ -311,21 +312,31 @@ export async function getAnimeFull(id: number) {
   const row = await findAnimeRow(id);
   if (!row) throw notFound("Anime not found");
 
-  const [mappings, segmentMappings, episodeRows, studioRows, tagRows, externalLinks, relations] =
-    await Promise.all([
-      listAnimeMappings(id),
-      listAnimeSegmentMappings(id),
-      listAnimeEpisodes(id),
-      getStudiosForAnime(id),
-      getTagsForAnime(id),
-      listAnimeExternalLinks(id),
-      listAnimeRelations(id),
-    ]);
+  const [
+    mappings,
+    segmentMappings,
+    episodeRows,
+    studioRows,
+    tagRows,
+    externalLinks,
+    relations,
+    seasonMappingRows,
+  ] = await Promise.all([
+    listAnimeMappings(id),
+    listAnimeSegmentMappings(id),
+    listAnimeEpisodes(id),
+    getStudiosForAnime(id),
+    getTagsForAnime(id),
+    listAnimeExternalLinks(id),
+    listAnimeRelations(id),
+    listAnimeSeasonMappings(id),
+  ]);
 
   return {
     ...formatAnime(row),
     mappings,
     segmentMappings,
+    seasonMappings: seasonMappingRows,
     episodes: episodeRows,
     studios: studioRows,
     tags: tagRows,

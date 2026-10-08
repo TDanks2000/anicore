@@ -3,6 +3,8 @@ import { Elysia, t } from "elysia";
 import { notFound } from "../../lib/errors";
 import {
   confidenceValue,
+  idParams,
+  nonNegativeInteger,
   positiveInteger,
   providerEnum,
   providerIdValue,
@@ -19,10 +21,46 @@ import {
   updateAnimeMapping,
   updateEpisodeMapping,
 } from "./mappings.service";
+import {
+  createSeasonMapping,
+  deleteSeasonMapping,
+  findSeasonMappings,
+  updateSeasonMapping,
+} from "./season-mappings.service";
 
 const optionalString = t.Optional(t.String());
 
 export const mappingRoutes = new Elysia({ prefix: "/mappings", detail: { tags: ["Mappings"] } })
+  .get(
+    "/season/:provider/:providerSeriesId",
+    ({ params, query }) =>
+      findSeasonMappings(params.provider, params.providerSeriesId, query.seasonNumber),
+    {
+      params: t.Object({ provider: providerEnum, providerSeriesId: providerIdValue }),
+      query: t.Object({ seasonNumber: t.Optional(nonNegativeInteger) }),
+    },
+  )
+  .post("/season", ({ body }) => createSeasonMapping(body), {
+    body: t.Object({
+      animeId: positiveInteger,
+      provider: providerEnum,
+      providerSeriesId: providerIdValue,
+      seasonNumber: nonNegativeInteger,
+      partNumber: t.Optional(positiveInteger),
+      confidence: t.Optional(confidenceValue),
+      source: t.Optional(sourceEnum),
+    }),
+  })
+  .patch("/season/:id", ({ params, body }) => updateSeasonMapping(params.id, body), {
+    params: idParams,
+    body: t.Object({
+      seasonNumber: t.Optional(nonNegativeInteger),
+      partNumber: t.Optional(positiveInteger),
+      confidence: t.Optional(confidenceValue),
+      source: t.Optional(sourceEnum),
+    }),
+  })
+  .delete("/season/:id", ({ params }) => deleteSeasonMapping(params.id), { params: idParams })
   .get(
     "/anime/:provider/:providerId",
     async ({ params }) => {

@@ -7,7 +7,7 @@ import {
   type SyncMonitorStatusResponse,
 } from "@anicore/sync-monitor";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-
+import { readMonitorCode, writeMonitorCode } from "@/lib/monitor-code-storage";
 import { nextPollDelay } from "@/lib/polling";
 import { readStored, writeStored } from "@/lib/storage";
 
@@ -24,8 +24,7 @@ export type ConnectionState = "idle" | "loading" | "ready" | "error";
 
 /**
  * Connection settings plus a polling snapshot of the monitor API. The code is
- * kept in session storage only, so it is never persisted across sessions or
- * compiled into the bundle.
+ * encrypted in local storage using a non-exportable browser key in IndexedDB.
  *
  * Polling is single-flight (one request at a time), aborts in-flight requests on
  * unmount or URL change, backs off on failures, and keeps the last good data
@@ -35,9 +34,13 @@ export function useSyncMonitor() {
   const [apiUrl, setApiUrl] = useState(() =>
     readStored("local", "anicore.apiUrl", DEFAULT_API_URL),
   );
-  const [accessCode, setAccessCode] = useState(() =>
-    readStored("session", "anicore.monitorCode", ""),
-  );
+  const [accessCode, setAccessCodeState] = useState("");
+  const [codeLoaded, setCodeLoaded] = useState(false);
+  const codeEdited = useRef(false);
+  const setAccessCode = useCallback((value: string) => {
+    codeEdited.current = true;
+    setAccessCodeState(value);
+  }, []);
   const [statusPayload, setStatusPayload] = useState<SyncMonitorStatusResponse | null>(null);
   const [configPayload, setConfigPayloadState] = useState<SyncMonitorConfigResponse | null>(null);
   const [events, setEvents] = useState<SyncMonitorEvent[]>([]);
@@ -57,7 +60,20 @@ export function useSyncMonitor() {
   const hasDataRef = useRef(false);
 
   useEffect(() => writeStored("local", "anicore.apiUrl", apiUrl), [apiUrl]);
-  useEffect(() => writeStored("session", "anicore.monitorCode", accessCode), [accessCode]);
+  useEffect(() => {
+    let cancelled = false;
+    void readMonitorCode().then((saved) => {
+      if (cancelled) return;
+      if (!codeEdited.current) setAccessCodeState(saved);
+      setCodeLoaded(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  useEffect(() => {
+    if (codeLoaded) void writeMonitorCode(accessCode);
+  }, [accessCode, codeLoaded]);
 
   const client = useMemo(
     () => (apiUrl && accessCode ? new SyncMonitorClient({ baseUrl: apiUrl, accessCode }) : null),

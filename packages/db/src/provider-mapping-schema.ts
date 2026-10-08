@@ -6,6 +6,46 @@ import { boolean, serial, timestamp } from "./columns";
 import { mappingSources, providers } from "./enums";
 import { anime } from "./schema";
 
+/** Numbered provider seasons can span several AniList entries (split cours). */
+export const seasonMappings = sqliteTable(
+  "season_mappings",
+  {
+    id: serial("id").primaryKey(),
+    animeId: integer("anime_id")
+      .notNull()
+      .references(() => anime.id, { onDelete: "cascade" }),
+    provider: text("provider", { enum: providers }).notNull(),
+    providerSeriesId: text("provider_series_id").notNull(),
+    seasonNumber: integer("season_number").notNull(),
+    partNumber: integer("part_number").notNull().default(1),
+    confidence: integer("confidence").notNull().default(100),
+    source: text("source", { enum: mappingSources }).notNull().default("manual"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    seasonPartIdx: uniqueIndex("season_mappings_series_season_part_idx").on(
+      table.provider,
+      table.providerSeriesId,
+      table.seasonNumber,
+      table.partNumber,
+    ),
+    animeSeasonIdx: uniqueIndex("season_mappings_anime_series_season_idx").on(
+      table.animeId,
+      table.provider,
+      table.providerSeriesId,
+      table.seasonNumber,
+    ),
+    animeIdx: index("season_mappings_anime_idx").on(table.animeId),
+    seasonCheck: check("season_mappings_season_check", sql`${table.seasonNumber} >= 0`),
+    partCheck: check("season_mappings_part_check", sql`${table.partNumber} > 0`),
+    confidenceCheck: check(
+      "season_mappings_confidence_check",
+      sql`${table.confidence} between 0 and 100`,
+    ),
+  }),
+);
+
 /**
  * Canonical external-provider identity.
  *
