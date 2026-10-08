@@ -1,5 +1,5 @@
 import { CircleAlert, ExternalLink, X } from "lucide-react";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
 import { AnimeCover } from "@/components/catalog/anime-cover";
 import { CoverageInspector } from "@/components/catalog/coverage-inspector";
@@ -19,13 +19,17 @@ import {
 } from "@/components/ui/table";
 import { useToast } from "@/components/ui/toast";
 import { useAnimeDetail } from "@/hooks/use-anime-detail";
+
 import type {
   AnimeEpisode,
   AnimeLanguageStatusRow,
   AnimeListItem,
+  AnimeMapping,
+  AnimeSegmentMapping,
   AnimeTagLink,
   EpisodeLanguageStatusRow,
 } from "@/lib/anime-api";
+
 import {
   animeDescriptionText,
   animeEpisodeTitle,
@@ -37,7 +41,6 @@ import {
   animeStatusLabel,
   animeStatusVariant,
   formatSeasonYear,
-  segmentRangeLabel,
 } from "@/lib/anime-format";
 import {
   animeLanguageStatusLabel,
@@ -52,9 +55,8 @@ import {
   groupAnimeLanguageStatuses,
   languageEvidenceSource,
 } from "@/lib/language-status";
-import { cn } from "@/lib/utils";
 
-const PANEL_HEIGHT = "max-h-[min(88vh,900px)]";
+import { cn } from "@/lib/utils";
 
 export function AnimeDetailDialog({
   anime,
@@ -72,12 +74,16 @@ export function AnimeDetailDialog({
   const animeId = anime?.id ?? null;
   const { data, loading, error, retry } = useAnimeDetail(apiUrl, animeId, revision);
   const [language, setLanguage] = useState(initialLanguage ?? "en");
+  const [activePanel, setActivePanel] = useState("overview");
+  const bodyRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
-
+  useEffect(() => {
+    if (bodyRef.current) bodyRef.current.scrollTop = 0;
+  }, [activePanel, animeId]);
   useEffect(() => {
     setLanguage(initialLanguage ?? "en");
+    setActivePanel("overview");
   }, [animeId, initialLanguage]);
-
   useEffect(() => {
     if (error && animeId !== null) {
       toast({
@@ -88,7 +94,6 @@ export function AnimeDetailDialog({
       });
     }
   }, [animeId, error, toast]);
-
   const full = data?.full.id === animeId ? data.full : null;
   const shownAnime = full ?? anime;
   const episodeStatuses = data?.language.episodes ?? [];
@@ -97,7 +102,6 @@ export function AnimeDetailDialog({
     () => (data ? episodeLanguages(data.language.episodes, data.language.statuses) : []),
     [data],
   );
-
   // Prefer English when available; otherwise show whatever has data.
   useEffect(() => {
     if (languages.length === 0) return;
@@ -105,7 +109,6 @@ export function AnimeDetailDialog({
       languages.includes(current) ? current : languages.includes("en") ? "en" : languages[0]!,
     );
   }, [languages]);
-
   const episodes = full?.episodes ?? [];
   const statusMap = useMemo(() => buildEpisodeStatusMap(episodeStatuses), [episodeStatuses]);
   const coverage = groupAnimeLanguageStatuses(data?.language.statuses ?? []);
@@ -119,14 +122,16 @@ export function AnimeDetailDialog({
     episodeNumbers,
   );
   const hasEpisodeRowsForLanguage = episodeStatuses.some((row) => row.languageCode === language);
-
   return (
-    // The panel wrapper owns the height cap, so the dialog fits it exactly
-    // instead of clipping the bottom with its own max-height.
-    <Dialog open={anime !== null} onClose={onClose} labelledBy="anime-detail-title">
+    <Dialog
+      open={anime !== null}
+      onClose={onClose}
+      labelledBy="anime-detail-title"
+      className="h-[min(1080px,calc(100dvh-2rem))] max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-[1920px] sm:h-[min(1080px,calc(100dvh-3rem))] sm:max-h-[calc(100dvh-3rem)] sm:w-[calc(100vw-3rem)]"
+    >
       {anime ? (
-        <div className={cn("flex flex-col", PANEL_HEIGHT)}>
-          <header className="flex items-start gap-4 border-b border-border p-5">
+        <div className="flex h-full min-h-0 flex-col">
+          <header className="flex shrink-0 items-start gap-4 border-b border-border p-5">
             <AnimeCover
               item={shownAnime!}
               className="h-28 w-20 rounded-lg"
@@ -166,14 +171,36 @@ export function AnimeDetailDialog({
               <X />
             </Button>
           </header>
-
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          <nav
+            aria-label="Detail sections"
+            className="flex shrink-0 gap-2 border-b border-border p-3 xl:hidden"
+          >
+            {[
+              ["overview", "Overview"],
+              ["mappings", "Mappings"],
+              ["episodes", "Seasons & episodes"],
+            ].map(([value, label]) => (
+              <Button
+                key={value}
+                size="sm"
+                variant={activePanel === value ? "default" : "ghost"}
+                aria-pressed={activePanel === value}
+                onClick={() => setActivePanel(value!)}
+              >
+                {label}
+              </Button>
+            ))}
+          </nav>
+          <div
+            ref={bodyRef}
+            className="min-h-0 flex-1 overflow-y-auto xl:flex xl:flex-col xl:overflow-hidden"
+          >
             {loading ? (
               <DetailSkeleton />
             ) : error && !full ? (
               <DetailError message={error} onRetry={retry} />
             ) : full ? (
-              <div className="flex flex-col gap-6 p-5">
+              <div className="flex min-h-0 flex-1 flex-col">
                 {error ? (
                   <div
                     role="status"
@@ -185,329 +212,300 @@ export function AnimeDetailDialog({
                     </Button>
                   </div>
                 ) : null}
-                <Synopsis description={full.description} />
-                <ProviderFreshnessPanel apiUrl={apiUrl} animeId={full.id} revision={revision} />
-                {data ? (
-                  <CoverageInspector
-                    anime={full}
-                    language={data.language}
-                    languageCode={language}
-                  />
-                ) : null}
-
-                <dl className="grid grid-cols-2 gap-x-6 gap-y-3 rounded-lg border border-border bg-muted/20 p-4 sm:grid-cols-4">
-                  <Fact
-                    label="Episodes"
-                    value={full.episodeCount ?? (full.episodes.length || "—")}
-                  />
-                  <Fact
-                    label="Duration"
-                    value={full.durationMinutes === null ? "—" : `${full.durationMinutes} min`}
-                  />
-                  <Fact label="Season" value={formatSeasonYear(full.season, full.seasonYear)} />
-                  <Fact label="Source" value={capitalize(full.source) ?? "—"} />
-                  <Fact label="Aired" value={formatAired(full.startDate, full.endDate)} />
-                  <Fact label="Country" value={full.countryOfOrigin ?? "—"} />
-                  <Fact
-                    label="Score"
-                    value={
-                      full.averageScore === null ? (
-                        "—"
-                      ) : (
-                        <span className={scoreTextClass(full.averageScore)}>
-                          {full.averageScore}
-                          {full.meanScore !== null && full.meanScore !== full.averageScore ? (
-                            <span className="ml-1 text-xs font-normal text-muted-foreground">
-                              mean {full.meanScore}
+                <div className="grid min-h-0 flex-1 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1fr)_minmax(0,1.35fr)]">
+                  <DetailColumn
+                    active={activePanel === "overview"}
+                    title="Overview"
+                    description="Story, release details and metadata"
+                  >
+                    <dl className="grid grid-cols-2 gap-x-6 gap-y-3 rounded-lg border border-border bg-muted/20 p-4 sm:grid-cols-4 xl:grid-cols-2">
+                      <Fact
+                        label="Episodes"
+                        value={full.episodeCount ?? (full.episodes.length || "—")}
+                      />
+                      <Fact
+                        label="Duration"
+                        value={full.durationMinutes === null ? "—" : `${full.durationMinutes} min`}
+                      />
+                      <Fact label="Season" value={formatSeasonYear(full.season, full.seasonYear)} />
+                      <Fact label="Source" value={capitalize(full.source) ?? "—"} />
+                      <Fact label="Aired" value={formatAired(full.startDate, full.endDate)} />
+                      <Fact label="Country" value={full.countryOfOrigin ?? "—"} />
+                      <Fact
+                        label="Score"
+                        value={
+                          full.averageScore === null ? (
+                            "—"
+                          ) : (
+                            <span className={scoreTextClass(full.averageScore)}>
+                              {full.averageScore}
+                              {full.meanScore !== null && full.meanScore !== full.averageScore ? (
+                                <span className="ml-1 text-xs font-normal text-muted-foreground">
+                                  mean {full.meanScore}
+                                </span>
+                              ) : null}
                             </span>
-                          ) : null}
-                        </span>
-                      )
-                    }
-                  />
-                  <Fact
-                    label="Popularity"
-                    value={full.popularity === null ? "—" : full.popularity.toLocaleString()}
-                  />
-                </dl>
-
-                <Section title="Dub & Sub availability">
-                  {coverage.length === 0 ? (
-                    <Hint>No language status recorded yet.</Hint>
-                  ) : (
-                    <ul className="grid gap-2 sm:grid-cols-2">
-                      {coverage.map((entry) => (
-                        <li
-                          key={entry.languageCode}
-                          className="rounded-lg border border-border px-3 py-2.5"
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="text-sm font-medium">
-                              {formatLanguageName(entry.languageCode)}
-                            </span>
-                            <span className="font-mono text-[11px] uppercase text-muted-foreground">
-                              {entry.languageCode}
-                            </span>
-                          </div>
-                          <div className="mt-2 flex flex-wrap gap-1.5">
-                            <MediaStatusPill label="Audio" row={entry.audio} />
-                            <MediaStatusPill label="Sub" row={entry.subtitle} />
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  <p className="text-xs text-muted-foreground">
-                    Confirmed status establishes that a language track exists. Episode coverage is
-                    verified separately; unknown coverage does not mean unavailable.
-                  </p>
-                  {languageEvidence.length > 0 ? (
-                    <details className="rounded-lg border border-border px-3 py-2">
-                      <summary className="cursor-pointer text-xs font-medium">
-                        View availability evidence ({languageEvidence.length})
-                      </summary>
-                      <ul className="mt-3 flex flex-col gap-2">
-                        {languageEvidence.map((item) => {
-                          const url = evidenceLink(item.sourceUrl);
-                          const source = languageEvidenceSource(item.sourceUrl, item.source);
-                          return (
-                            <li
-                              key={item.id}
-                              className="flex flex-wrap items-center justify-between gap-2 text-xs"
-                            >
-                              <span>
-                                {formatLanguageName(item.languageCode)} ·{" "}
-                                {item.mediaType === "audio" ? "Audio" : "Subtitles"} ·{" "}
-                                {item.value.replaceAll("_", " ")}
-                              </span>
-                              <span className="flex items-center gap-2 text-muted-foreground">
-                                {url ? (
-                                  <a
-                                    href={url}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="inline-flex items-center gap-1 underline underline-offset-2"
-                                  >
-                                    {source}
-                                    <ExternalLink className="size-3" />
-                                  </a>
-                                ) : (
-                                  source
-                                )}
-                                <span className="tabular-nums">Weight {item.confidence}/100</span>
-                              </span>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    </details>
-                  ) : null}
-                </Section>
-
-                <Section
-                  title="Episodes"
-                  aside={
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant="outline">
-                        Audio{" "}
-                        <span className="tabular-nums">
-                          {dub.known ? dub.available : "?"}/{dub.total}
-                        </span>
-                      </Badge>
-                      <Badge variant="outline">
-                        Sub{" "}
-                        <span className="tabular-nums">
-                          {sub.known ? sub.available : "?"}/{sub.total}
-                        </span>
-                      </Badge>
-                      {languages.length > 1 ? (
-                        <Select
-                          aria-label="Episode language"
-                          containerClassName="w-[10.5rem]"
-                          className="h-8 pl-2.5 text-xs"
-                          value={language}
-                          onValueChange={setLanguage}
-                        >
-                          {languages.map((code) => (
-                            <SelectItem key={code} value={code}>
-                              {formatLanguageName(code)}
-                            </SelectItem>
+                          )
+                        }
+                      />
+                      <Fact
+                        label="Popularity"
+                        value={full.popularity === null ? "—" : full.popularity.toLocaleString()}
+                      />
+                    </dl>
+                    <Synopsis description={full.description} />
+                    {full.genres.length > 0 ? (
+                      <Section title="Genres">
+                        <div className="flex flex-wrap gap-1.5">
+                          {full.genres.map((genre) => (
+                            <Badge key={genre} variant="secondary">
+                              {genre}
+                            </Badge>
                           ))}
-                        </Select>
-                      ) : null}
-                    </div>
-                  }
-                >
-                  {episodes.length === 0 ? (
-                    <Hint>No episodes recorded yet.</Hint>
-                  ) : (
-                    <div className="flex flex-col gap-2">
-                      <div className="overflow-hidden rounded-lg border border-border">
-                        <Table containerClassName="max-h-80">
-                          <TableHeader>
-                            <TableRow className="hover:bg-transparent">
-                              <TableHead className="w-12 text-right">#</TableHead>
-                              <TableHead className="min-w-[200px]">Title</TableHead>
-                              <TableHead className="w-28 text-right">Audio</TableHead>
-                              <TableHead className="w-28 text-right">Sub</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {episodes.map((episode) => (
-                              <EpisodeRow
-                                key={episode.id}
-                                episode={episode}
-                                language={language}
-                                statusMap={statusMap}
-                              />
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </div>
-                      {!hasEpisodeRowsForLanguage ? (
-                        <p className="text-xs text-muted-foreground">
-                          No episode-level status recorded for {formatLanguageName(language)} yet.
-                        </p>
-                      ) : null}
-                    </div>
-                  )}
-                </Section>
-
-                {full.genres.length > 0 ? (
-                  <Section title="Genres">
-                    <div className="flex flex-wrap gap-1.5">
-                      {full.genres.map((genre) => (
-                        <Badge key={genre} variant="secondary">
-                          {genre}
-                        </Badge>
-                      ))}
-                    </div>
-                  </Section>
-                ) : null}
-
-                {full.studios.length > 0 ? (
-                  <Section title="Studios">
-                    <div className="flex flex-wrap gap-1.5">
-                      {full.studios.map((studio) => (
-                        <Badge key={studio.id} variant={studio.isMain ? "default" : "outline"}>
-                          {studio.name}
-                        </Badge>
-                      ))}
-                    </div>
-                  </Section>
-                ) : null}
-
-                {full.tags.length > 0 ? (
-                  <Section title="Tags">
-                    <div className="flex flex-wrap gap-1.5">
-                      {topTags(full.tags).map((tag) => (
-                        <Badge key={tag.id} variant="outline">
-                          {tag.name}
-                          {tag.rank !== null ? (
-                            <span className="tabular-nums opacity-60">{tag.rank}%</span>
-                          ) : null}
-                        </Badge>
-                      ))}
-                    </div>
-                  </Section>
-                ) : null}
-
-                <Section title="Provider mappings">
-                  {full.mappings.length === 0 && !full.segmentMappings?.length ? (
-                    <Hint>No provider mappings.</Hint>
-                  ) : (
-                    <ul className="grid gap-2 sm:grid-cols-2">
-                      {(full.segmentMappings ?? []).map((mapping) => (
-                        <li
-                          key={`segment-${mapping.id}`}
-                          className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2"
-                        >
-                          <div className="flex min-w-0 items-center gap-2">
-                            <span className="shrink-0 text-sm font-medium">
-                              {animeProviderLabel(mapping.provider)}
-                            </span>
-                            <span className="truncate font-mono text-xs text-muted-foreground">
-                              {mapping.providerSlug ?? mapping.providerId}
-                            </span>
-                            {mapping.segments.map((segment) => (
-                              <Badge
-                                key={`${segment.providerEpisodeStart}-${segment.localEpisodeStart}`}
-                                variant="outline"
-                                className="shrink-0 tabular-nums"
+                        </div>
+                      </Section>
+                    ) : null}
+                    {full.studios.length > 0 ? (
+                      <Section title="Studios">
+                        <div className="flex flex-wrap gap-1.5">
+                          {full.studios.map((studio) => (
+                            <Badge key={studio.id} variant={studio.isMain ? "default" : "outline"}>
+                              {studio.name}
+                            </Badge>
+                          ))}
+                        </div>
+                      </Section>
+                    ) : null}
+                    {full.tags.length > 0 ? (
+                      <Section title="Tags">
+                        <div className="flex flex-wrap gap-1.5">
+                          {sortedTags(full.tags).map((tag) => (
+                            <Badge key={tag.id} variant="outline">
+                              {tag.name}
+                              {tag.rank !== null ? (
+                                <span className="tabular-nums opacity-60">{tag.rank}%</span>
+                              ) : null}
+                            </Badge>
+                          ))}
+                        </div>
+                      </Section>
+                    ) : null}
+                    {full.synonyms.length > 0 ? (
+                      <Section title="Alternative titles">
+                        <ul className="space-y-1 text-sm">
+                          {full.synonyms.map((title) => (
+                            <li key={title}>{title}</li>
+                          ))}
+                        </ul>
+                      </Section>
+                    ) : null}
+                    {full.externalLinks.length > 0 ? (
+                      <Section title="External links">
+                        <ul className="flex flex-wrap gap-2">
+                          {full.externalLinks.map((link) => (
+                            <li key={link.id}>
+                              <a
+                                href={link.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                               >
-                                {segmentRangeLabel(segment)}
-                              </Badge>
-                            ))}
-                            {mapping.source === "fuzzy" ? (
-                              <Badge variant="secondary">Matched</Badge>
-                            ) : null}
-                          </div>
-                          {mapping.providerUrl ? (
-                            <a
-                              href={mapping.providerUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-primary hover:underline"
+                                {link.site}
+                                {link.type ? (
+                                  <span className="text-muted-foreground/70">· {link.type}</span>
+                                ) : null}
+                                <ExternalLink className="size-3" aria-hidden="true" />
+                              </a>
+                            </li>
+                          ))}
+                        </ul>
+                      </Section>
+                    ) : null}{" "}
+                  </DetailColumn>
+                  <DetailColumn
+                    active={activePanel === "mappings"}
+                    title="Mappings & availability"
+                    description="Provider records, episode alignment and languages"
+                  >
+                    <Section
+                      title="Provider mappings"
+                      aside={
+                        <Badge variant="outline">
+                          {full.mappings.length + (full.segmentMappings?.length ?? 0)} records
+                        </Badge>
+                      }
+                    >
+                      {full.mappings.length === 0 && !full.segmentMappings?.length ? (
+                        <Hint>No provider mappings recorded.</Hint>
+                      ) : (
+                        <ul className="space-y-3">
+                          {full.mappings.map((mapping) => (
+                            <MappingCard key={`title-${mapping.id}`} mapping={mapping} />
+                          ))}
+                          {(full.segmentMappings ?? []).map((mapping) => (
+                            <MappingCard
+                              key={`segment-${mapping.id}`}
+                              mapping={mapping}
+                              segments={mapping.segments}
+                            />
+                          ))}
+                        </ul>
+                      )}
+                    </Section>
+                    <Section title="Dub & Sub availability">
+                      {coverage.length === 0 ? (
+                        <Hint>No language status recorded yet.</Hint>
+                      ) : (
+                        <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+                          {coverage.map((entry) => (
+                            <li
+                              key={entry.languageCode}
+                              className="rounded-lg border border-border px-3 py-2.5"
                             >
-                              Open
-                              <ExternalLink className="size-3" aria-hidden="true" />
-                            </a>
-                          ) : null}
-                        </li>
-                      ))}
-                      {full.mappings.map((mapping) => (
-                        <li
-                          key={mapping.id}
-                          className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2"
-                        >
-                          <div className="flex min-w-0 items-center gap-2">
-                            <span className="shrink-0 text-sm font-medium">
-                              {animeProviderLabel(mapping.provider)}
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-sm font-medium">
+                                  {formatLanguageName(entry.languageCode)}
+                                </span>
+                                <span className="font-mono text-[11px] uppercase text-muted-foreground">
+                                  {entry.languageCode}
+                                </span>
+                              </div>
+                              <div className="mt-2 flex flex-wrap gap-1.5">
+                                <MediaStatusPill label="Audio" row={entry.audio} />
+                                <MediaStatusPill label="Sub" row={entry.subtitle} />
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        Confirmed status establishes that a language track exists. Episode coverage
+                        is verified separately; unknown coverage does not mean unavailable.
+                      </p>
+                      {languageEvidence.length > 0 ? (
+                        <details className="rounded-lg border border-border px-3 py-2">
+                          <summary className="cursor-pointer text-xs font-medium">
+                            View availability evidence ({languageEvidence.length})
+                          </summary>
+                          <ul className="mt-3 flex flex-col gap-2">
+                            {languageEvidence.map((item) => {
+                              const url = evidenceLink(item.sourceUrl);
+                              const source = languageEvidenceSource(item.sourceUrl, item.source);
+                              return (
+                                <li
+                                  key={item.id}
+                                  className="flex flex-wrap items-center justify-between gap-2 text-xs"
+                                >
+                                  <span>
+                                    {formatLanguageName(item.languageCode)} ·{" "}
+                                    {item.mediaType === "audio" ? "Audio" : "Subtitles"} ·{" "}
+                                    {item.value.replaceAll("_", " ")}
+                                  </span>
+                                  <span className="flex items-center gap-2 text-muted-foreground">
+                                    {url ? (
+                                      <a
+                                        href={url}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="inline-flex items-center gap-1 underline underline-offset-2"
+                                      >
+                                        {source}
+                                        <ExternalLink className="size-3" />
+                                      </a>
+                                    ) : (
+                                      source
+                                    )}
+                                    <span className="tabular-nums">
+                                      Weight {item.confidence}/100
+                                    </span>
+                                  </span>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </details>
+                      ) : null}
+                    </Section>
+                    <ProviderFreshnessPanel apiUrl={apiUrl} animeId={full.id} revision={revision} />
+                  </DetailColumn>
+                  <DetailColumn
+                    active={activePanel === "episodes"}
+                    title="Seasons & episodes"
+                    description={`${episodes.length} recorded episodes · ${formatLanguageName(language)}`}
+                  >
+                    <Section
+                      title="Seasons & episodes"
+                      aside={
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant="outline">
+                            Audio{" "}
+                            <span className="tabular-nums">
+                              {dub.known ? dub.available : "?"}/{dub.total}
                             </span>
-                            <span className="truncate font-mono text-xs text-muted-foreground">
-                              {mapping.providerId}
+                          </Badge>
+                          <Badge variant="outline">
+                            Sub{" "}
+                            <span className="tabular-nums">
+                              {sub.known ? sub.available : "?"}/{sub.total}
                             </span>
-                            {mapping.isPrimary ? <Badge variant="default">Primary</Badge> : null}
-                          </div>
-                          {mapping.providerUrl ? (
-                            <a
-                              href={mapping.providerUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-primary hover:underline"
+                          </Badge>
+                          {languages.length > 1 ? (
+                            <Select
+                              aria-label="Episode language"
+                              containerClassName="w-[10.5rem]"
+                              className="h-8 pl-2.5 text-xs"
+                              value={language}
+                              onValueChange={setLanguage}
                             >
-                              Open
-                              <ExternalLink className="size-3" aria-hidden="true" />
-                            </a>
+                              {languages.map((code) => (
+                                <SelectItem key={code} value={code}>
+                                  {formatLanguageName(code)}
+                                </SelectItem>
+                              ))}
+                            </Select>
                           ) : null}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </Section>
-
-                {full.externalLinks.length > 0 ? (
-                  <Section title="External links">
-                    <ul className="flex flex-wrap gap-2">
-                      {full.externalLinks.map((link) => (
-                        <li key={link.id}>
-                          <a
-                            href={link.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                          >
-                            {link.site}
-                            {link.type ? (
-                              <span className="text-muted-foreground/70">· {link.type}</span>
-                            ) : null}
-                            <ExternalLink className="size-3" aria-hidden="true" />
-                          </a>
-                        </li>
-                      ))}
-                    </ul>
-                  </Section>
-                ) : null}
+                        </div>
+                      }
+                    >
+                      <SeasonEpisodes
+                        episodes={episodes}
+                        language={language}
+                        statusMap={statusMap}
+                      />
+                      {!hasEpisodeRowsForLanguage && episodes.length > 0 ? (
+                        <Hint>
+                          No episode-level status recorded for {formatLanguageName(language)} yet.
+                        </Hint>
+                      ) : null}
+                    </Section>
+                    {full.relations.length > 0 ? (
+                      <Section title="Related entries">
+                        <ul className="grid gap-2 sm:grid-cols-2">
+                          {full.relations.map((relation) => (
+                            <li
+                              key={relation.id}
+                              className="rounded-lg border border-border p-3 text-sm"
+                            >
+                              <p className="font-medium">
+                                {relation.relationType.replaceAll("_", " ").toLowerCase()}
+                              </p>
+                              <p className="text-muted-foreground">
+                                Catalog ID {relation.relatedAnimeId}
+                              </p>
+                            </li>
+                          ))}
+                        </ul>
+                      </Section>
+                    ) : null}
+                    {data ? (
+                      <CoverageInspector
+                        anime={full}
+                        language={data.language}
+                        languageCode={language}
+                      />
+                    ) : null}
+                  </DetailColumn>
+                </div>
               </div>
             ) : null}
           </div>
@@ -517,15 +515,195 @@ export function AnimeDetailDialog({
   );
 }
 
+function DetailColumn({
+  active,
+  title,
+  description,
+  children,
+}: {
+  active: boolean;
+  title: string;
+  description: string;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className={cn(
+        "min-h-0 min-w-0 flex-col border-b border-border last:border-0 xl:flex xl:border-r xl:border-b-0",
+        active ? "flex" : "hidden",
+      )}
+    >
+      <div className="shrink-0 border-b border-border bg-muted/25 px-5 py-3">
+        <h3 className="font-semibold">{title}</h3>
+        <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+      </div>
+      <div className="flex min-h-0 flex-col gap-6 p-5 xl:overflow-y-auto">{children}</div>
+    </div>
+  );
+}
+
+function MappingCard({
+  mapping,
+  segments,
+}: {
+  mapping: AnimeMapping | AnimeSegmentMapping;
+  segments?: AnimeSegmentMapping["segments"];
+}) {
+  return (
+    <li className="rounded-lg border border-border bg-muted/10 p-3.5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-sm font-semibold">{animeProviderLabel(mapping.provider)}</span>
+        <div className="flex flex-wrap gap-1.5">
+          <Badge variant="outline">{segments ? "Shared season" : "Title mapping"}</Badge>
+          <Badge variant={mapping.isPrimary ? "default" : "secondary"}>
+            {mapping.isPrimary ? "Primary" : "Secondary"}
+          </Badge>
+        </div>
+      </div>
+      <dl className="mt-3 grid grid-cols-2 gap-3">
+        <Fact label="Mapping record" value={mapping.id} />
+        <Fact
+          label="Provider ID"
+          value={<span className="break-all font-mono text-xs">{mapping.providerId}</span>}
+        />
+        <Fact label="Match source" value={mapping.source.replaceAll("_", " ")} />
+        {mapping.providerSlug ? (
+          <Fact label="Slug" value={<span className="break-all">{mapping.providerSlug}</span>} />
+        ) : null}
+        <Fact label="Evidence weight" value={`${mapping.confidence}/100`} />
+        <Fact label="Updated" value={new Date(mapping.updatedAt).toLocaleString()} />
+        {"createdAt" in mapping ? (
+          <Fact label="Created" value={new Date(mapping.createdAt).toLocaleString()} />
+        ) : null}
+      </dl>
+      {segments ? (
+        <div className="mt-3 space-y-2 border-t border-border pt-3">
+          <p className="text-xs font-medium">Episode alignment</p>
+          {segments.length ? (
+            segments.map((segment) => (
+              <p
+                key={`${segment.providerEpisodeStart}-${segment.localEpisodeStart}`}
+                className="text-sm tabular-nums"
+              >
+                <span className="block">
+                  Provider episodes {segment.providerEpisodeStart}–{segment.providerEpisodeEnd}
+                </span>
+                <span className="block text-muted-foreground">
+                  → Catalog episodes {segment.localEpisodeStart}–{segment.localEpisodeEnd}
+                </span>
+              </p>
+            ))
+          ) : (
+            <Hint>No episode alignment recorded.</Hint>
+          )}
+        </div>
+      ) : null}
+      {mapping.providerUrl ? (
+        <a
+          href={mapping.providerUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-3 flex items-start gap-2 text-sm text-primary hover:underline"
+        >
+          <span className="min-w-0 break-all">{mapping.providerUrl}</span>
+          <ExternalLink className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+        </a>
+      ) : null}
+    </li>
+  );
+}
+
+function SeasonEpisodes({
+  episodes,
+  language,
+  statusMap,
+}: {
+  episodes: AnimeEpisode[];
+  language: string;
+  statusMap: Map<string, EpisodeLanguageStatusRow>;
+}) {
+  if (!episodes.length) return <Hint>No seasons or episodes recorded yet.</Hint>;
+  const seasons = new Map<number | null, AnimeEpisode[]>();
+  for (const episode of episodes) {
+    const key = episode.seasonNumber ?? null;
+    const group = seasons.get(key) ?? [];
+    group.push(episode);
+    seasons.set(key, group);
+  }
+  return (
+    <div className="space-y-4">
+      <nav aria-label="Jump to season" className="flex flex-wrap gap-2">
+        {[...seasons.entries()]
+          .sort(([a], [b]) => (a ?? Infinity) - (b ?? Infinity))
+          .map(([season, rows]) => (
+            <Button
+              key={season ?? "unassigned"}
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                document
+                  .getElementById(`catalog-season-${season ?? "unassigned"}`)
+                  ?.scrollIntoView({ block: "start" })
+              }
+            >
+              {season === null ? "Unassigned" : season === 0 ? "Specials" : `Season ${season}`}{" "}
+              <span className="text-muted-foreground">({rows.length})</span>
+            </Button>
+          ))}
+      </nav>
+      {[...seasons.entries()]
+        .sort(([a], [b]) => (a ?? Infinity) - (b ?? Infinity))
+        .map(([season, rows]) => (
+          <section
+            id={`catalog-season-${season ?? "unassigned"}`}
+            key={season ?? "unassigned"}
+            className="overflow-hidden rounded-lg border border-border"
+          >
+            <div className="flex items-center justify-between gap-2 border-b border-border bg-muted/30 px-3 py-3">
+              <h4 className="text-sm font-semibold">
+                {season === null
+                  ? "Season not recorded"
+                  : season === 0
+                    ? "Specials / Season 0"
+                    : `Season ${season}`}
+              </h4>
+              <Badge variant="outline">{rows.length} episodes</Badge>
+            </div>
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="w-12 text-right">#</TableHead>
+                  <TableHead>Title / aired</TableHead>
+                  <TableHead className="text-right">Audio</TableHead>
+                  <TableHead className="text-right">Sub</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {[...rows]
+                  .sort((a, b) => (a.sortNumber ?? a.number) - (b.sortNumber ?? b.number))
+                  .map((episode) => (
+                    <EpisodeRow
+                      key={episode.id}
+                      episode={episode}
+                      language={language}
+                      statusMap={statusMap}
+                    />
+                  ))}
+              </TableBody>
+            </Table>
+          </section>
+        ))}
+    </div>
+  );
+}
+
 function TitleAlternates({ anime }: { anime: AnimeListItem }) {
   const secondary = animeSecondaryTitle(anime);
   const native =
     anime.titleNative && anime.titleNative !== anime.titleRomaji && anime.titleNative !== secondary
       ? anime.titleNative
       : null;
-
   if (!secondary && !native) return null;
-
   return (
     <div className="mt-1 flex flex-col gap-0.5">
       {secondary ? <p className="text-sm text-muted-foreground">{secondary}</p> : null}
@@ -559,9 +737,7 @@ function Section({
   return (
     <section className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-          {title}
-        </h3>
+        <h3 className="text-sm font-semibold text-foreground">{title}</h3>
         {aside}
       </div>
       {children}
@@ -588,7 +764,6 @@ function MediaStatusPill({ label, row }: { label: string; row: AnimeLanguageStat
       </Badge>
     );
   }
-
   return (
     <Badge
       variant={animeLanguageStatusTone(row.status)}
@@ -613,14 +788,13 @@ function EpisodeRow({
   statusMap: Map<string, EpisodeLanguageStatusRow>;
 }) {
   const key = (mediaType: "audio" | "subtitle") => `${episode.number}|${language}|${mediaType}`;
-
   return (
     <TableRow>
       <TableCell className="text-right font-mono text-xs text-muted-foreground">
         {episode.displayNumber ?? episode.number}
       </TableCell>
-      <TableCell className="w-full max-w-0">
-        <div className="truncate" title={animeEpisodeTitle(episode)}>
+      <TableCell className="min-w-48">
+        <div className="whitespace-normal break-words" title={animeEpisodeTitle(episode)}>
           {animeEpisodeTitle(episode)}
         </div>
         {episode.airDate ? (
@@ -724,6 +898,6 @@ function scoreTextClass(score: number): string {
   }[animeScoreTone(score)];
 }
 
-function topTags(tags: AnimeTagLink[]): AnimeTagLink[] {
-  return [...tags].sort((a, b) => (b.rank ?? 0) - (a.rank ?? 0)).slice(0, 12);
+function sortedTags(tags: AnimeTagLink[]): AnimeTagLink[] {
+  return [...tags].sort((a, b) => (b.rank ?? 0) - (a.rank ?? 0));
 }
